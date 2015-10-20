@@ -8,15 +8,14 @@ INFO="INFO"
 DEBUG="DEBUG"
 WARNING="WARNING"
 ERROR="ERROR"
-
+EXCEPTION="EXCEPTION"
 logging.basicConfig(level=logging.INFO, format='%(message)s');
+ALL_MASK = 0xFFFFFFFF
+DEFAULT_DATETIME_FORMAT = '%Y%m%d%H%M%S%Z'
 
-class my_logger():	
-	ALL_MASK = 0xFFFFFFFF
-	DEFAULT_DATETIME_FORMAT = '%Y%m%d%H%M%S%Z'
-
-	def __init__(self, verbosity=0, mask=ALL_MASK, mode_list=[DEBUG, WARNING, INFO, ERROR], std=INFO):
-		EXCEPTION="EXCEPTION"
+class log():	
+	def __init__(self, verbosity=0, mask=ALL_MASK, mode_list=[DEBUG, WARNING, INFO, ERROR, EXCEPTION], std=INFO):
+		
 
 		if EXCEPTION not in mode_list:
 			mode_list.append(EXCEPTION)
@@ -28,13 +27,31 @@ class my_logger():
 		self.modes = {}
 
 		for mode in mode_list:
-			if mode not in self.modes: 
-				self.modes[mode] = {"enable": True,
-									"verbosity":verbosity, 
-				                    "show_mode": True, 
-				                    "show_file": True, 
-				                    "show_line": True, 
-				                    "show_time": None}
+			if mode not in self.modes:
+
+				if mode == std:
+					self.modes[mode] = {"enable": True,
+										"verbosity":verbosity, 
+										"show_mode": True, 
+										"show_file": True, 
+										"show_line": True, 
+										"show_time": None}
+
+				elif mode == EXCEPTION:
+					self.modes[mode] = {"enable": True,
+										"verbosity": 0, 
+										"show_mode": False, 
+										"show_file": True, 
+										"show_line": True, 
+										"show_time": DEFAULT_DATETIME_FORMAT}
+
+				else:
+					self.modes[mode] = {"enable": False,
+										"verbosity":verbosity, 
+										"show_mode": False, 
+										"show_file": False, 
+										"show_line": False, 
+										"show_time": None}
 			else:
 				raise Exception(mode + ' is already in the list.')
 
@@ -43,7 +60,6 @@ class my_logger():
 			self.modes[mode]["verbosity"] = level
 		else:
 			raise Exception(mode + ' is an unknown mode')
-
 
 	def set_datetime_fmt(self, mode, format=DEFAULT_DATETIME_FORMAT):
 		if mode in self.modes:
@@ -72,20 +88,20 @@ class my_logger():
 								prefixed = True
 
 							# Should we prefix the file 
-							if self.modes[mode]["show_file"] is not None:
+							if self.modes[mode]["show_file"] is not False:
 								if prefixed:
 									output = output + ":"	
 								output = output + os.path.basename(frameinfo.filename)
 								prefixed = True
 
 							# Should we prefix the line number
-							if self.modes[mode]["show_line"] is not None:
+							if self.modes[mode]["show_line"] is not False:
 								if prefixed:
 									output = output + ":"
 								output = output + str(frameinfo.lineno)
 								prefixed = True
 
-							if self.modes[mode]["show_mode"] is not None:
+							if self.modes[mode]["show_mode"] is not False:
 								if prefixed:
 									output = output + ":"
 								output = output + str(mode)
@@ -94,14 +110,9 @@ class my_logger():
 							if prefixed:
 								output = output + ": "
 
-						logging.info(output+msg)
+						if mode != EXCEPTION:
+							logging.info(output+msg)
+						else:
+							raise Exception(output+msg)
 		else:
 			raise Exception(mode + ' is an unknown mode')
-
-
-ian = my_logger()
-ian.set_verbosity(INFO, 0)
-ian.set_verbosity(DEBUG, 10)
-ian.set_datetime_fmt(INFO)
-
-ian.log("Hi", INFO)
