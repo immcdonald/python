@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(message)s');
 ALL_MASK = 0xFFFFFFFF
 DEFAULT_DATETIME_FORMAT = '%Y%m%d%H%M%S%Z'
 
-class log():	
+class my_log():	
 	def __init__(self, verbosity=0, mask=ALL_MASK, mode_list=[DEBUG, WARNING, INFO, ERROR, EXCEPTION], std=INFO):
 		
 
@@ -32,9 +32,9 @@ class log():
 				if mode == std:
 					self.modes[mode] = {"enable": True,
 										"verbosity":verbosity, 
-										"show_mode": True, 
-										"show_file": True, 
-										"show_line": True, 
+										"show_mode": False, 
+										"show_file": False, 
+										"show_line": False, 
 										"show_time": None}
 
 				elif mode == EXCEPTION:
@@ -44,7 +44,14 @@ class log():
 										"show_file": True, 
 										"show_line": True, 
 										"show_time": DEFAULT_DATETIME_FORMAT}
-
+				
+				elif mode == ERROR:
+					self.modes[mode] = {"enable": True,
+										"verbosity": 0, 
+										"show_mode": True, 
+										"show_file": True, 
+										"show_line": True, 
+										"show_time": DEFAULT_DATETIME_FORMAT}
 				else:
 					self.modes[mode] = {"enable": False,
 										"verbosity":verbosity, 
@@ -67,7 +74,45 @@ class log():
 		else:
 			raise Exception(mode + ' is an unknown mode')
 
-	def log(self, msg, mode=None, verbosity=0, mask=ALL_MASK,frameinfo=getframeinfo(currentframe()), suppress=False):
+	def set_mode(self, mode, enable=True):
+		if (enable is True) or (enable is False):
+			if mode in self.modes:
+				self.modes[mode]["enable"] = enable
+			else:
+				raise Exception(enable + ' is not a value value. Should be True or False')
+		else:
+			raise Exception(mode + ' is an unknown mode')	
+
+	def set_show_mode(self, mode, enable=True):
+		if (enable is True) or (enable is False):
+			if mode in self.modes:
+				self.modes[mode]["show_mode"] = enable
+			else:
+				raise Exception(enable + ' is not a value value. Should be True or False')
+		else:
+			raise Exception(mode + ' is an unknown mode')	
+	
+
+	def set_show_file(self, mode, enable=True):
+		if (enable is True) or (enable is False):
+			if mode in self.modes:
+				self.modes[mode]["show_file"] = enable
+			else:
+				raise Exception(enable + ' is not a value value. Should be True or False')
+		else:
+			raise Exception(mode + ' is an unknown mode')	
+	
+	def set_show_line_number(self, mode, enable=True):
+		if (enable is True) or (enable is False):
+			if mode in self.modes:
+				self.modes[mode]["show_line"] = enable
+			else:
+				raise Exception(enable + ' is not a value value. Should be True or False')
+		else:
+			raise Exception(mode + ' is an unknown mode')	
+
+
+	def out(self, msg, mode=None, verbosity=0, mask=ALL_MASK,frameinfo=getframeinfo(currentframe()), suppress=False):
 		
 		if mode is None:
 			mode = self.std
