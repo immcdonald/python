@@ -15,7 +15,6 @@ DEFAULT_DATETIME_FORMAT = '%Y%m%d%H%M%S%Z'
 
 class my_log():	
 	def __init__(self, verbosity=0, mask=ALL_MASK, mode_list=[DEBUG, WARNING, INFO, ERROR, EXCEPTION], std=INFO):
-		
 
 		if EXCEPTION not in mode_list:
 			mode_list.append(EXCEPTION)
