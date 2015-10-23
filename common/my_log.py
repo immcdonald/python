@@ -54,7 +54,7 @@ class my_log():
 
 				elif mode == DEBUG:
 					self.modes[mode] = {"enable": True,
-										"verbosity": 0,
+										"verbosity": 1,
 										"show_mode": True,
 										"show_file": False,
 										"show_line": False,
@@ -128,7 +128,6 @@ class my_log():
 
 
 	def out(self, msg, mode=None, v=0, mask=ALL_MASK,frameinfo=getframeinfo(currentframe()), suppress=False):
-
 		if mode is None:
 			mode = self.std
 
