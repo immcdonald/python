@@ -44,13 +44,20 @@ class my_log():
 										"show_line": True,
 										"show_time": DEFAULT_DATETIME_FORMAT}
 
-
 				elif mode == WARNING:
 					self.modes[mode] = {"enable": True,
 										"verbosity": 0,
 										"show_mode": True,
 										"show_file": True,
 										"show_line": True,
+										"show_time": None}
+
+				elif mode == DEBUG:
+					self.modes[mode] = {"enable": True,
+										"verbosity": 0,
+										"show_mode": True,
+										"show_file": False,
+										"show_line": False,
 										"show_time": DEFAULT_DATETIME_FORMAT}
 
 				elif mode == ERROR:
@@ -59,7 +66,7 @@ class my_log():
 										"show_mode": True,
 										"show_file": False,
 										"show_line": False,
-										"show_time": None}
+										"show_time": DEFAULT_DATETIME_FORMAT}
 				else:
 					self.modes[mode] = {"enable": False,
 										"verbosity":verbosity,
@@ -120,14 +127,14 @@ class my_log():
 			raise Exception(mode + ' is an unknown mode')
 
 
-	def out(self, msg, mode=None, verbosity=0, mask=ALL_MASK,frameinfo=getframeinfo(currentframe()), suppress=False):
+	def out(self, msg, mode=None, v=0, mask=ALL_MASK,frameinfo=getframeinfo(currentframe()), suppress=False):
 
 		if mode is None:
 			mode = self.std
 
 		if mode in self.modes:
 			if self.modes[mode]["enable"]:
-				if (verbosity >= self.modes[mode]["verbosity"]):
+				if (v <= self.modes[mode]["verbosity"]):
 					if (self.mask & mask):
 
 						output = "";
