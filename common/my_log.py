@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import datetime 
+from datetime import datetime
 from pprint import pformat
 from inspect import currentframe, getframeinfo
 
@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(message)s');
 ALL_MASK = 0xFFFFFFFF
 DEFAULT_DATETIME_FORMAT = '%Y%m%d%H%M%S%Z'
 
-class my_log():	
+class my_log():
 	def __init__(self, verbosity=0, mask=ALL_MASK, mode_list=[DEBUG, WARNING, INFO, ERROR, EXCEPTION], std=INFO):
 
 		if EXCEPTION not in mode_list:
@@ -30,33 +30,42 @@ class my_log():
 
 				if mode == std:
 					self.modes[mode] = {"enable": True,
-										"verbosity":verbosity, 
-										"show_mode": False, 
-										"show_file": False, 
-										"show_line": False, 
+										"verbosity":verbosity,
+										"show_mode": False,
+										"show_file": False,
+										"show_line": False,
 										"show_time": None}
 
 				elif mode == EXCEPTION:
 					self.modes[mode] = {"enable": True,
-										"verbosity": 0, 
-										"show_mode": False, 
-										"show_file": True, 
-										"show_line": True, 
+										"verbosity": 0,
+										"show_mode": False,
+										"show_file": True,
+										"show_line": True,
 										"show_time": DEFAULT_DATETIME_FORMAT}
-				
+
+
+				elif mode == WARNING:
+					self.modes[mode] = {"enable": True,
+										"verbosity": 0,
+										"show_mode": True,
+										"show_file": True,
+										"show_line": True,
+										"show_time": DEFAULT_DATETIME_FORMAT}
+
 				elif mode == ERROR:
 					self.modes[mode] = {"enable": True,
-										"verbosity": 0, 
-										"show_mode": True, 
-										"show_file": True, 
-										"show_line": True, 
-										"show_time": DEFAULT_DATETIME_FORMAT}
+										"verbosity": 0,
+										"show_mode": True,
+										"show_file": False,
+										"show_line": False,
+										"show_time": None}
 				else:
 					self.modes[mode] = {"enable": False,
-										"verbosity":verbosity, 
-										"show_mode": False, 
-										"show_file": False, 
-										"show_line": False, 
+										"verbosity":verbosity,
+										"show_mode": False,
+										"show_file": False,
+										"show_line": False,
 										"show_time": None}
 			else:
 				raise Exception(mode + ' is already in the list.')
@@ -80,7 +89,7 @@ class my_log():
 			else:
 				raise Exception(enable + ' is not a value value. Should be True or False')
 		else:
-			raise Exception(mode + ' is an unknown mode')	
+			raise Exception(mode + ' is an unknown mode')
 
 	def set_show_mode(self, mode, enable=True):
 		if (enable is True) or (enable is False):
@@ -89,8 +98,8 @@ class my_log():
 			else:
 				raise Exception(enable + ' is not a value value. Should be True or False')
 		else:
-			raise Exception(mode + ' is an unknown mode')	
-	
+			raise Exception(mode + ' is an unknown mode')
+
 
 	def set_show_file(self, mode, enable=True):
 		if (enable is True) or (enable is False):
@@ -99,8 +108,8 @@ class my_log():
 			else:
 				raise Exception(enable + ' is not a value value. Should be True or False')
 		else:
-			raise Exception(mode + ' is an unknown mode')	
-	
+			raise Exception(mode + ' is an unknown mode')
+
 	def set_show_line_number(self, mode, enable=True):
 		if (enable is True) or (enable is False):
 			if mode in self.modes:
@@ -108,11 +117,11 @@ class my_log():
 			else:
 				raise Exception(enable + ' is not a value value. Should be True or False')
 		else:
-			raise Exception(mode + ' is an unknown mode')	
+			raise Exception(mode + ' is an unknown mode')
 
 
 	def out(self, msg, mode=None, verbosity=0, mask=ALL_MASK,frameinfo=getframeinfo(currentframe()), suppress=False):
-		
+
 		if mode is None:
 			mode = self.std
 
@@ -120,7 +129,7 @@ class my_log():
 			if self.modes[mode]["enable"]:
 				if (verbosity >= self.modes[mode]["verbosity"]):
 					if (self.mask & mask):
-						
+
 						output = "";
 						if suppress is False:
 							prefixed = False
@@ -131,10 +140,10 @@ class my_log():
 								output = output + current.strftime(self.modes[mode]["show_time"])
 								prefixed = True
 
-							# Should we prefix the file 
+							# Should we prefix the file
 							if self.modes[mode]["show_file"] is not False:
 								if prefixed:
-									output = output + ":"	
+									output = output + ":"
 								output = output + os.path.basename(frameinfo.filename)
 								prefixed = True
 
