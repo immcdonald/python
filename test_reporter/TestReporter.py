@@ -12,7 +12,7 @@ class TestReporter(My_SQL):
 	def junk(self):
 		pass
 
-dog = TestReporter("serenity.bts.rim.net", "root", "q1!w2@e3#");
+dog = TestReporter("serenity.bts.rim.net", "root", "root");
 
 dog.connect()
 print dog.list_tables("qa_db")

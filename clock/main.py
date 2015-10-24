@@ -13,6 +13,8 @@ from my_log import *
 from my_store import *
 
 DEF_TIME_UPDATE_EVENT=(USEREVENT+1)
+
+
 DEF_SECONDS_IN_A_DAY = (24 * 60 * 60)
 
 def store_init(args):
@@ -45,11 +47,22 @@ def time_update(args):
 	seconds_passed_today = time_to_seconds(args.current_time.hour, args.current_time.minute, args.current_time.second)
 	args.day_past_percentage = seconds_to_percent_of_day(seconds_passed_today)
 
-	sunset = time_to_seconds(18,6,00)
-	sunset_percent =  seconds_to_percent_of_day(sunset)
-	args.log.out(str(sunset_percent)+" --> "+str(args.day_past_percentage))
+	#sunset = time_to_seconds(18,6,00)
+	#sunset_percent =  seconds_to_percent_of_day(sunset)
+	#args.log.out(str(sunset_percent)+" --> "+str(args.day_past_percentage))
 	pygame.time.set_timer(DEF_TIME_UPDATE_EVENT, 500);
 
+
+def draw_pixels(screen, offset):
+	width, height = screen.get_size()
+
+	counter = (offset % 255);
+	for x in range(0, width, 5):
+		for y in range(0, height,5):
+			screen.set_at((x, y + (counter % 2)), (0, 0, counter))
+			counter += 1
+			if counter > 255:
+				counter = 0
 
 def main(argv):
 	log = my_log()
@@ -77,15 +90,30 @@ def main(argv):
 	run = True
 
 	if pygame.init():
+		# Used to manage how fast the screen updates
+		clock = pygame.time.Clock()
+
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
  		time_update(args)
 
+ 		offset = 0
 		while(run):
+			
+			draw_pixels(screen, offset);
+			offset += 1
+
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
 					run = False
 				elif event.type == DEF_TIME_UPDATE_EVENT:
  					time_update(args)
+ 					print clock.get_fps()
+ 				elif event.type == pygame.KEYDOWN:
+ 					print "Key Down"
+ 			
+ 			pygame.display.flip()
+			# limit the frame rate
+			clock.tick(500)
 
  	log.out("Good Bye")
 
