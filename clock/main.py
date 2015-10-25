@@ -103,7 +103,11 @@ def main(argv):
 
  		offset = 0
 		while(run):
-			print bin(args.keyboard_state)
+			
+
+			if len(key_list) > 0:
+				print key_list
+
 			draw_pixels(screen, offset);
 			offset += 1
 			for event in pygame.event.get():
@@ -336,8 +340,6 @@ def main(argv):
 						pass
 					elif event.key == K_F15:
 						pass
-
-						args.keyboard_state = args.keyboard_state & (~KMOD_CAPS)
 					elif event.key == K_NUMLOCK:
 						args.keyboard_state = args.keyboard_state  & (~KMOD_NUM)
 					elif event.key == K_CAPSLOCK:
@@ -382,19 +384,22 @@ def main(argv):
 						pass
  				elif event.type == pygame.KEYDOWN:
 					if event.key == K_BACKSPACE:
-						pass
+						if len(key_list) > 0:
+							 del key_list[-1]
 					elif event.key == K_TAB:
 						pass
 					elif event.key == K_CLEAR:
 						pass
 					elif event.key == K_RETURN:
-						pass
+						dog = "".join(key_list)
+						print dog
+						key_list = []
 					elif event.key == K_PAUSE:
 						pass
 					elif event.key == K_ESCAPE:
 						pass
 					elif event.key == K_SPACE:
-						pass
+						key_list.append(' ')
 					elif event.key == K_EXCLAIM:
 						pass
 					elif event.key == K_QUOTEDBL:
@@ -424,27 +429,60 @@ def main(argv):
 					elif event.key == K_SLASH:
 						pass
 					elif event.key == K_0:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append(')')
+						else:
+							key_list.append('0')
 					elif event.key == K_1:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append('!')
+						else:
+							key_list.append('1')
 					elif event.key == K_2:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append('@')
+						else:
+							key_list.append('2')
 					elif event.key == K_3:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append('#')
+						else:
+							key_list.append('3')
 					elif event.key == K_4:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append('$')
+						else:
+							key_list.append('4')
 					elif event.key == K_5:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append('%')
+						else:
+							key_list.append('5')
 					elif event.key == K_6:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append('^')
+						else:
+							key_list.append('6')
 					elif event.key == K_7:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append('&')
+						else:
+							key_list.append('7')
 					elif event.key == K_8:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append('*')
+						else:
+							key_list.append('8')
 					elif event.key == K_9:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append('(')
+						else:
+							key_list.append('9')
 					elif event.key == K_COLON:
-						pass
+						if (args.keyboard_state & KMOD_SHIFT) != 0:
+							key_list.append(':')
+						else:
+							key_list.append(';')
 					elif event.key == K_SEMICOLON:
 						pass
 					elif event.key == K_LESS:
@@ -469,58 +507,11 @@ def main(argv):
 						pass
 					elif event.key == K_BACKQUOTE:
 						pass
-					elif event.key == K_a:
-						pass
-					elif event.key == K_b:
-						pass
-					elif event.key == K_c:
-						pass
-					elif event.key == K_d:
-						pass
-					elif event.key == K_e:
-						pass
-					elif event.key == K_f:
-						pass
-					elif event.key == K_g:
-						pass
-					elif event.key == K_h:
-						pass
-					elif event.key == K_i:
-						pass
-					elif event.key == K_j:
-						pass
-					elif event.key == K_k:
-						pass
-					elif event.key == K_l:
-						pass
-					elif event.key == K_m:
-						pass
-					elif event.key == K_n:
-						pass
-					elif event.key == K_o:
-						pass
-					elif event.key == K_p:
-						pass
-					elif event.key == K_q:
-						pass
-					elif event.key == K_r:
-						pass
-					elif event.key == K_s:
-						pass
-					elif event.key == K_t:
-						pass
-					elif event.key == K_u:
-						pass
-					elif event.key == K_v:
-						pass
-					elif event.key == K_w:
-						pass
-					elif event.key == K_x:
-						pass
-					elif event.key == K_y:
-						pass
-					elif event.key == K_z:
-						pass
+					elif ((event.key >= 97) and (event.key <= 172)):
+						if ((args.keyboard_state & KMOD_SHIFT) != 0) or ((args.keyboard_state & K_CAPSLOCK) != 0):
+							key_list.append(chr(event.key-32))
+						else:
+							key_list.append(chr(event.key))
 					elif event.key == K_DELETE:
 						pass
 					elif event.key == K_KP0:
