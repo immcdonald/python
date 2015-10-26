@@ -10,6 +10,7 @@ from my_sql import *
 
 class TestReporter(My_SQL):
 
+<<<<<<< HEAD
 	def create_project_table(self, ine="IF NOT EXISTS"):
 		query = "CREATE TABLE " + ine + " `project` ("\
 				"`id` int(11) NOT NULL AUTO_INCREMENT,"\
@@ -20,6 +21,9 @@ class TestReporter(My_SQL):
 				"UNIQUE KEY `name_UNIQUE` (`name`)"\
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8;"
 		return self.query(query)
+=======
+dog = TestReporter("serenity.bts.rim.net", "root", "root");
+>>>>>>> 11e34e6bd8d4363aa8fec5c2a65e93852516e8d3
 
 	def setup_database(self, db_name=None):
 		data_bases = self.list_databases()
@@ -36,6 +40,7 @@ class TestReporter(My_SQL):
 			if rc:
 				rc = self.create_project_table();
 
+<<<<<<< HEAD
 
 			return rc
 		else:
@@ -46,3 +51,8 @@ dog = TestReporter("serenity.bts.rim.net", <user_name>, <password>);
 
 dog.connect()
 print dog.setup_database("fred")
+=======
+#dog.create_db("fred")
+#dog.select_db("fred")
+#dog.query(" CREATE TABLE MyGuests (id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY,firstname VARCHAR(30) NOT NULL,lastname VARCHAR(30) NOT NULL, email VARCHAR(50),reg_date TIMESTAMP)");
+>>>>>>> 11e34e6bd8d4363aa8fec5c2a65e93852516e8d3
