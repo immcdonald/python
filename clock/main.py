@@ -21,7 +21,7 @@ def store_init(args):
 	args.store.add_store("BLUE", (0,0,255), tuple)
 	args.store.add_store("RED", (0,255,0), tuple)
 	args.store.add_store("BLUE", (255,0,0), tuple)
-	args.store.update_store("RED", (255,0,0), tuple)	
+	args.store.update_store("RED", (255,0,0), tuple)
 
 def check_negative(value):
     ivalue = int(value)
@@ -67,14 +67,14 @@ def draw_pixels(screen, offset):
 def main(argv):
 	log = my_log()
 	parser = argparse.ArgumentParser(description='Clock')
-	parser.add_argument('-y', "--height", default=400, type=check_negative)	
-	parser.add_argument('-x', "--width", default=640, type=check_negative)	
+	parser.add_argument('-y', "--height", default=400, type=check_negative)
+	parser.add_argument('-x', "--width", default=640, type=check_negative)
 	parser.add_argument("-v","--verbosity",  nargs='+', help="increase output verbosity")
 	args = parser.parse_args(argv)
 
-	
+
 	log.out("Input Params")
-	log.out("============")	
+	log.out("============")
 	log.out(pformat(vars(args)))
 
 
@@ -96,10 +96,10 @@ def main(argv):
 		clock = pygame.time.Clock()
 		pygame.key.set_repeat(1000, 250)
 		font = pygame.font.Font(None, 18)
-		
+
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
  		time_update(args)
- 		
+
  		key_list = []
 
  		offset = 0
@@ -198,57 +198,7 @@ def main(argv):
 						pass
 					elif event.key == K_BACKQUOTE:
 						pass
-					elif event.key == K_a:
-						pass
-					elif event.key == K_b:
-						pass
-					elif event.key == K_c:
-						pass
-					elif event.key == K_d:
-						pass
-					elif event.key == K_e:
-						pass
-					elif event.key == K_f:
-						pass
-					elif event.key == K_g:
-						pass
-					elif event.key == K_h:
-						pass
-					elif event.key == K_i:
-						pass
-					elif event.key == K_j:
-						pass
-					elif event.key == K_k:
-						pass
-					elif event.key == K_l:
-						pass
-					elif event.key == K_m:
-						pass
-					elif event.key == K_n:
-						pass
-					elif event.key == K_o:
-						pass
-					elif event.key == K_p:
-						pass
-					elif event.key == K_q:
-						pass
-					elif event.key == K_r:
-						pass
-					elif event.key == K_s:
-						pass
-					elif event.key == K_t:
-						pass
-					elif event.key == K_u:
-						pass
-					elif event.key == K_v:
-						pass
-					elif event.key == K_w:
-						pass
-					elif event.key == K_x:
-						pass
-					elif event.key == K_y:
-						pass
-					elif event.key == K_z:
+					elif ((event.key >= 97) and (event.key <= 172)):
 						pass
 					elif event.key == K_DELETE:
 						pass
@@ -353,7 +303,7 @@ def main(argv):
 					elif event.key == K_LALT:
 						args.keyboard_state = args.keyboard_state & (~KMOD_LALT)
 					elif event.key == K_RMETA:
-						args.keyboard_state = args.keyboard_state & (~KMOD_RMETA)					
+						args.keyboard_state = args.keyboard_state & (~KMOD_RMETA)
 					elif event.key == K_LMETA:
 						args.keyboard_state = args.keyboard_state & (~KMOD_LMETA)
 					elif event.key == K_LSUPER:
@@ -609,9 +559,9 @@ def main(argv):
 					elif event.key == K_LALT:
 						args.keyboard_state = args.keyboard_state | KMOD_LALT
 					elif event.key == K_RMETA:
-						args.keyboard_state = args.keyboard_state | KMOD_RMETA					
+						args.keyboard_state = args.keyboard_state | KMOD_RMETA
 					elif event.key == K_LMETA:
-						args.keyboard_state = args.keyboard_state | KMOD_LMETA	
+						args.keyboard_state = args.keyboard_state | KMOD_LMETA
 					elif event.key == K_LSUPER:
 						pass
 					elif event.key == K_RSUPER:
@@ -638,14 +588,14 @@ def main(argv):
 				text = font.render("".join(key_list), 1, (255, 255, 255))
 				textpos = text.get_rect()
 				textpos.centerx = screen.get_rect().centerx
- 			
+
  			# blank the screen
  			screen.fill((0,0,0))
 			draw_pixels(screen, offset);
 
 			draw_pixels(screen, offset);
-			offset += 1	
-			
+			offset += 1
+
 			if text:
 				screen.blit(text, textpos)
 
