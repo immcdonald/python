@@ -95,7 +95,8 @@ def main(argv):
 		# Used to manage how fast the screen updates
 		clock = pygame.time.Clock()
 		pygame.key.set_repeat(1000, 250)
-
+		font = pygame.font.Font(None, 18)
+		
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
  		time_update(args)
  		
@@ -103,13 +104,6 @@ def main(argv):
 
  		offset = 0
 		while(run):
-			
-
-			if len(key_list) > 0:
-				print key_list
-
-			draw_pixels(screen, offset);
-			offset += 1
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
 					run = False
@@ -639,7 +633,22 @@ def main(argv):
 					elif event.key == K_EURO:
 						pass
 
- 	
+ 			text = None
+			if len(key_list) > 0:
+				text = font.render("".join(key_list), 1, (255, 255, 255))
+				textpos = text.get_rect()
+				textpos.centerx = screen.get_rect().centerx
+ 			
+ 			# blank the screen
+ 			screen.fill((0,0,0))
+			draw_pixels(screen, offset);
+
+			draw_pixels(screen, offset);
+			offset += 1	
+			
+			if text:
+				screen.blit(text, textpos)
+
 
  			pygame.display.flip()
 			# limit the frame rate
