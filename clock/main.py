@@ -13,10 +13,488 @@ from my_log import *
 from my_store import *
 
 DEF_TIME_UPDATE_EVENT=(USEREVENT+1)
-
-
 DEF_SECONDS_IN_A_DAY = (24 * 60 * 60)
 
+
+
+
+def command_processor(args, cmd_string):
+	print cmd_string
+
+
+def process_key_up(args):
+	if args.event.key == K_BACKSPACE:
+		pass
+	elif args.event.key == K_TAB:
+		pass
+	elif args.event.key == K_CLEAR:
+		pass
+	elif args.event.key == K_RETURN:
+		pass
+	elif args.event.key == K_PAUSE:
+		pass
+	elif args.event.key == K_ESCAPE:
+		pass
+	elif args.event.key == K_SPACE:
+		pass
+	elif args.event.key == K_EXCLAIM:
+		pass
+	elif args.event.key == K_QUOTEDBL:
+		pass
+	elif args.event.key == K_HASH:
+		pass
+	elif args.event.key == K_DOLLAR:
+		pass
+	elif args.event.key == K_AMPERSAND:
+		pass
+	elif args.event.key == K_QUOTE:
+		pass
+	elif args.event.key == K_LEFTPAREN:
+		pass
+	elif args.event.key == K_RIGHTPAREN:
+		pass
+	elif args.event.key == K_ASTERISK:
+		pass
+	elif args.event.key == K_PLUS:
+		pass
+	elif args.event.key == K_COMMA:
+		pass
+	elif args.event.key == K_MINUS:
+		pass
+	elif args.event.key == K_PERIOD:
+		pass
+	elif args.event.key == K_SLASH:
+		pass
+	elif args.event.key == K_0:
+		pass
+	elif args.event.key == K_1:
+		pass
+	elif args.event.key == K_2:
+		pass
+	elif args.event.key == K_3:
+		pass
+	elif args.event.key == K_4:
+		pass
+	elif args.event.key == K_5:
+		pass
+	elif args.event.key == K_6:
+		pass
+	elif args.event.key == K_7:
+		pass
+	elif args.event.key == K_8:
+		pass
+	elif args.event.key == K_9:
+		pass
+	elif args.event.key == K_COLON:
+		pass
+	elif args.event.key == K_SEMICOLON:
+		pass
+	elif args.event.key == K_LESS:
+		pass
+	elif args.event.key == K_EQUALS:
+		pass
+	elif args.event.key == K_GREATER:
+		pass
+	elif args.event.key == K_QUESTION:
+		pass
+	elif args.event.key == K_AT:
+		pass
+	elif args.event.key == K_LEFTBRACKET:
+		pass
+	elif args.event.key == K_BACKSLASH:
+		pass
+	elif args.event.key == K_RIGHTBRACKET:
+		pass
+	elif args.event.key == K_CARET:
+		pass
+	elif args.event.key == K_UNDERSCORE:
+		pass
+	elif args.event.key == K_BACKQUOTE:
+		pass
+	elif ((args.event.key >= 97) and (args.event.key <= 172)):
+		pass
+	elif args.event.key == K_DELETE:
+		pass
+	elif args.event.key == K_KP0:
+		pass
+	elif args.event.key == K_KP1:
+		pass
+	elif args.event.key == K_KP2:
+		pass
+	elif args.event.key == K_KP3:
+		pass
+	elif args.event.key == K_KP4:
+		pass
+	elif args.event.key == K_KP5:
+		pass
+	elif args.event.key == K_KP6:
+		pass
+	elif args.event.key == K_KP7:
+		pass
+	elif args.event.key == K_KP8:
+		pass
+	elif args.event.key == K_KP9:
+		pass
+	elif args.event.key == K_KP_PERIOD:
+		pass
+	elif args.event.key == K_KP_DIVIDE:
+		pass
+	elif args.event.key == K_KP_MULTIPLY:
+		pass
+	elif args.event.key == K_KP_MINUS:
+		pass
+	elif args.event.key == K_KP_PLUS:
+		pass
+	elif args.event.key == K_KP_ENTER:
+		pass
+	elif args.event.key == K_KP_EQUALS:
+		pass
+	elif args.event.key == K_UP:
+		pass
+	elif args.event.key == K_DOWN:
+		pass
+	elif args.event.key == K_RIGHT:
+		pass
+	elif args.event.key == K_LEFT:
+		pass
+	elif args.event.key == K_INSERT:
+		pass
+	elif args.event.key == K_HOME:
+		pass
+	elif args.event.key == K_END:
+		pass
+	elif args.event.key == K_PAGEUP:
+		pass
+	elif args.event.key == K_PAGEDOWN:
+		pass
+	elif args.event.key == K_F1:
+		pass
+	elif args.event.key == K_F2:
+		pass
+	elif args.event.key == K_F3:
+		pass
+	elif args.event.key == K_F4:
+		pass
+	elif args.event.key == K_F5:
+		pass
+	elif args.event.key == K_F6:
+		pass
+	elif args.event.key == K_F7:
+		pass
+	elif args.event.key == K_F8:
+		pass
+	elif args.event.key == K_F9:
+		pass
+	elif args.event.key == K_F10:
+		pass
+	elif args.event.key == K_F11:
+		pass
+	elif args.event.key == K_F12:
+		pass
+	elif args.event.key == K_F13:
+		pass
+	elif args.event.key == K_F14:
+		pass
+	elif args.event.key == K_F15:
+		pass
+	elif args.event.key == K_NUMLOCK:
+		args.keyboard_state = args.keyboard_state  & (~KMOD_NUM)
+	elif args.event.key == K_CAPSLOCK:
+		args.keyboard_state = args.keyboard_state & (~KMOD_CAPS)
+	elif args.event.key == K_SCROLLOCK:
+		pass
+	elif args.event.key == K_RSHIFT:
+		args.keyboard_state = args.keyboard_state & (~KMOD_RSHIFT)
+	elif args.event.key == K_LSHIFT:
+		args.keyboard_state = args.keyboard_state & (~KMOD_LSHIFT)
+	elif args.event.key == K_RCTRL:
+		args.keyboard_state = args.keyboard_state & (~KMOD_RCTRL)
+	elif args.event.key == K_LCTRL:
+		args.keyboard_state = args.keyboard_state & (~KMOD_LCTRL)
+	elif args.event.key == K_RALT:
+		args.keyboard_state = args.keyboard_state & (~KMOD_RALT)
+	elif args.event.key == K_LALT:
+		args.keyboard_state = args.keyboard_state & (~KMOD_LALT)
+	elif args.event.key == K_RMETA:
+		args.keyboard_state = args.keyboard_state & (~KMOD_RMETA)
+	elif args.event.key == K_LMETA:
+		args.keyboard_state = args.keyboard_state & (~KMOD_LMETA)
+	elif args.event.key == K_LSUPER:
+		pass
+	elif args.event.key == K_RSUPER:
+		pass
+	elif args.event.key == K_MODE:
+		pass
+	elif args.event.key == K_HELP:
+		pass
+	elif args.event.key == K_PRINT:
+		pass
+	elif args.event.key == K_SYSREQ:
+		pass
+	elif args.event.key == K_BREAK:
+		pass
+	elif args.event.key == K_MENU:
+		pass
+	elif args.event.key == K_POWER:
+		pass
+	elif args.event.key == K_EURO:
+		pass	
+
+def process_key_down(args):
+	if args.event.key == K_BACKSPACE:
+		if len(args.key_input_list) > 0:
+			 del args.key_input_list[-1]
+	elif args.event.key == K_TAB:
+		pass
+	elif args.event.key == K_CLEAR:
+		pass
+	elif args.event.key == K_RETURN:
+		command_processor(args, "".join(args.key_input_list))
+		args.key_input_list = []
+	elif args.event.key == K_PAUSE:
+		pass
+	elif args.event.key == K_ESCAPE:
+		pass
+	elif args.event.key == K_SPACE:
+		args.key_input_list.append(' ')
+	elif args.event.key == K_EXCLAIM:
+		pass
+	elif args.event.key == K_QUOTEDBL:
+		pass
+	elif args.event.key == K_HASH:
+		pass
+	elif args.event.key == K_DOLLAR:
+		pass
+	elif args.event.key == K_AMPERSAND:
+		pass
+	elif args.event.key == K_QUOTE:
+		pass
+	elif args.event.key == K_LEFTPAREN:
+		pass
+	elif args.event.key == K_RIGHTPAREN:
+		pass
+	elif args.event.key == K_ASTERISK:
+		pass
+	elif args.event.key == K_PLUS:
+		pass
+	elif args.event.key == K_COMMA:
+		pass
+	elif args.event.key == K_MINUS:
+		pass
+	elif args.event.key == K_PERIOD:
+		pass
+	elif args.event.key == K_SLASH:
+		pass
+	elif args.event.key == K_0:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append(')')
+		else:
+			args.key_input_list.append('0')
+	elif args.event.key == K_1:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('!')
+		else:
+			args.key_input_list.append('1')
+	elif args.event.key == K_2:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('@')
+		else:
+			args.key_input_list.append('2')
+	elif args.event.key == K_3:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('#')
+		else:
+			args.key_input_list.append('3')
+	elif args.event.key == K_4:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('$')
+		else:
+			args.key_input_list.append('4')
+	elif args.event.key == K_5:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('%')
+		else:
+			args.key_input_list.append('5')
+	elif args.event.key == K_6:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('^')
+		else:
+			args.key_input_list.append('6')
+	elif args.event.key == K_7:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('&')
+		else:
+			args.key_input_list.append('7')
+	elif args.event.key == K_8:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('*')
+		else:
+			args.key_input_list.append('8')
+	elif args.event.key == K_9:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('(')
+		else:
+			args.key_input_list.append('9')
+	elif args.event.key == K_COLON:
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append(':')
+		else:
+			args.key_input_list.append(';')
+	elif args.event.key == K_SEMICOLON:
+		pass
+	elif args.event.key == K_LESS:
+		pass
+	elif args.event.key == K_EQUALS:
+		pass
+	elif args.event.key == K_GREATER:
+		pass
+	elif args.event.key == K_QUESTION:
+		pass
+	elif args.event.key == K_AT:
+		pass
+	elif args.event.key == K_LEFTBRACKET:
+		pass
+	elif args.event.key == K_BACKSLASH:
+		pass
+	elif args.event.key == K_RIGHTBRACKET:
+		pass
+	elif args.event.key == K_CARET:
+		pass
+	elif args.event.key == K_UNDERSCORE:
+		pass
+	elif args.event.key == K_BACKQUOTE:
+		pass
+	elif ((args.event.key >= 97) and (args.event.key <= 172)):
+		if ((args.keyboard_state & KMOD_SHIFT) != 0) or ((args.keyboard_state & K_CAPSLOCK) != 0):
+			args.key_input_list.append(chr(args.event.key-32))
+		else:
+			args.key_input_list.append(chr(args.event.key))
+	elif args.event.key == K_DELETE:
+		pass
+	elif args.event.key == K_KP0:
+		pass
+	elif args.event.key == K_KP1:
+		pass
+	elif args.event.key == K_KP2:
+		pass
+	elif args.event.key == K_KP3:
+		pass
+	elif args.event.key == K_KP4:
+		pass
+	elif args.event.key == K_KP5:
+		pass
+	elif args.event.key == K_KP6:
+		pass
+	elif args.event.key == K_KP7:
+		pass
+	elif args.event.key == K_KP8:
+		pass
+	elif args.event.key == K_KP9:
+		pass
+	elif args.event.key == K_KP_PERIOD:
+		pass
+	elif args.event.key == K_KP_DIVIDE:
+		pass
+	elif args.event.key == K_KP_MULTIPLY:
+		pass
+	elif args.event.key == K_KP_MINUS:
+		pass
+	elif args.event.key == K_KP_PLUS:
+		pass
+	elif args.event.key == K_KP_ENTER:
+		pass
+	elif args.event.key == K_KP_EQUALS:
+		pass
+	elif args.event.key == K_UP:
+		pass
+	elif args.event.key == K_DOWN:
+		pass
+	elif args.event.key == K_RIGHT:
+		pass
+	elif args.event.key == K_LEFT:
+		pass
+	elif args.event.key == K_INSERT:
+		pass
+	elif args.event.key == K_HOME:
+		pass
+	elif args.event.key == K_END:
+		pass
+	elif args.event.key == K_PAGEUP:
+		pass
+	elif args.event.key == K_PAGEDOWN:
+		pass
+	elif args.event.key == K_F1:
+		pass
+	elif args.event.key == K_F2:
+		pass
+	elif args.event.key == K_F3:
+		pass
+	elif args.event.key == K_F4:
+		pass
+	elif args.event.key == K_F5:
+		pass
+	elif args.event.key == K_F6:
+		pass
+	elif args.event.key == K_F7:
+		pass
+	elif args.event.key == K_F8:
+		pass
+	elif args.event.key == K_F9:
+		pass
+	elif args.event.key == K_F10:
+		pass
+	elif args.event.key == K_F11:
+		pass
+	elif args.event.key == K_F12:
+		pass
+	elif args.event.key == K_F13:
+		pass
+	elif args.event.key == K_F14:
+		pass
+	elif args.event.key == K_F15:
+		pass
+	elif args.event.key == K_NUMLOCK:
+		args.keyboard_state = args.keyboard_state | KMOD_NUM
+	elif args.event.key == K_CAPSLOCK:
+		args.keyboard_state = args.keyboard_state | KMOD_CAPS
+	elif args.event.key == K_SCROLLOCK:
+		pass
+	elif args.event.key == K_RSHIFT:
+		args.keyboard_state = args.keyboard_state | KMOD_RSHIFT
+	elif args.event.key == K_LSHIFT:
+		args.keyboard_state = args.keyboard_state | KMOD_LSHIFT
+	elif args.event.key == K_RCTRL:
+		args.keyboard_state = args.keyboard_state | KMOD_RCTRL
+	elif args.event.key == K_LCTRL:
+		args.keyboard_state = args.keyboard_state | KMOD_LCTRL
+	elif args.event.key == K_RALT:
+		args.keyboard_state = args.keyboard_state | KMOD_RALT
+	elif args.event.key == K_LALT:
+		args.keyboard_state = args.keyboard_state | KMOD_LALT
+	elif args.event.key == K_RMETA:
+		args.keyboard_state = args.keyboard_state | KMOD_RMETA
+	elif args.event.key == K_LMETA:
+		args.keyboard_state = args.keyboard_state | KMOD_LMETA
+	elif args.event.key == K_LSUPER:
+		pass
+	elif args.event.key == K_RSUPER:
+		pass
+	elif args.event.key == K_MODE:
+		pass
+	elif args.event.key == K_HELP:
+		pass
+	elif args.event.key == K_PRINT:
+		pass
+	elif args.event.key == K_SYSREQ:
+		pass
+	elif args.event.key == K_BREAK:
+		pass
+	elif args.event.key == K_MENU:
+		pass
+	elif args.event.key == K_POWER:
+		pass
+	elif args.event.key == K_EURO:
+		pass
 def store_init(args):
 	args.store.add_store("BLUE", (0,0,255), tuple)
 	args.store.add_store("RED", (0,255,0), tuple)
@@ -52,7 +530,6 @@ def time_update(args):
 	#args.log.out(str(sunset_percent)+" --> "+str(args.day_past_percentage))
 	pygame.time.set_timer(DEF_TIME_UPDATE_EVENT, 500);
 
-
 def draw_pixels(screen, offset):
 	width, height = screen.get_size()
 
@@ -63,6 +540,39 @@ def draw_pixels(screen, offset):
 			counter += 1
 			if counter > 255:
 				counter = 0
+
+def draw_sky(args, screen):
+	pass
+
+
+def render(args, screen):
+
+	# blank the screen
+	screen.fill((0,0,0))
+
+	# Draw stuff
+	draw_pixels(screen, args.offset)
+	args.offset += 1
+
+
+	# Draw Horizon
+
+	# Draw the fade out if you need too.
+	if (args.shade > 0.0) and (args.shade <= 100.00):
+		pass
+
+	# Draw text on the screen
+	if len(args.key_input_list) > 0:
+		text = None
+		text = args.font_handle.render("".join(args.key_input_list), 1, (255, 255, 255))
+		textpos = text.get_rect()
+		textpos.y = args.height - round(args.cmd_font * 0.70,0)
+		screen.blit(text, textpos)
+
+	#convert the screen 
+	screen.convert()
+	pygame.display.flip()
+
 
 def main(argv):
 	log = my_log()
@@ -80,9 +590,12 @@ def main(argv):
 
 	args.log = log
 	args.keyboard_state = KMOD_MODE
-
+	args.cmd_font = 18
+	args.shade = 0.00;
 	args.day_past_percentage = 0.0;
 	args.store = my_store(log=log)
+	args.key_input_list = []
+	args.event = None
 
 	store_init(args)
 
@@ -95,514 +608,28 @@ def main(argv):
 		# Used to manage how fast the screen updates
 		clock = pygame.time.Clock()
 		pygame.key.set_repeat(1000, 250)
-		font = pygame.font.Font(None, 18)
+		args.font_handle = pygame.font.Font(None, args.cmd_font)
 
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
  		time_update(args)
 
- 		key_list = []
+ 		args.offset = 0
 
- 		offset = 0
 		while(run):
-			for event in pygame.event.get():
-				if event.type == pygame.QUIT:
+			for args.event in pygame.event.get():
+				if args.event.type == pygame.QUIT:
 					run = False
-				elif event.type == DEF_TIME_UPDATE_EVENT:
+				elif args.event.type == DEF_TIME_UPDATE_EVENT:
  					time_update(args)
- 				elif event.type == pygame.KEYUP:
-					if event.key == K_BACKSPACE:
-						pass
-					elif event.key == K_TAB:
-						pass
-					elif event.key == K_CLEAR:
-						pass
-					elif event.key == K_RETURN:
-						pass
-					elif event.key == K_PAUSE:
-						pass
-					elif event.key == K_ESCAPE:
-						pass
-					elif event.key == K_SPACE:
-						pass
-					elif event.key == K_EXCLAIM:
-						pass
-					elif event.key == K_QUOTEDBL:
-						pass
-					elif event.key == K_HASH:
-						pass
-					elif event.key == K_DOLLAR:
-						pass
-					elif event.key == K_AMPERSAND:
-						pass
-					elif event.key == K_QUOTE:
-						pass
-					elif event.key == K_LEFTPAREN:
-						pass
-					elif event.key == K_RIGHTPAREN:
-						pass
-					elif event.key == K_ASTERISK:
-						pass
-					elif event.key == K_PLUS:
-						pass
-					elif event.key == K_COMMA:
-						pass
-					elif event.key == K_MINUS:
-						pass
-					elif event.key == K_PERIOD:
-						pass
-					elif event.key == K_SLASH:
-						pass
-					elif event.key == K_0:
-						pass
-					elif event.key == K_1:
-						pass
-					elif event.key == K_2:
-						pass
-					elif event.key == K_3:
-						pass
-					elif event.key == K_4:
-						pass
-					elif event.key == K_5:
-						pass
-					elif event.key == K_6:
-						pass
-					elif event.key == K_7:
-						pass
-					elif event.key == K_8:
-						pass
-					elif event.key == K_9:
-						pass
-					elif event.key == K_COLON:
-						pass
-					elif event.key == K_SEMICOLON:
-						pass
-					elif event.key == K_LESS:
-						pass
-					elif event.key == K_EQUALS:
-						pass
-					elif event.key == K_GREATER:
-						pass
-					elif event.key == K_QUESTION:
-						pass
-					elif event.key == K_AT:
-						pass
-					elif event.key == K_LEFTBRACKET:
-						pass
-					elif event.key == K_BACKSLASH:
-						pass
-					elif event.key == K_RIGHTBRACKET:
-						pass
-					elif event.key == K_CARET:
-						pass
-					elif event.key == K_UNDERSCORE:
-						pass
-					elif event.key == K_BACKQUOTE:
-						pass
-					elif ((event.key >= 97) and (event.key <= 172)):
-						pass
-					elif event.key == K_DELETE:
-						pass
-					elif event.key == K_KP0:
-						pass
-					elif event.key == K_KP1:
-						pass
-					elif event.key == K_KP2:
-						pass
-					elif event.key == K_KP3:
-						pass
-					elif event.key == K_KP4:
-						pass
-					elif event.key == K_KP5:
-						pass
-					elif event.key == K_KP6:
-						pass
-					elif event.key == K_KP7:
-						pass
-					elif event.key == K_KP8:
-						pass
-					elif event.key == K_KP9:
-						pass
-					elif event.key == K_KP_PERIOD:
-						pass
-					elif event.key == K_KP_DIVIDE:
-						pass
-					elif event.key == K_KP_MULTIPLY:
-						pass
-					elif event.key == K_KP_MINUS:
-						pass
-					elif event.key == K_KP_PLUS:
-						pass
-					elif event.key == K_KP_ENTER:
-						pass
-					elif event.key == K_KP_EQUALS:
-						pass
-					elif event.key == K_UP:
-						pass
-					elif event.key == K_DOWN:
-						pass
-					elif event.key == K_RIGHT:
-						pass
-					elif event.key == K_LEFT:
-						pass
-					elif event.key == K_INSERT:
-						pass
-					elif event.key == K_HOME:
-						pass
-					elif event.key == K_END:
-						pass
-					elif event.key == K_PAGEUP:
-						pass
-					elif event.key == K_PAGEDOWN:
-						pass
-					elif event.key == K_F1:
-						pass
-					elif event.key == K_F2:
-						pass
-					elif event.key == K_F3:
-						pass
-					elif event.key == K_F4:
-						pass
-					elif event.key == K_F5:
-						pass
-					elif event.key == K_F6:
-						pass
-					elif event.key == K_F7:
-						pass
-					elif event.key == K_F8:
-						pass
-					elif event.key == K_F9:
-						pass
-					elif event.key == K_F10:
-						pass
-					elif event.key == K_F11:
-						pass
-					elif event.key == K_F12:
-						pass
-					elif event.key == K_F13:
-						pass
-					elif event.key == K_F14:
-						pass
-					elif event.key == K_F15:
-						pass
-					elif event.key == K_NUMLOCK:
-						args.keyboard_state = args.keyboard_state  & (~KMOD_NUM)
-					elif event.key == K_CAPSLOCK:
-						args.keyboard_state = args.keyboard_state & (~KMOD_CAPS)
-					elif event.key == K_SCROLLOCK:
-						pass
-					elif event.key == K_RSHIFT:
-						args.keyboard_state = args.keyboard_state & (~KMOD_RSHIFT)
-					elif event.key == K_LSHIFT:
-						args.keyboard_state = args.keyboard_state & (~KMOD_LSHIFT)
-					elif event.key == K_RCTRL:
-						args.keyboard_state = args.keyboard_state & (~KMOD_RCTRL)
-					elif event.key == K_LCTRL:
-						args.keyboard_state = args.keyboard_state & (~KMOD_LCTRL)
-					elif event.key == K_RALT:
-						args.keyboard_state = args.keyboard_state & (~KMOD_RALT)
-					elif event.key == K_LALT:
-						args.keyboard_state = args.keyboard_state & (~KMOD_LALT)
-					elif event.key == K_RMETA:
-						args.keyboard_state = args.keyboard_state & (~KMOD_RMETA)
-					elif event.key == K_LMETA:
-						args.keyboard_state = args.keyboard_state & (~KMOD_LMETA)
-					elif event.key == K_LSUPER:
-						pass
-					elif event.key == K_RSUPER:
-						pass
-					elif event.key == K_MODE:
-						pass
-					elif event.key == K_HELP:
-						pass
-					elif event.key == K_PRINT:
-						pass
-					elif event.key == K_SYSREQ:
-						pass
-					elif event.key == K_BREAK:
-						pass
-					elif event.key == K_MENU:
-						pass
-					elif event.key == K_POWER:
-						pass
-					elif event.key == K_EURO:
-						pass
- 				elif event.type == pygame.KEYDOWN:
-					if event.key == K_BACKSPACE:
-						if len(key_list) > 0:
-							 del key_list[-1]
-					elif event.key == K_TAB:
-						pass
-					elif event.key == K_CLEAR:
-						pass
-					elif event.key == K_RETURN:
-						dog = "".join(key_list)
-						print dog
-						key_list = []
-					elif event.key == K_PAUSE:
-						pass
-					elif event.key == K_ESCAPE:
-						pass
-					elif event.key == K_SPACE:
-						key_list.append(' ')
-					elif event.key == K_EXCLAIM:
-						pass
-					elif event.key == K_QUOTEDBL:
-						pass
-					elif event.key == K_HASH:
-						pass
-					elif event.key == K_DOLLAR:
-						pass
-					elif event.key == K_AMPERSAND:
-						pass
-					elif event.key == K_QUOTE:
-						pass
-					elif event.key == K_LEFTPAREN:
-						pass
-					elif event.key == K_RIGHTPAREN:
-						pass
-					elif event.key == K_ASTERISK:
-						pass
-					elif event.key == K_PLUS:
-						pass
-					elif event.key == K_COMMA:
-						pass
-					elif event.key == K_MINUS:
-						pass
-					elif event.key == K_PERIOD:
-						pass
-					elif event.key == K_SLASH:
-						pass
-					elif event.key == K_0:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append(')')
-						else:
-							key_list.append('0')
-					elif event.key == K_1:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append('!')
-						else:
-							key_list.append('1')
-					elif event.key == K_2:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append('@')
-						else:
-							key_list.append('2')
-					elif event.key == K_3:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append('#')
-						else:
-							key_list.append('3')
-					elif event.key == K_4:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append('$')
-						else:
-							key_list.append('4')
-					elif event.key == K_5:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append('%')
-						else:
-							key_list.append('5')
-					elif event.key == K_6:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append('^')
-						else:
-							key_list.append('6')
-					elif event.key == K_7:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append('&')
-						else:
-							key_list.append('7')
-					elif event.key == K_8:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append('*')
-						else:
-							key_list.append('8')
-					elif event.key == K_9:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append('(')
-						else:
-							key_list.append('9')
-					elif event.key == K_COLON:
-						if (args.keyboard_state & KMOD_SHIFT) != 0:
-							key_list.append(':')
-						else:
-							key_list.append(';')
-					elif event.key == K_SEMICOLON:
-						pass
-					elif event.key == K_LESS:
-						pass
-					elif event.key == K_EQUALS:
-						pass
-					elif event.key == K_GREATER:
-						pass
-					elif event.key == K_QUESTION:
-						pass
-					elif event.key == K_AT:
-						pass
-					elif event.key == K_LEFTBRACKET:
-						pass
-					elif event.key == K_BACKSLASH:
-						pass
-					elif event.key == K_RIGHTBRACKET:
-						pass
-					elif event.key == K_CARET:
-						pass
-					elif event.key == K_UNDERSCORE:
-						pass
-					elif event.key == K_BACKQUOTE:
-						pass
-					elif ((event.key >= 97) and (event.key <= 172)):
-						if ((args.keyboard_state & KMOD_SHIFT) != 0) or ((args.keyboard_state & K_CAPSLOCK) != 0):
-							key_list.append(chr(event.key-32))
-						else:
-							key_list.append(chr(event.key))
-					elif event.key == K_DELETE:
-						pass
-					elif event.key == K_KP0:
-						pass
-					elif event.key == K_KP1:
-						pass
-					elif event.key == K_KP2:
-						pass
-					elif event.key == K_KP3:
-						pass
-					elif event.key == K_KP4:
-						pass
-					elif event.key == K_KP5:
-						pass
-					elif event.key == K_KP6:
-						pass
-					elif event.key == K_KP7:
-						pass
-					elif event.key == K_KP8:
-						pass
-					elif event.key == K_KP9:
-						pass
-					elif event.key == K_KP_PERIOD:
-						pass
-					elif event.key == K_KP_DIVIDE:
-						pass
-					elif event.key == K_KP_MULTIPLY:
-						pass
-					elif event.key == K_KP_MINUS:
-						pass
-					elif event.key == K_KP_PLUS:
-						pass
-					elif event.key == K_KP_ENTER:
-						pass
-					elif event.key == K_KP_EQUALS:
-						pass
-					elif event.key == K_UP:
-						pass
-					elif event.key == K_DOWN:
-						pass
-					elif event.key == K_RIGHT:
-						pass
-					elif event.key == K_LEFT:
-						pass
-					elif event.key == K_INSERT:
-						pass
-					elif event.key == K_HOME:
-						pass
-					elif event.key == K_END:
-						pass
-					elif event.key == K_PAGEUP:
-						pass
-					elif event.key == K_PAGEDOWN:
-						pass
-					elif event.key == K_F1:
-						pass
-					elif event.key == K_F2:
-						pass
-					elif event.key == K_F3:
-						pass
-					elif event.key == K_F4:
-						pass
-					elif event.key == K_F5:
-						pass
-					elif event.key == K_F6:
-						pass
-					elif event.key == K_F7:
-						pass
-					elif event.key == K_F8:
-						pass
-					elif event.key == K_F9:
-						pass
-					elif event.key == K_F10:
-						pass
-					elif event.key == K_F11:
-						pass
-					elif event.key == K_F12:
-						pass
-					elif event.key == K_F13:
-						pass
-					elif event.key == K_F14:
-						pass
-					elif event.key == K_F15:
-						pass
-					elif event.key == K_NUMLOCK:
-						args.keyboard_state = args.keyboard_state | KMOD_NUM
-					elif event.key == K_CAPSLOCK:
-						args.keyboard_state = args.keyboard_state | KMOD_CAPS
-					elif event.key == K_SCROLLOCK:
-						pass
-					elif event.key == K_RSHIFT:
-						args.keyboard_state = args.keyboard_state | KMOD_RSHIFT
-					elif event.key == K_LSHIFT:
-						args.keyboard_state = args.keyboard_state | KMOD_LSHIFT
-					elif event.key == K_RCTRL:
-						args.keyboard_state = args.keyboard_state | KMOD_RCTRL
-					elif event.key == K_LCTRL:
-						args.keyboard_state = args.keyboard_state | KMOD_LCTRL
-					elif event.key == K_RALT:
-						args.keyboard_state = args.keyboard_state | KMOD_RALT
-					elif event.key == K_LALT:
-						args.keyboard_state = args.keyboard_state | KMOD_LALT
-					elif event.key == K_RMETA:
-						args.keyboard_state = args.keyboard_state | KMOD_RMETA
-					elif event.key == K_LMETA:
-						args.keyboard_state = args.keyboard_state | KMOD_LMETA
-					elif event.key == K_LSUPER:
-						pass
-					elif event.key == K_RSUPER:
-						pass
-					elif event.key == K_MODE:
-						pass
-					elif event.key == K_HELP:
-						pass
-					elif event.key == K_PRINT:
-						pass
-					elif event.key == K_SYSREQ:
-						pass
-					elif event.key == K_BREAK:
-						pass
-					elif event.key == K_MENU:
-						pass
-					elif event.key == K_POWER:
-						pass
-					elif event.key == K_EURO:
-						pass
+ 				elif args.event.type == pygame.KEYUP:
+					process_key_up(args)
+ 				elif args.event.type == pygame.KEYDOWN:
+ 					process_key_down(args)
 
- 			text = None
-			if len(key_list) > 0:
-				text = font.render("".join(key_list), 1, (255, 255, 255))
-				textpos = text.get_rect()
-				textpos.centerx = screen.get_rect().centerx
+ 			render(args, screen)
 
- 			# blank the screen
- 			screen.fill((0,0,0))
-			draw_pixels(screen, offset);
-
-			draw_pixels(screen, offset);
-			offset += 1
-
-			if text:
-				screen.blit(text, textpos)
-
-
- 			pygame.display.flip()
 			# limit the frame rate
-			clock.tick(60)
+			clock.tick(100)
 
  	log.out("Good Bye")
 
