@@ -1,6 +1,7 @@
 import os, sys
 import argparse
 import pygame
+import math
 from datetime import datetime
 from pygame.locals import *
 
@@ -495,6 +496,7 @@ def process_key_down(args):
 		pass
 	elif args.event.key == K_EURO:
 		pass
+
 def store_init(args):
 	args.store.add_store("BLUE", (0,0,255), tuple)
 	args.store.add_store("RED", (0,255,0), tuple)
@@ -543,6 +545,86 @@ def draw_pixels(screen, offset):
 
 def draw_sky(args, screen):
 	pass
+
+def cal_local_standard_time_meridian(local_delta_from_gmt):
+	degrees = 15
+	return degrees * local_delta_from_gmt 
+
+def convert_deg_min_sec_2_dec(args, deg, minutes, seconds, direction):
+	valid_directions_type = ['N', 'S', 'E', 'W']
+
+	if direction.upper() in valid_directions_type:
+		multiplier = 1
+		if direction.upper() == "S" or direction.upper() == "W":
+			multiplier = -1
+		return (deg + (minutes/60.0) + (seconds/3600.00)) * multiplier
+	else:
+		args.log.out("% is not a valid direction" % direction, ERROR)
+		return None
+
+
+def decimalDegrees2DMS(value,type):
+    """
+        Converts a Decimal Degree Value into
+        Degrees Minute Seconds Notation.
+        
+        Pass value as double
+        type = {Latitude or Longitude} as string
+        
+        returns a string as D:M:S:Direction
+        created by: anothergisblog.blogspot.com 
+    """
+    degrees = int(value)
+    submin = abs( (value - int(value) ) * 60)
+    minutes = int(submin)
+    subseconds = abs((submin-int(submin)) * 60)
+
+    direction = ""
+    if type == "long":
+        if degrees < 0:
+            direction = "W"
+        elif degrees > 0:
+            direction = "E"
+        else:
+            direction = ""
+    elif type == "lat":
+        if degrees < 0:
+            direction = "S"
+        elif degrees > 0:
+            direction = "N"
+        else:
+            direction = "" 
+    notation = [degrees, minutes, subseconds, direction]
+    return notation
+
+def cal_equation_of_time(days_since_start_of_year):
+
+	print "Day:", days_since_start_of_year
+	print (360.00/365.00)
+	print (days_since_start_of_year-81)
+
+
+	B = (360.00/365.00) * (days_since_start_of_year-81)
+	print "B:", B
+	eot = (9.87 * math.sin(2*B)) - (7.53 * math.cos(B)) - (1.5 * math.sin(B))
+	print "EOT:", eot
+
+def calculate_fractional_year_in_degrees(days_since_start_of_year, military_hour, minutes):
+	return (360.0 / 365.25) * (days_since_start_of_year + ((military_hour + (minutes/60.0))/24.0))
+
+def calculate_sun_declination(fractional_year_in_degrees):
+	return 0.396372-(22.91327*math.cos(fractional_year_in_degrees)) + (4.02543*math.sin(fractional_year_in_degrees))-(0.387205*math.cos(2*fractional_year_in_degrees))+ (0.051967*math.sin(2*fractional_year_in_degrees))- (0.154527*math.cos(3*fractional_year_in_degrees)) + (0.084798*math.sin(3*fractional_year_in_degrees)) 
+
+
+def work(args):
+
+	print "lat:",  convert_deg_min_sec_2_dec(args,45,21,22,'S')
+	print "long:", convert_deg_min_sec_2_dec(args,18,5,45,'W')
+	print "dec", decimalDegrees2DMS(18.2, "long")
+	print "year_frac", calculate_fractional_year_in_degrees(319, 10,35)
+	print "sun_dec", calculate_sun_declination(314.849)
+	print cal_local_standard_time_meridian(-4)
+	print cal_equation_of_time(210)
 
 
 def render(args, screen):
@@ -596,13 +678,18 @@ def main(argv):
 	args.store = my_store(log=log)
 	args.key_input_list = []
 	args.event = None
+	args.lat = 45.4111700
+	args.log = -75.6981200
 
 	store_init(args)
 
 	log.set_verbosity(INFO, 0)
 	log.set_verbosity(DEBUG, 10)
 
-	run = True
+	run = False
+
+
+
 
 	if pygame.init():
 		# Used to manage how fast the screen updates
@@ -612,6 +699,8 @@ def main(argv):
 
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
  		time_update(args)
+	
+ 		work(args)
 
  		args.offset = 0
 
@@ -631,7 +720,8 @@ def main(argv):
 			# limit the frame rate
 			clock.tick(100)
 
- 	log.out("Good Bye")
+
+ 	#log.out("Good Bye")
 
 if __name__ == "__main__":
 	main(sys.argv[1:])
