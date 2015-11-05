@@ -511,8 +511,8 @@ def pygame_init(args):
 		args.log.out("pygame init has failed.", ERROR)
 		return None
 
-def time_to_seconds(hour, minute, second):
-	return (hour * (60*60)) + (minute * 60) + second
+def time_to_seconds(miltary_hour, minute, second=0):
+	return (miltary_hour * (60*60)) + (minute * 60) + second
 
 def seconds_to_percent_of_day(seconds, to=2):
 	return round(((seconds * 1.0) / (DEF_SECONDS_IN_A_DAY * 1.0)) * 100.00, to)
@@ -560,6 +560,10 @@ def draw_ellipse_path(args, screen):
 		screen.set_at((x, y), (255,0,0))	
 
 
+def draw_sun_from_center(screen, xpos, ypos, color, radius):
+	pygame.draw.circle(screen, color, (xpos,ypos), radius, 1)
+
+
 def render(args, screen):
 
 	# blank the screen
@@ -567,6 +571,17 @@ def render(args, screen):
 
 	# Draw stuff
 	draw_ellipse_path(args, screen)
+
+	# Draw_sun
+	if ((args.day_past_percentage >= args.sunrise_percentage) and (args.day_past_percentage <= args.sunset_percentage)):
+		delta_percentage = args.day_past_percentage - args.sunrise_percentage
+		x_pos = int(args.width * (delta_percentage/100))
+		y_pos =  ellipse_path(args, x_pos-(args.width/2), sun_radius=6)
+		draw_sun_from_center(screen, x_pos, y_pos, (255,255,255), 6)
+		screen.set_at((x_pos, y_pos), (0,255,0))	
+		print  args.day_past_percentage, x_pos
+
+
 
 	# Draw Horizon
 	pygame.draw.rect(screen, (0,0,0), (0, args.height-args.horizon_size, args.width, args.height),0)
@@ -590,6 +605,7 @@ def render(args, screen):
 		textpos = text.get_rect()
 		textpos.y = args.height - round(args.cmd_font * 0.70,0)
 		screen.blit(text, textpos)
+
 
 	#convert the screen 
 	screen.convert()
@@ -629,6 +645,10 @@ def main(argv):
 
 	run = True
 
+	args.sunrise_percentage = seconds_to_percent_of_day(time_to_seconds(6,46,00))
+	args.sunset_percentage = seconds_to_percent_of_day(time_to_seconds(16,46,00))
+
+
 	if pygame.init():
 		# Used to manage how fast the screen updates
 		clock = pygame.time.Clock()
@@ -639,7 +659,7 @@ def main(argv):
 		args.clock_font_handle = pygame.font.Font(args.clock_font, args.clock_font_size)
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
  		
-		args.debug_time_of_day_offset = 12*(60*60)
+		args.debug_time_of_day_offset = 6*(60*60)
 
  		time_update(args)
 
