@@ -2,7 +2,7 @@ import os, sys
 import argparse
 import pygame
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from pygame.locals import *
 
 parentPath = os.path.abspath("../common")
@@ -16,12 +16,7 @@ from my_store import *
 DEF_TIME_UPDATE_EVENT=(USEREVENT+1)
 DEF_SECONDS_IN_A_DAY = (24 * 60 * 60)
 
-
-
-
-def command_processor(args, cmd_string):
-	print cmd_string
-
+DEEP_SKY_BLUE=(3,8,39)
 
 def process_key_up(args):
 	if args.event.key == K_BACKSPACE:
@@ -524,6 +519,8 @@ def seconds_to_percent_of_day(seconds, to=2):
 
 def time_update(args):
 	args.current_time = datetime.now()
+	args.current_time =	args.current_time - timedelta(seconds=args.debug_time_of_day_offset)
+
 	seconds_passed_today = time_to_seconds(args.current_time.hour, args.current_time.minute, args.current_time.second)
 	args.day_past_percentage = seconds_to_percent_of_day(seconds_passed_today)
 
@@ -532,112 +529,55 @@ def time_update(args):
 	#args.log.out(str(sunset_percent)+" --> "+str(args.day_past_percentage))
 	pygame.time.set_timer(DEF_TIME_UPDATE_EVENT, 500);
 
-def draw_pixels(screen, offset):
-	width, height = screen.get_size()
+def command_processor(args, cmd_string):
+	print cmd_string
 
-	counter = (offset % 255);
-	for x in range(0, width, 5):
-		for y in range(0, height,5):
-			screen.set_at((x, y + (counter % 2)), (0, 0, counter))
-			counter += 1
-			if counter > 255:
-				counter = 0
+def ellipse_path(args, x, sun_radius=0, horizontal_offset=0,  vertical_offset = 0):	
+	x_plane = (args.width-sun_radius) / 2.0
+	y_plane = args.height - args.horizon_size - sun_radius
 
-def draw_sky(args, screen):
-	pass
+	value = (x-horizontal_offset) ** 2
+	
+	value = value / ((x_plane**2) * 1.0)
+	
+	value = 1 - value
+	
+	value = (y_plane ** 2) * value
+	
+	value = math.sqrt(value)
+	
+	value = value + vertical_offset
 
-def cal_local_standard_time_meridian(local_delta_from_gmt):
-	degrees = 15
-	return degrees * local_delta_from_gmt 
+	return int((args.height-args.horizon_size) - value)
 
-def convert_deg_min_sec_2_dec(args, deg, minutes, seconds, direction):
-	valid_directions_type = ['N', 'S', 'E', 'W']
-
-	if direction.upper() in valid_directions_type:
-		multiplier = 1
-		if direction.upper() == "S" or direction.upper() == "W":
-			multiplier = -1
-		return (deg + (minutes/60.0) + (seconds/3600.00)) * multiplier
-	else:
-		args.log.out("% is not a valid direction" % direction, ERROR)
-		return None
-
-
-def decimalDegrees2DMS(value,type):
-    """
-        Converts a Decimal Degree Value into
-        Degrees Minute Seconds Notation.
-        
-        Pass value as double
-        type = {Latitude or Longitude} as string
-        
-        returns a string as D:M:S:Direction
-        created by: anothergisblog.blogspot.com 
-    """
-    degrees = int(value)
-    submin = abs( (value - int(value) ) * 60)
-    minutes = int(submin)
-    subseconds = abs((submin-int(submin)) * 60)
-
-    direction = ""
-    if type == "long":
-        if degrees < 0:
-            direction = "W"
-        elif degrees > 0:
-            direction = "E"
-        else:
-            direction = ""
-    elif type == "lat":
-        if degrees < 0:
-            direction = "S"
-        elif degrees > 0:
-            direction = "N"
-        else:
-            direction = "" 
-    notation = [degrees, minutes, subseconds, direction]
-    return notation
-
-def cal_equation_of_time(days_since_start_of_year):
-
-	print "Day:", days_since_start_of_year
-	print (360.00/365.00)
-	print (days_since_start_of_year-81)
-
-
-	B = (360.00/365.00) * (days_since_start_of_year-81)
-	print "B:", B
-	eot = (9.87 * math.sin(2*B)) - (7.53 * math.cos(B)) - (1.5 * math.sin(B))
-	print "EOT:", eot
-
-def calculate_fractional_year_in_degrees(days_since_start_of_year, military_hour, minutes):
-	return (360.0 / 365.25) * (days_since_start_of_year + ((military_hour + (minutes/60.0))/24.0))
-
-def calculate_sun_declination(fractional_year_in_degrees):
-	return 0.396372-(22.91327*math.cos(fractional_year_in_degrees)) + (4.02543*math.sin(fractional_year_in_degrees))-(0.387205*math.cos(2*fractional_year_in_degrees))+ (0.051967*math.sin(2*fractional_year_in_degrees))- (0.154527*math.cos(3*fractional_year_in_degrees)) + (0.084798*math.sin(3*fractional_year_in_degrees)) 
-
-
-def work(args):
-
-	print "lat:",  convert_deg_min_sec_2_dec(args,45,21,22,'S')
-	print "long:", convert_deg_min_sec_2_dec(args,18,5,45,'W')
-	print "dec", decimalDegrees2DMS(18.2, "long")
-	print "year_frac", calculate_fractional_year_in_degrees(319, 10,35)
-	print "sun_dec", calculate_sun_declination(314.849)
-	print cal_local_standard_time_meridian(-4)
-	print cal_equation_of_time(210)
+def draw_ellipse_path(args, screen):
+	for x in range(1, args.width):
+		y = 0
+		try:
+			y = ellipse_path(args, x-320, sun_radius=6)
+		except:
+			continue
+		screen.set_at((x, y), (255,0,0))	
 
 
 def render(args, screen):
 
 	# blank the screen
-	screen.fill((0,0,0))
+	screen.fill((3,8,39))
 
 	# Draw stuff
-	draw_pixels(screen, args.offset)
-	args.offset += 1
-
+	draw_ellipse_path(args, screen)
 
 	# Draw Horizon
+	pygame.draw.rect(screen, (0,0,0), (0, args.height-args.horizon_size, args.width, args.height),0)
+
+	# Draw the Current Time on the screen
+	clock_text = args.clock_font_handle.render(args.current_time.strftime("%I:%M:%S %p"), 1, (255, 255, 255))
+	textpos = clock_text.get_rect()
+	textpos.centerx = args.width / 2;
+
+	textpos.centery = (args.height -(args.horizon_size/2))  
+	screen.blit(clock_text, textpos)
 
 	# Draw the fade out if you need too.
 	if (args.shade > 0.0) and (args.shade <= 100.00):
@@ -674,35 +614,40 @@ def main(argv):
 	args.keyboard_state = KMOD_MODE
 	args.cmd_font = 18
 	args.shade = 0.00;
+	args.clock_font = None
+	args.clock_font_size = 70
+
 	args.day_past_percentage = 0.0;
 	args.store = my_store(log=log)
 	args.key_input_list = []
 	args.event = None
-	args.lat = 45.4111700
-	args.log = -75.6981200
 
 	store_init(args)
 
 	log.set_verbosity(INFO, 0)
 	log.set_verbosity(DEBUG, 10)
 
-	run = False
-
-
-
+	run = True
 
 	if pygame.init():
 		# Used to manage how fast the screen updates
 		clock = pygame.time.Clock()
+		
 		pygame.key.set_repeat(1000, 250)
+		
 		args.font_handle = pygame.font.Font(None, args.cmd_font)
-
+		args.clock_font_handle = pygame.font.Font(args.clock_font, args.clock_font_size)
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
+ 		
+		args.debug_time_of_day_offset = 12*(60*60)
+
  		time_update(args)
-	
- 		work(args)
+
+ 		args.horizon_size = int(args.height * 0.33)
 
  		args.offset = 0
+ 		args.x_value = 0
+
 
 		while(run):
 			for args.event in pygame.event.get():
