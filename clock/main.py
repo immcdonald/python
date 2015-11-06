@@ -164,9 +164,9 @@ def process_key_up(args):
 	elif args.event.key == K_PAGEDOWN:
 		pass
 	elif args.event.key == K_F1:
-		pass
+		args.debug_time_of_day_offset = args.debug_time_of_day_offset + (1*60)
 	elif args.event.key == K_F2:
-		pass
+		args.debug_time_of_day_offset = args.debug_time_of_day_offset - (1*60)
 	elif args.event.key == K_F3:
 		pass
 	elif args.event.key == K_F4:
@@ -276,7 +276,10 @@ def process_key_down(args):
 	elif args.event.key == K_COMMA:
 		pass
 	elif args.event.key == K_MINUS:
-		pass
+		if (args.keyboard_state & KMOD_SHIFT) != 0:
+			args.key_input_list.append('_')
+		else:
+			args.key_input_list.append('-')
 	elif args.event.key == K_PERIOD:
 		pass
 	elif args.event.key == K_SLASH:
@@ -517,20 +520,66 @@ def time_to_seconds(miltary_hour, minute, second=0):
 def seconds_to_percent_of_day(seconds, to=2):
 	return round(((seconds * 1.0) / (DEF_SECONDS_IN_A_DAY * 1.0)) * 100.00, to)
 
+def convert_sun_time(args):
+	# fiture out what percentage of the day the sun should come up.
+	sunrise_start_percentage = seconds_to_percent_of_day(args.sunrise_time)
+
+	# figure out what percentage of the day the sun should set.
+	sunset_end_percentage = seconds_to_percent_of_day(args.sunset_time)
+
+	# Calculate what percentage of the day the sun should be up
+	sun_delta_percentage = sunset_end_percentage - sunrise_start_percentage 
+
+	# take the current day percentage and subtrace the sun start percentage.
+	# When this value is negative the sun is not up yet.. when the value is postive 
+	# then the sun is up or has pasted sunset..
+	# So take the sun up delta percentage and divide it by the current value
+	# so if the value is greater then 0 percent and less then 100.00 percent the sun should be up.
+	args.sun_pos_percentage = ((args.day_past_percentage - sunrise_start_percentage) / sun_delta_percentage)
+
+	if ((args.sun_pos_percentage >= 0.0) and (args.sun_pos_percentage <= 100.0)):
+		# multiple the width of the screen by the sun up time percentage to know how far across the 
+		# screen it should of traveled.
+		args.x_sun_pos = int(args.width * args.sun_pos_percentage)
+	else:
+		args.x_sun_pos = -1;
+
 def time_update(args):
 	args.current_time = datetime.now()
 	args.current_time =	args.current_time - timedelta(seconds=args.debug_time_of_day_offset)
 
 	seconds_passed_today = time_to_seconds(args.current_time.hour, args.current_time.minute, args.current_time.second)
 	args.day_past_percentage = seconds_to_percent_of_day(seconds_passed_today)
-
-	#sunset = time_to_seconds(18,6,00)
-	#sunset_percent =  seconds_to_percent_of_day(sunset)
-	#args.log.out(str(sunset_percent)+" --> "+str(args.day_past_percentage))
+	
+	convert_sun_time(args)
 	pygame.time.set_timer(DEF_TIME_UPDATE_EVENT, 500);
 
+
+
 def command_processor(args, cmd_string):
+	
 	print cmd_string
+	cmd_parts = cmd_string.split(" ")
+	
+	if cmd_parts[0] == "set":
+		if len(cmd_parts) > 1:
+			if cmd_parts[1] == 'time':
+				if len(cmd_parts) > 2:
+						
+					try:
+						args.debug_time_of_day_offset = 60 * int(cmd_parts[2])
+					except:
+						args.debug_time_of_day_offset = 0
+				else:
+					print "The set time command requires one or more parameters."
+			else:
+				print "<" + cmd_parts[1] + "> is not a valid second parameter for set."
+		else:
+			print "The set command requires one or more parameters."
+
+	else:
+		print "<"+cmd_string + "> cmd is not known."
+
 
 def ellipse_path(args, x, sun_radius=0, horizontal_offset=0,  vertical_offset = 0):	
 	x_plane = (args.width-sun_radius) / 2.0
@@ -573,15 +622,18 @@ def render(args, screen):
 	draw_ellipse_path(args, screen)
 
 	# Draw_sun
-	if ((args.day_past_percentage >= args.sunrise_percentage) and (args.day_past_percentage <= args.sunset_percentage)):
-		delta_percentage = args.day_past_percentage - args.sunrise_percentage
-		x_pos = int(args.width * (delta_percentage/100))
-		y_pos =  ellipse_path(args, x_pos-(args.width/2), sun_radius=6)
-		draw_sun_from_center(screen, x_pos, y_pos, (255,255,255), 6)
-		screen.set_at((x_pos, y_pos), (0,255,0))	
-		print  args.day_past_percentage, x_pos
+	#print args.sun_pos_percentage
 
+	if ((args.sun_pos_percentage >= 0.0) and (args.sun_pos_percentage <= 100.0)):
+		ok = True
+		try:
+			y_pos =  ellipse_path(args, args.x_sun_pos-(args.width/2), sun_radius=6)
+		except:
+			ok = False
 
+		if ok:
+			draw_sun_from_center(screen, args.x_sun_pos, y_pos, (255,255,255), 6)
+			screen.set_at((args.x_sun_pos, y_pos), (0,255,0))	
 
 	# Draw Horizon
 	pygame.draw.rect(screen, (0,0,0), (0, args.height-args.horizon_size, args.width, args.height),0)
@@ -645,9 +697,8 @@ def main(argv):
 
 	run = True
 
-	args.sunrise_percentage = seconds_to_percent_of_day(time_to_seconds(6,46,00))
-	args.sunset_percentage = seconds_to_percent_of_day(time_to_seconds(16,46,00))
-
+	args.sunrise_time = time_to_seconds(6,46,00)
+	args.sunset_time = time_to_seconds(16,46,00)
 
 	if pygame.init():
 		# Used to manage how fast the screen updates
@@ -659,7 +710,7 @@ def main(argv):
 		args.clock_font_handle = pygame.font.Font(args.clock_font, args.clock_font_size)
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
  		
-		args.debug_time_of_day_offset = 6*(60*60)
+		args.debug_time_of_day_offset = 3*(60*60)
 
  		time_update(args)
 
