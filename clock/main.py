@@ -4,6 +4,9 @@ import pygame
 import math
 from datetime import datetime, timedelta
 from pygame.locals import *
+import pytz
+import Pysolar
+
 
 parentPath = os.path.abspath("../common")
 
@@ -17,6 +20,12 @@ DEF_TIME_UPDATE_EVENT=(USEREVENT+1)
 DEF_SECONDS_IN_A_DAY = (24 * 60 * 60)
 
 DEEP_SKY_BLUE=(3,8,39)
+
+# this function was borrowed from http://stackoverflow.com/questions/19774709/use-python-to-find-out-if-a-timezone-currently-in-daylight-savings-time
+def is_dst(zonename):
+    tz = pytz.timezone(zonename)
+    now = pytz.utc.localize(datetime.utcnow())
+    return now.astimezone(tz).dst() != timedelta(0)
 
 def process_key_up(args):
 	if args.event.key == K_BACKSPACE:
@@ -545,9 +554,19 @@ def convert_sun_time(args):
 		args.x_sun_pos = -1;
 
 def time_update(args):
+
 	args.current_time = datetime.now()
 	args.current_time =	args.current_time - timedelta(seconds=args.debug_time_of_day_offset)
+	
+	if is_dst(args.timezone):
+		args.utc_time =  args.current_time - timedelta(seconds=(4*(60*60)))
+	else:
+		args.utc_time =  args.current_time - timedelta(seconds=(5*(60*60)))
+	
+	args.sun_alt_deg = Pysolar.GetAltitude(args.latitude, args.longitude, args.utc_time)
+	args.sun_azimuth_deg = Pysolar.GetAzimuth(args.latitude, args.longitude, args.utc_time)
 
+	print args.sun_alt_deg, args.sun_azimuth_deg
 	seconds_passed_today = time_to_seconds(args.current_time.hour, args.current_time.minute, args.current_time.second)
 	args.day_past_percentage = seconds_to_percent_of_day(seconds_passed_today)
 	
@@ -670,8 +689,10 @@ def main(argv):
 	parser.add_argument('-y', "--height", default=400, type=check_negative)
 	parser.add_argument('-x', "--width", default=640, type=check_negative)
 	parser.add_argument("-v","--verbosity",  nargs='+', help="increase output verbosity")
+	parser.add_argument("-z", "--timezone", default="America/New_York")
+	parser.add_argument("-lat", "--latitude", default=45.4214)
+	parser.add_argument("-long", "--longitude", default=75.6919)
 	args = parser.parse_args(argv)
-
 
 	log.out("Input Params")
 	log.out("============")
@@ -697,6 +718,7 @@ def main(argv):
 
 	run = True
 
+	args.debug_time_of_day_offset = 0
 	args.sunrise_time = time_to_seconds(6,46,00)
 	args.sunset_time = time_to_seconds(16,46,00)
 
@@ -710,7 +732,7 @@ def main(argv):
 		args.clock_font_handle = pygame.font.Font(args.clock_font, args.clock_font_size)
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
  		
-		args.debug_time_of_day_offset = 3*(60*60)
+		args.debug_time_of_day_offset = 0
 
  		time_update(args)
 
