@@ -19,7 +19,23 @@ from my_store import *
 DEF_TIME_UPDATE_EVENT=(USEREVENT+1)
 DEF_SECONDS_IN_A_DAY = (24 * 60 * 60)
 
-DEEP_SKY_BLUE=(3,8,39)
+DEF_CIVIL_TWILIGHT_ANGLE = -6.00 # 0 to -6.00 degrees below the horizon
+DEF_NAUTICAL_TWILIGHT_ANGLE = -12.00 # -6 to -12.00 degrees below the horizon
+DEF_ASTRONMICAL_TWILIGHT_ANGLE = -18.0 # -12.00 to  -18 degrees below the horizon
+
+DEF_NIGHT_MODE = 0
+DEF_ASTRONMICAL_TWLIGHT_MODE = 1
+DEF_NAUTICAL_TWILIGHT_MODE	 = 2
+DEF_CIVIL_TWILIGHT_MODE     = 3
+DEF_DAY_MODE				= 4
+
+DEF_NIGHT_COLOR = (0,0,0)
+
+DEF_ASTRONMICAL_COLOR = (3,8,39)
+DEF_NAUTICAL_COLOR = (71,115,187)
+DEF_CIVIL_COLOR    = (135, 164,211)
+DEF_DAY_COLOR      = (219, 233, 255)
+
 
 # this function was borrowed from http://stackoverflow.com/questions/19774709/use-python-to-find-out-if-a-timezone-currently-in-daylight-savings-time
 def is_dst(zonename):
@@ -553,6 +569,60 @@ def convert_sun_time(args):
 	else:
 		args.x_sun_pos = -1;
 
+
+def determine_day_mode(args):
+	delta = 0
+
+	print "Sun Angle:", args.sun_alt_deg
+	
+	if args.sun_alt_deg < 0.00:
+		if ((args.sun_alt_deg < 0.00) and (args.sun_alt_deg > DEF_CIVIL_TWILIGHT_ANGLE)):
+			sun_angle_percentage =  args.sun_alt_deg / (DEF_CIVIL_TWILIGHT_ANGLE * 1.0)
+			
+			red_delta = DEF_NAUTICAL_COLOR[0] - DEF_CIVIL_COLOR[0]
+			green_delta = DEF_NAUTICAL_COLOR[1] - DEF_CIVIL_COLOR[1]
+			blue_delta = DEF_NAUTICAL_COLOR[2] - DEF_CIVIL_COLOR[2]
+
+			red = DEF_CIVIL_COLOR[0] + (red_delta * sun_angle_percentage)
+			green = DEF_CIVIL_COLOR[1] + (green_delta * sun_angle_percentage)
+			blue = DEF_CIVIL_COLOR[2] + (blue_delta * sun_angle_percentage)
+			
+			args.background_color = (int(red), int(green), int(blue))
+			args.day_mode = DEF_CIVIL_TWILIGHT_MODE
+		elif ((args.sun_alt_deg <= DEF_CIVIL_TWILIGHT_ANGLE) and (args.sun_alt_deg > DEF_NAUTICAL_TWILIGHT_ANGLE)):
+			sun_angle_percentage = (args.sun_alt_deg - DEF_CIVIL_TWILIGHT_ANGLE) / ((DEF_NAUTICAL_TWILIGHT_ANGLE - DEF_CIVIL_TWILIGHT_ANGLE) * 1.0)
+			
+			red_delta = DEF_ASTRONMICAL_COLOR[0] - DEF_NAUTICAL_COLOR[0]
+			green_delta = DEF_ASTRONMICAL_COLOR[1] - DEF_NAUTICAL_COLOR[1]
+			blue_delta = DEF_ASTRONMICAL_COLOR[2] - DEF_NAUTICAL_COLOR[2]
+
+			red = DEF_NAUTICAL_COLOR[0] + (red_delta * sun_angle_percentage)
+			green = DEF_NAUTICAL_COLOR[1] + (green_delta * sun_angle_percentage)
+			blue = DEF_NAUTICAL_COLOR[2] + (blue_delta * sun_angle_percentage)
+			
+			args.background_color = (int(red), int(green), int(blue))
+			args.day_mode = DEF_NAUTICAL_TWILIGHT_MODE
+		elif ((args.sun_alt_deg <= DEF_NAUTICAL_TWILIGHT_ANGLE) and (args.sun_alt_deg > DEF_ASTRONMICAL_TWILIGHT_ANGLE)):
+			sun_angle_percentage = (args.sun_alt_deg - DEF_NAUTICAL_TWILIGHT_ANGLE) / ((DEF_ASTRONMICAL_TWILIGHT_ANGLE-DEF_NAUTICAL_TWILIGHT_ANGLE) * 1.0)
+				
+			red_delta = DEF_NIGHT_COLOR[0] - DEF_ASTRONMICAL_COLOR[0]
+			green_delta = DEF_NIGHT_COLOR[1] - DEF_ASTRONMICAL_COLOR[1]
+			blue_delta = DEF_NIGHT_COLOR[2] - DEF_ASTRONMICAL_COLOR[2]
+
+			red = DEF_ASTRONMICAL_COLOR[0] + (red_delta * sun_angle_percentage)
+			green = DEF_ASTRONMICAL_COLOR[1] + (green_delta * sun_angle_percentage)
+			blue = DEF_ASTRONMICAL_COLOR[2] + (blue_delta * sun_angle_percentage)
+			
+			args.background_color = (int(red), int(green), int(blue))
+			args.day_mode = DEF_ASTRONMICAL_TWLIGHT_MODE
+		else:
+			args.day_mode = DEF_NIGHT_MODE
+			args.background_color = DEF_NIGHT_COLOR
+	else:
+			args.day_mode = DEF_DAY_MODE
+			args.background_color = DEF_DAY_COLOR
+
+
 def time_update(args):
 
 	args.current_time = datetime.now()
@@ -564,9 +634,10 @@ def time_update(args):
 		args.utc_time =  args.current_time - timedelta(seconds=(5*(60*60)))
 	
 	args.sun_alt_deg = Pysolar.GetAltitude(args.latitude, args.longitude, args.utc_time)
-	args.sun_azimuth_deg = Pysolar.GetAzimuth(args.latitude, args.longitude, args.utc_time)
+	#args.sun_azimuth_deg = Pysolar.GetAzimuth(args.latitude, args.longitude, args.utc_time)
+	
+	determine_day_mode(args)
 
-	print args.sun_alt_deg, args.sun_azimuth_deg
 	seconds_passed_today = time_to_seconds(args.current_time.hour, args.current_time.minute, args.current_time.second)
 	args.day_past_percentage = seconds_to_percent_of_day(seconds_passed_today)
 	
@@ -635,7 +706,7 @@ def draw_sun_from_center(screen, xpos, ypos, color, radius):
 def render(args, screen):
 
 	# blank the screen
-	screen.fill((3,8,39))
+	screen.fill(args.background_color)
 
 	# Draw stuff
 	draw_ellipse_path(args, screen)
@@ -698,6 +769,7 @@ def main(argv):
 	log.out("============")
 	log.out(pformat(vars(args)))
 
+	args.day_mode = DEF_NIGHT_MODE
 
 	args.log = log
 	args.keyboard_state = KMOD_MODE
@@ -719,8 +791,10 @@ def main(argv):
 	run = True
 
 	args.debug_time_of_day_offset = 0
-	args.sunrise_time = time_to_seconds(6,46,00)
-	args.sunset_time = time_to_seconds(16,46,00)
+	args.sunrise_time = time_to_seconds(6,49,00)
+	args.sunset_time = time_to_seconds(16,44,00)
+	args.background_color = (3,8,39)
+
 
 	if pygame.init():
 		# Used to manage how fast the screen updates
