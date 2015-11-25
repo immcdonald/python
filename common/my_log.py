@@ -2,7 +2,7 @@ import os
 import logging
 from datetime import datetime
 from pprint import pformat
-from inspect import currentframe, getframeinfo
+from inspect import currentframe, getframeinfo, stack
 
 INFO="INFO"
 DEBUG="DEBUG"
@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(message)s');
 ALL_MASK = 0xFFFFFFFF
 DEFAULT_DATETIME_FORMAT = '%Y%m%d%H%M%S%Z'
 
-class my_log():
+class my_log(object):
 	def __init__(self, verbosity=0, mask=ALL_MASK, mode_list=[DEBUG, WARNING, INFO, ERROR, EXCEPTION], std=INFO):
 
 		if EXCEPTION not in mode_list:
@@ -64,8 +64,8 @@ class my_log():
 					self.modes[mode] = {"enable": True,
 										"verbosity": 0,
 										"show_mode": True,
-										"show_file": False,
-										"show_line": False,
+										"show_file": True,
+										"show_line": True,
 										"show_time": DEFAULT_DATETIME_FORMAT}
 				else:
 					self.modes[mode] = {"enable": False,
@@ -126,8 +126,11 @@ class my_log():
 		else:
 			raise Exception(mode + ' is an unknown mode')
 
+	def out(self, msg, mode=None, v=0, mask=ALL_MASK, frameinfo=None, suppress=False):
 
-	def out(self, msg, mode=None, v=0, mask=ALL_MASK,frameinfo=getframeinfo(currentframe()), suppress=False):
+		if frameinfo is None:
+			frameinfo =  getframeinfo(stack()[1][0])
+
 		if mode is None:
 			mode = self.std
 
