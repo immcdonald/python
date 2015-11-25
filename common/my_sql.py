@@ -22,7 +22,7 @@ class My_SQL(object):
 		self.init()
 
 		if log is None:
-			self.log = my_log(verbosity=0)
+			self.log = my_log(verbosity=10)
 		else:
 			self.log = log
 
@@ -30,13 +30,13 @@ class My_SQL(object):
 			self.commit_on_close = True
 
 		if host is not None:
-			self.set_host(host)
+			self.set_sql_host(host)
 
 		if usr is not None:
-			self.set_user_name(usr)
+			self.set_sql_user_name(usr)
 
 		if passwd is not None:
-			self.set_user_pwd(passwd)
+			self.set_sql_user_pwd(passwd)
 
 		if db_name is not None:
 			self.set_db_name(db_name)
@@ -55,11 +55,18 @@ class My_SQL(object):
 
 		self.log.out(self.error, ERROR, v=verbosity, mask=self.mask, frameinfo=frameinfo)
 
+	def commit(self):
+		if self.conn is not None:
+			self.conn.commit()
+			return True
+		else:
+			return False
+
 	def close_connection(self):
 		if self.conn is not None:
 			if self.commit_on_close:
 				self.log.out("Commiting on close.", WARNING, v=1, mask=self.mask)
-				self.conn.commit()
+				self.commit()
 
 			self.conn.close()
 			self.conn = None
@@ -70,14 +77,14 @@ class My_SQL(object):
 	'''
 		The data passed to this function is used for the connect command below.
 	'''
-	def set_host(self, host):
+	def set_sql_host(self, host):
 		if host is not None:
 			self.host = str(host)
 			if self.conn is not None:
 				self.log.out("Already connect to sql server. You must disconnect and reconnect for this change to take affect.", WARNING, mask=self.mask)
 			return True
 		else:
-			self._error_macro("SQL host can not be set to None", fi=getframeinfo(currentframe()))
+			self._error_macro("SQL host can not be set to None")
 			return False
 
 	'''
@@ -90,33 +97,33 @@ class My_SQL(object):
 				self.log.out("Already connect to sql server. You must disconnect and reconnect for this change to take affect.", WARNING, mask=self.mask)
 			return True
 		else:
-			self._error_macro("SQL db can not be set to None", fi=getframeinfo(currentframe()))
+			self._error_macro("SQL db can not be set to None")
 			return False
 
 	'''
 		The data passed to this function is used for the connect command below.
 	'''
-	def set_user_name(self, user):
+	def set_sql_user_name(self, user):
 		if user is not None:
 			self.usr = str(user)
 			if self.conn is not None:
 				self.log.out("Already connect to sql server. You must disconnect and reconnect for this change to take affect.", WARNING, mask=self.mask)
 			return True
 		else:
-			self._error_macro("SQL user name can not be set to None", fi=getframeinfo(currentframe()))
+			self._error_macro("SQL user name can not be set to None")
 			return False
 
 	'''
 		The data passed to this function is used for the connect command below.
 	'''
-	def set_user_pwd(self, pwd):
+	def set_sql_user_pwd(self, pwd):
 		if pwd is not None:
 			self.pwd = str(pwd)
 			if self.conn is not None:
 				self.log.out("Already connect to sql server. You must disconnect and reconnect for this change to take affect.", WARNING, mask=self.mask)
 			return True
 		else:
-			self._error_macro("SQL user password can not be set to None", fi=getframeinfo(currentframe()))
+			self._error_macro("SQL user password can not be set to None")
 			return False
 
 	def connect(self):
@@ -135,46 +142,52 @@ class My_SQL(object):
 					self.log.out("Connected to the server: %s (%s)" % (self.host, self.db_name), DEBUG, v=1, mask=self.mask)
 				else:
 					self.log.out("Connected to the server: %s" % self.host, DEBUG, v=1, mask=self.mask)
-
-
 				self.cursor = self.conn.cursor()
 				if self.cursor:
 					return self.query("START TRANSACTION")
 				else:
-					self._error_macro("Failed why attempting to create a cursor.", fi=getframeinfo(currentframe()))
+					self._error_macro("Failed why attempting to create a cursor.")
 					return False
 			else:
-				self._error_macro("Failed to connect to sql server: %s" % self.host, fi=getframeinfo(currentframe()))
+				self._error_macro("Failed to connect to sql server: %s" % self.host)
 				return False
 		else:
-			self._error_macro("SQL user password can not be set to None", fi=getframeinfo(currentframe()))
+			self._error_macro("SQL user password can not be set to None")
 			return False
 
 
 	def last_error(self):
 		return self.error
 
-	def query(self, query, data=None):
+	def query(self, query, data=None, supress=False):
 		if self.conn is not None:
 			if self.cursor is not None:
 				if data is not None:
 					if type(data) is not tuple:
 						data = (data)
 
-				self.cursor.execute(query, data)
+				if supress:
+					try:
+						self.cursor.execute(query, data)
+					except mysql.connector.Error as err:
+						self._error_macro("".format(err))
+						return False
+				else:
+					self.cursor.execute(query, data)
+
 				return True
 			else:
-				self._error_macro("Cursor handle was set to None", fi=getframeinfo(currentframe()))
+				self._error_macro("Cursor handle was set to None")
 				return False
 		else:
-			self._error_macro("Query failed because there is no active connection", fi=getframeinfo(currentframe()))
+			self._error_macro("Query failed because there is no active connection")
 			return False
 
 	def create_db(self, db_name):
 		if db_name is not None:
 			return self.query("CREATE DATABASE IF NOT EXISTS "+str(db_name))
 		else:
-			self._error_macro("Database name cannot be None.", fi=getframeinfo(currentframe()))
+			self._error_macro("Database name cannot be None.")
 			return False
 
 	def select_db(self, db_name):
@@ -186,13 +199,13 @@ class My_SQL(object):
 				if db_name in server_databases:
 					return self.query("USE "+str(db_name))
 				else:
-					self._error_macro('Database: '+ db_name + ' not found on the server.', fi=getframeinfo(currentframe()))
+					self._error_macro('Database: '+ db_name + ' not found on the server.')
 					return False
 			else:
-				self._error_macro('list_database return None.', fi=getframeinfo(currentframe()))
+				self._error_macro('list_database return None.')
 				return False
 		else:
-			self._error_macro("Database name cannot be None.", fi=getframeinfo(currentframe()))
+			self._error_macro("Database name cannot be None.")
 			return False
 
 	def list_databases(self):
