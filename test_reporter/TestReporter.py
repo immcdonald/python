@@ -21,6 +21,7 @@ class TestReporter(My_SQL):
 		self.exec_id = None
 		self.variant_id = None
 		self.suite_id = None
+		self.project_id = None
 
 		# Dictionaries
 		self.project_dict = {}
@@ -95,7 +96,7 @@ class TestReporter(My_SQL):
 			self.query(query)
 
 			for row in self.cursor:
-				self.project_dict[row[1]] = row[0]
+				self.project_dict[row[1]] = {"id":row[0]}
 			return True
 		else:
 			return False
@@ -141,7 +142,7 @@ class TestReporter(My_SQL):
 
 					self.query(query,data)
 
-					self.project_dict[project_name] = self.cursor.lastrowid
+					self.project_dict[project_name] = {"id": self.cursor.lastrowid}
 
 					self.select_project(project_name)
 
@@ -158,6 +159,7 @@ class TestReporter(My_SQL):
 		if self._common_checks():
 			if project_name in self.project_dict:
 				self.selected_project = project_name
+				self.project_id = self.project_dict[project_name]["id"]
 				self.refresh_tags()
 				self.refresh_crash_type()
 
@@ -174,7 +176,7 @@ class TestReporter(My_SQL):
 			query = "SELECT arch_id, name from arch"
 			self.query(query)
 			for row in self.cursor:
-				self.arch_dict[row[1]] = row[0]
+				self.arch_dict[row[1]] = {"id":row[0]}
 			return True
 		else:
 			return False
@@ -202,7 +204,7 @@ class TestReporter(My_SQL):
 
 					self.query(query, data)
 
-					self.arch_dict[arch] = self.cursor.lastrowid
+					self.arch_dict[arch] = {"id": self.cursor.lastrowid}
 
 					self.log.out("Arch (" + arch + ")  added to the database.", v=1)
 
@@ -216,10 +218,11 @@ class TestReporter(My_SQL):
 	def refresh_tags(self):
 		if self._common_checks(project=True):
 			self.tag_dict = {}
-			query = "SELECT tag_id, result from tag WHERE fk_project_id=" + str(self.project_dict[self.selected_project]) + " ORDER BY tag_id ASC"
+			query = "SELECT tag_id, result from tag WHERE fk_project_id=" + str(self.project_id) + " ORDER BY tag_id ASC"
 			self.query(query)
 			for row in self.cursor:
-				self.tag_dict[row[1]] = row[0]
+				list_len = len(self.tag_dict)
+				self.tag_dict[row[1]] = {"id":row[0], "local_index": list_len}
 			return True
 		else:
 			return False
@@ -232,7 +235,7 @@ class TestReporter(My_SQL):
 				else:
 					value  = ["fk_project_id"]
 					format = ["%s"]
-					data = [self.project_dict[self.selected_project]]
+					data = [self.project_id]
 
 					if len(tag) < 2:
 						self._error_macro("Tag is to short")
@@ -275,7 +278,9 @@ class TestReporter(My_SQL):
 					query = "INSERT INTO tag (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
 					self.query(query, data)
 
-					self.tag_dict[tag] = self.cursor.lastrowid
+					list_len = len(self.tag_dict)
+
+					self.tag_dict[tag] = {"id": self.cursor.lastrowid, "local_index": list_len}
 
 					self.log.out("Result tag (" + tag + ")  added to the database.", v=1)
 
@@ -289,7 +294,7 @@ class TestReporter(My_SQL):
 	def refresh_crash_type(self):
 		if self._common_checks(project=True):
 			self.crash_type_dict = {}
-			query = "SELECT crash_id, name from crash_type WHERE fk_project_id=" + str(self.project_dict[self.selected_project]) + " ORDER BY crash_id ASC"
+			query = "SELECT crash_id, name from crash_type WHERE fk_project_id=" + str(self.project_id) + " ORDER BY crash_id ASC"
 			self.query(query)
 			for row in self.cursor:
 				self.crash_type_dict[row[1]] = row[0]
@@ -306,7 +311,7 @@ class TestReporter(My_SQL):
 				else:
 					value  = ["fk_project_id"]
 					format = ["%s"]
-					data = [self.project_dict[self.selected_project]]
+					data = [self.project_id]
 
 					if len(crash_type) < 2:
 						self._error_macro("Crash type is to short")
@@ -349,7 +354,7 @@ class TestReporter(My_SQL):
 					query = "INSERT INTO crash_type (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
 					self.query(query, data)
 
-					self.crash_type_dict[crash_type] = self.cursor.lastrowid
+					self.crash_type_dict[crash_type] = {"id": self.cursor.lastrowid}
 
 					self.log.out("Crash type (" + crash_type + ")  added to the database.", v=1)
 
@@ -364,7 +369,7 @@ class TestReporter(My_SQL):
 		if self._common_checks(project=True, user_name=True):
 			value  = ["fk_project_id"]
 			format = ["%s"]
-			data = [self.project_dict[self.selected_project]]
+			data = [self.project_id]
 			value.append("user_name")
 			format.append("%s")
 			data.append(self.report_user_name)
@@ -378,7 +383,7 @@ class TestReporter(My_SQL):
 
 	def set_exec_id(self, exec_id):
 		if self._common_checks(project=True):
-			query = 'SELECT exec_id FROM exec WHERE fk_project_id=' + str(self.project_dict[self.selected_project]) +  ' and exec_id=' + str(exec_id)
+			query = 'SELECT exec_id FROM exec WHERE fk_project_id=' + str(self.project_id) +  ' and exec_id=' + str(exec_id)
 			self.query(query)
 			rows = self.cursor.fetchall()
 
@@ -483,7 +488,7 @@ class TestReporter(My_SQL):
 
 				value.append("fk_project_id")
 				format.append("%s")
-				data.append(self.project_dict[self.selected_project])
+				data.append(self.project_id)
 
 				value.append("fk_exec_id")
 				format.append("%s")
@@ -530,13 +535,20 @@ class TestReporter(My_SQL):
 				query = "INSERT INTO test_suite (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
 				self.query(query, data)
 
-				self.suite_dictionary[suite_name] = self.cursor.lastrowid
+				self.suite_dictionary[suite_name] = {"id": self.cursor.lastrowid}
 
 				self.log.out("Test Suite (" + suite_name + ")  added to the database.", v=1)
 				return True
 
 		else:
 			return False
+
+
+	def add_variant(self, target, arch, variant):
+		pass
+
+
+
 
 exec_id=1
 
