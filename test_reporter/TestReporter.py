@@ -18,14 +18,15 @@ class TestReporter(My_SQL):
 		self.report_user_name = None
 
 		#Identififiers
+		self.project_id = None
 		self.exec_id = None
 		self.variant_id = None
 		self.suite_id = None
-		self.project_id = None
 
 		# Dictionaries
 		self.project_dict = {}
 		self.arch_dict = {}
+		self.target_dict = {}
 		self.tag_dict = {}
 		self.crash_type_dict = {}
 		self.suite_dictionary = {}
@@ -39,6 +40,7 @@ class TestReporter(My_SQL):
 		super(TestReporter, self).connect()
 		self.refresh_projects_list()
 		self.refresh_arch_list()
+		self.refresh_target_list()
 
 	def set_report_user_name(self, user_name):
 		if user_name is not None:
@@ -162,7 +164,6 @@ class TestReporter(My_SQL):
 				self.project_id = self.project_dict[project_name]["id"]
 				self.refresh_tags()
 				self.refresh_crash_type()
-
 				self.log.out("(" + project_name + ") is now the active project")
 			else:
 				self._error_macro("(" + project_name + ") does not appear in the database. Try reconnecting or calling refresh_projects_list")
@@ -212,6 +213,72 @@ class TestReporter(My_SQL):
 			else:
 				self._error_macro("Arch can not be None.")
 				return False
+		else:
+			return False
+
+	def refresh_target_list(self):
+		if self._common_checks():
+			self.target_dict={}
+			query = "SELECT target_id, target_name from target ORDER BY target_name"
+			self.query(query)
+			for row in self.cursor:
+				self.target_dict[row[1]] = {"id":row[0]}
+			return True
+		else:
+			return False
+
+	def add_target(self, target_name, description=None, html_style=None):
+		if self._common_checks():
+			if target_name in self.target_dict:
+				self.log.out('Target (' + target_name + ") already registered in the database", WARNING, v=0)
+			else:
+				value = []
+				format = []
+				data = []
+
+				if len(target_name) < 5:
+					self._error_macro("Target name is to short")
+					return False
+
+				if len(target_name) > 45:
+					self._error_macro("Target name is to long")
+					return False
+
+				value.append("target_name")
+				format.append("%s")
+				data.append(target_name)
+
+				if description is not None:
+					if len(description) < 5:
+						self._error_macro("description is to short")
+						return False
+
+					if len(description) > 65535:
+						self._error_macro("description is to long")
+						return False
+
+					value.append("description")
+					format.append("%s")
+					data.append(description)
+
+				if 	html_style is not None:
+					if len(html_style) < 2:
+						self._error_macro("html style is to short")
+						return False
+
+					if len(html_style) > 65535:
+						self._error_macro("html style is to long")
+						return False
+
+				query = "INSERT INTO target (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", Now())"
+
+				self.query(query, data)
+
+				self.target_dict[target_name] = {"id": self.cursor.lastrowid}
+
+				self.log.out("Target (" + target_name + ")  added to the database.", v=0)
+
+				return True
 		else:
 			return False
 
@@ -545,7 +612,31 @@ class TestReporter(My_SQL):
 
 
 	def add_variant(self, target, arch, variant):
-		pass
+		if self._common_checks(project=True, exec_id=True, user_name=True):
+			if arch in self.arch_dict:
+				if target in self.target_dict:
+					data = (self.arch_dict[arch]["id"], self.target_dict[target]["id"], variant)
+
+					# Check to see if we have a root variant of this combination exists
+					query = 'SELECT root_variant_id FROM root_variant WHERE fk_arch_id=%s and fk_target_id=%s and variant=%s'
+					self.query(query, data)
+
+					rows = self.cursor.fetchall()
+
+					if len(rows) > 0:
+						print "Found something!!!!"
+
+					else:
+						print "None Found"
+				else:
+					self._error_macro("Target (" + str(target) + ") is not in the database. Please call add_target before this function.")
+					return False
+
+			else:
+				self._error_macro("Arch (" + str(arch) + ") is not in the database. Please call add_arch before this function.")
+				return False
+		else:
+			return False
 
 
 
@@ -566,6 +657,9 @@ rdb.add_arch("ppc", "Blue")
 rdb.add_arch("arm", "Yellow")
 rdb.add_arch("x86_64", "Purple")
 rdb.add_arch("aarch64", "Cyan")
+
+rdb.add_target("imb-151-6342")
+
 
 rdb.register_project("Mainline", "Mainline/Trunk Regression Thread", "Red")
 rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
@@ -616,6 +710,8 @@ else:
 rdb.add_test_suite("testware_sanitytest")
 rdb.add_test_suite("testware_Benchmark", "Benchmark Sanity tests")
 rdb.add_test_suite("testware_aps", "APS specific tests")
+
+rdb.add_variant("imb-151-6342", "x86", "o.smp")
 
 
 rdb.register_src("svn", "http://svn.ott.qnx.com/qa/mainline/testware", "123457")
