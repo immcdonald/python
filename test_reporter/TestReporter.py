@@ -14,14 +14,21 @@ class TestReporter(My_SQL):
 
 	def init(self):
 		super(TestReporter, self).init()
-		self.project_dict = {}
-		self.arch_dict = {}
 		self.selected_project = None
-		self.tag_dict = {}
-		self.crash_type_dict = {}
 		self.report_user_name = None
+
+		#Identififiers
 		self.exec_id = None
 		self.variant_id = None
+		self.suite_id = None
+
+		# Dictionaries
+		self.project_dict = {}
+		self.arch_dict = {}
+		self.tag_dict = {}
+		self.crash_type_dict = {}
+		self.suite_dictionary = {}
+
 
 	def __init__(self, host, usr, passwd, db_name, log=None, commit_on_close=False, mask=None):
 		self.init()
@@ -90,6 +97,8 @@ class TestReporter(My_SQL):
 			for row in self.cursor:
 				self.project_dict[row[1]] = row[0]
 			return True
+		else:
+			return False
 
 	'''
 	Add a project to the database. Note: the new project name automatically becomes the
@@ -142,6 +151,8 @@ class TestReporter(My_SQL):
 			else:
 				self._error_macro("Project name cannot be None")
 				return False
+		else:
+			return False
 
 	def select_project(self, project_name):
 		if self._common_checks():
@@ -154,6 +165,8 @@ class TestReporter(My_SQL):
 			else:
 				self._error_macro("(" + project_name + ") does not appear in the database. Try reconnecting or calling refresh_projects_list")
 				return False
+		else:
+			return False
 
 	def refresh_arch_list(self):
 		if self._common_checks():
@@ -163,6 +176,8 @@ class TestReporter(My_SQL):
 			for row in self.cursor:
 				self.arch_dict[row[1]] = row[0]
 			return True
+		else:
+			return False
 
 	def add_arch(self, arch, html_style=None):
 		if self._common_checks():
@@ -187,7 +202,7 @@ class TestReporter(My_SQL):
 
 					self.query(query, data)
 
-					self.arch_dict[arch] = {self.cursor.lastrowid}
+					self.arch_dict[arch] = self.cursor.lastrowid
 
 					self.log.out("Arch (" + arch + ")  added to the database.", v=1)
 
@@ -195,7 +210,8 @@ class TestReporter(My_SQL):
 			else:
 				self._error_macro("Arch can not be None.")
 				return False
-
+		else:
+			return False
 
 	def refresh_tags(self):
 		if self._common_checks(project=True):
@@ -205,7 +221,8 @@ class TestReporter(My_SQL):
 			for row in self.cursor:
 				self.tag_dict[row[1]] = row[0]
 			return True
-
+		else:
+			return False
 
 	def add_tag(self, tag, comment=None, html_style=None):
 		if self._common_checks(project=True):
@@ -258,7 +275,7 @@ class TestReporter(My_SQL):
 					query = "INSERT INTO tag (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
 					self.query(query, data)
 
-					self.tag_dict[tag] = {self.cursor.lastrowid}
+					self.tag_dict[tag] = self.cursor.lastrowid
 
 					self.log.out("Result tag (" + tag + ")  added to the database.", v=1)
 
@@ -266,6 +283,8 @@ class TestReporter(My_SQL):
 			else:
 				self._error_macro("Result tag can not be None.")
 				return False
+		else:
+			return False
 
 	def refresh_crash_type(self):
 		if self._common_checks(project=True):
@@ -275,6 +294,8 @@ class TestReporter(My_SQL):
 			for row in self.cursor:
 				self.crash_type_dict[row[1]] = row[0]
 			return True
+		else:
+			return False
 
 
 	def add_crash_type(self, crash_type, comment, html_style=None):
@@ -328,7 +349,7 @@ class TestReporter(My_SQL):
 					query = "INSERT INTO crash_type (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
 					self.query(query, data)
 
-					self.crash_type_dict[crash_type] = {self.cursor.lastrowid}
+					self.crash_type_dict[crash_type] = self.cursor.lastrowid
 
 					self.log.out("Crash type (" + crash_type + ")  added to the database.", v=1)
 
@@ -336,6 +357,8 @@ class TestReporter(My_SQL):
 			else:
 				self._error_macro("Crash type can not be None.")
 				return False
+		else:
+			return False
 
 	def register_exec(self):
 		if self._common_checks(project=True, user_name=True):
@@ -350,6 +373,24 @@ class TestReporter(My_SQL):
 			self.exec_id = self.cursor.lastrowid
 			self.log.out("Exec registered as (" + str(self.exec_id) + ").", v=0)
 			return True
+		else:
+			return False
+
+	def set_exec_id(self, exec_id):
+		if self._common_checks(project=True):
+			query = 'SELECT exec_id FROM exec WHERE fk_project_id=' + str(self.project_dict[self.selected_project]) +  ' and exec_id=' + str(exec_id)
+			self.query(query)
+			rows = self.cursor.fetchall()
+
+			if len(rows) == 1:
+				self.exec_id = exec_id
+				self.refresh_suite_names()
+				return True
+			else:
+				self._error_macro("Execution ID: " + str(exec_id) + " could not be found for project: " + self.selected_project)
+				return False
+		else:
+			return False
 
 	def register_src(self, source_type, url_path, unique_id, description=None):
 		allowed_source_types = ['build', 'cvs', 'svn', 'git', 'other', 'path']
@@ -374,7 +415,6 @@ class TestReporter(My_SQL):
 				if len(url_path) > 65535:
 					self._error_macro("url/path is to long")
 					return False
-
 
 				value.append("url_path")
 				format.append("%s")
@@ -410,9 +450,7 @@ class TestReporter(My_SQL):
 				self.query(query, data)
 
 				rows = self.cursor.fetchall()
-
 				if len(rows) > 0:
-					self.cursor.fetchall()
 					self.log.out(source_type + "> " + url_path + ":" + unique_id + " is already in the database.", WARNING, v=1)
 				else:
 					query = "INSERT INTO src (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
@@ -423,32 +461,150 @@ class TestReporter(My_SQL):
 				self._error_macro(str(source_type) + " is not a valid source type")
 				return False
 
+	def refresh_suite_names(self):
+		if self._common_checks(project=True, exec_id=True):
+			self.suite_dictionary = {}
+			query = "SELECT test_suite_id, suite_name from test_suite WHERE fk_exec_id=" + str(self.exec_id) + " ORDER BY suite_name"
+			self.query(query)
+			for row in self.cursor:
+				self.suite_dictionary[row[1]] = row[0]
+			return True
 
-dog = TestReporter("serenity.bts.rim.net", user.sql_name, user.sql_password, db_name="result_db");
+	def add_test_suite(self, suite_name, description=None, html_style=None):
+		if self._common_checks(project=True, exec_id=True):
+			if suite_name in self.suite_dictionary:
+				self.log.out('Suite name (' + suite_name + ") already in the database.", WARNING, v=0)
+				self.suite_id =  self.suite_dictionary[suite_name];
+				return True
+			else:
+				value = []
+				format = []
+				data = []
 
-dog.connect()
-dog.set_report_user_name("iamcdonald")
+				value.append("fk_project_id")
+				format.append("%s")
+				data.append(self.project_dict[self.selected_project])
 
-dog.select_db("result_db")
+				value.append("fk_exec_id")
+				format.append("%s")
+				data.append(self.exec_id)
 
-dog.add_arch("x86","Red")
-dog.add_arch("sh", "Green")
-dog.add_arch("mips", "Black")
-dog.add_arch("ppc", "Blue")
-dog.add_arch("arm", "Yellow")
-dog.add_arch("x86_64", "Purple")
-dog.add_arch("aarch64", "Cyan")
+				if len(suite_name) < 3:
+					self._error_macro("suite name is to short")
+					return False
 
-dog.register_project("Ian", "This is a project for Ian", "Red")
-dog.register_project("Rebecca", "This is a project for Rebecca", "Green")
-dog.select_project("Ian")
+				if len(suite_name) > 45:
+					self._error_macro("suite name is to long")
+					return False
 
-dog.add_tag("Horse", "Woo hoo we passed!!!!!", "Some stupid color and font stuff")
+				value.append("suite_name")
+				format.append("%s")
+				data.append(suite_name)
 
-dog.add_crash_type("SIGSERV", "Crash")
-dog.add_crash_type("SIGILL", "Crash")
-dog.add_crash_type("SIGBUS", "Crash")
-dog.add_crash_type("KDUMP", "Crash")
-dog.register_exec()
-dog.register_src("svn", "http://svn.ott.qnx.com/qa/mainline/testware", "123457")
-dog.commit()
+				if description is not None:
+					if len(description) < 5:
+						self._error_macro("description is to short")
+						return False
+
+					if len(description) > 65535:
+						self._error_macro("description is to long")
+						return False
+
+					value.append("description")
+					format.append("%s")
+					data.append(description)
+
+				if 	html_style is not None:
+						if len(html_style) < 2:
+							self._error_macro("html style is to short")
+							return False
+
+						if len(html_style) > 65535:
+							self._error_macro("html style is to long")
+							return False
+
+						value.append("tag_html_style")
+						format.append("%s")
+						data.append(html_style)
+
+				query = "INSERT INTO test_suite (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
+				self.query(query, data)
+
+				self.suite_dictionary[suite_name] = self.cursor.lastrowid
+
+				self.log.out("Test Suite (" + suite_name + ")  added to the database.", v=1)
+				return True
+
+		else:
+			return False
+
+exec_id=1
+
+rdb = TestReporter("serenity.bts.rim.net", user.sql_name, user.sql_password, db_name="result_db");
+
+rdb.connect()
+rdb.set_report_user_name("iamcdonald")
+
+rdb.select_db("result_db")
+
+rdb.add_arch("x86","Red")
+rdb.add_arch("sh", "Green")
+rdb.add_arch("mips", "Black")
+rdb.add_arch("ppc", "Blue")
+rdb.add_arch("arm", "Yellow")
+rdb.add_arch("x86_64", "Purple")
+rdb.add_arch("aarch64", "Cyan")
+
+rdb.register_project("Mainline", "Mainline/Trunk Regression Thread", "Red")
+rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
+rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
+rdb.add_tag("XPASS", "The test completed with a XPASS status", "YELLOW")
+rdb.add_tag("XFAIL", "The test completed with a XPASS status", "ORANGE")
+rdb.add_tag("UNRESOLVED", "The test completed with a XPASS status", "PURPLE")
+rdb.add_tag("UNTESTED", "The test completed with a XPASS status", "BLUE")
+rdb.add_crash_type("SIGSERV", "Crash")
+rdb.add_crash_type("SIGILL", "Crash")
+rdb.add_crash_type("SIGBUS", "Crash")
+rdb.add_crash_type("KDUMP", "Crash")
+rdb.add_crash_type("SHUTDOWN", "Crash")
+
+rdb.register_project("dev_64b", "64 Bit initial development project", "Yellow")
+rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
+rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
+rdb.add_tag("XPASS", "The test completed with a XPASS status", "YELLOW")
+rdb.add_tag("XFAIL", "The test completed with a XPASS status", "ORANGE")
+rdb.add_tag("UNRESOLVED", "The test completed with a XPASS status", "PURPLE")
+rdb.add_tag("UNTESTED", "The test completed with a XPASS status", "BLUE")
+rdb.add_crash_type("SIGSERV", "Crash")
+rdb.add_crash_type("SIGILL", "Crash")
+rdb.add_crash_type("SIGBUS", "Crash")
+rdb.add_crash_type("KDUMP", "Crash")
+rdb.add_crash_type("SHUTDOWN", "Crash")
+
+rdb.register_project("Qnx_sdp_7", "Qnx 7.0 SDP Branch")
+rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
+rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
+rdb.add_tag("XPASS", "The test completed with a XPASS status", "YELLOW")
+rdb.add_tag("XFAIL", "The test completed with a XPASS status", "ORANGE")
+rdb.add_tag("UNRESOLVED", "The test completed with a XPASS status", "PURPLE")
+rdb.add_tag("UNTESTED", "The test completed with a XPASS status", "BLUE")
+rdb.add_crash_type("SIGSERV", "Crash")
+rdb.add_crash_type("SIGILL", "Crash")
+rdb.add_crash_type("SIGBUS", "Crash")
+rdb.add_crash_type("KDUMP", "Crash")
+rdb.add_crash_type("SHUTDOWN", "Crash")
+
+rdb.select_project("Mainline");
+
+if exec_id is None:
+	rdb.register_exec()
+else:
+	rdb.set_exec_id(exec_id)
+
+rdb.add_test_suite("testware_sanitytest")
+rdb.add_test_suite("testware_Benchmark", "Benchmark Sanity tests")
+rdb.add_test_suite("testware_aps", "APS specific tests")
+
+
+rdb.register_src("svn", "http://svn.ott.qnx.com/qa/mainline/testware", "123457")
+rdb.commit()
