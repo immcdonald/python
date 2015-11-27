@@ -207,7 +207,7 @@ class TestReporter(My_SQL):
 
 					self.arch_dict[arch] = {"id": self.cursor.lastrowid}
 
-					self.log.out("Arch (" + arch + ")  added to the database.", v=1)
+					self.log.out("Arch (" + arch + ") added to the database.", v=1)
 
 				return True
 			else:
@@ -276,7 +276,7 @@ class TestReporter(My_SQL):
 
 				self.target_dict[target_name] = {"id": self.cursor.lastrowid}
 
-				self.log.out("Target (" + target_name + ")  added to the database.", v=0)
+				self.log.out("Target (" + target_name + ") added to the database.", v=0)
 
 				return True
 		else:
@@ -285,11 +285,10 @@ class TestReporter(My_SQL):
 	def refresh_tags(self):
 		if self._common_checks(project=True):
 			self.tag_dict = {}
-			query = "SELECT tag_id, result from tag WHERE fk_project_id=" + str(self.project_id) + " ORDER BY tag_id ASC"
+			query = "SELECT tag_id, result, relative_offset from tag WHERE fk_project_id=" + str(self.project_id) + " ORDER BY tag_id ASC"
 			self.query(query)
 			for row in self.cursor:
-				list_len = len(self.tag_dict)
-				self.tag_dict[row[1]] = {"id":row[0], "local_index": list_len}
+				self.tag_dict[row[1]] = {"id":row[0], "relative_offset": row[2]}
 			return True
 		else:
 			return False
@@ -303,6 +302,10 @@ class TestReporter(My_SQL):
 					value  = ["fk_project_id"]
 					format = ["%s"]
 					data = [self.project_id]
+
+					value.append("relative_offset")
+					format.append("%s")
+					data.append(len(self.tag_dict))
 
 					if len(tag) < 2:
 						self._error_macro("Tag is to short")
@@ -349,7 +352,7 @@ class TestReporter(My_SQL):
 
 					self.tag_dict[tag] = {"id": self.cursor.lastrowid, "local_index": list_len}
 
-					self.log.out("Result tag (" + tag + ")  added to the database.", v=1)
+					self.log.out("Result tag (" + tag + ") added to the database.", v=1)
 
 					return True
 			else:
@@ -423,7 +426,7 @@ class TestReporter(My_SQL):
 
 					self.crash_type_dict[crash_type] = {"id": self.cursor.lastrowid}
 
-					self.log.out("Crash type (" + crash_type + ")  added to the database.", v=1)
+					self.log.out("Crash type (" + crash_type + ") added to the database.", v=1)
 
 					return True
 			else:
@@ -604,7 +607,7 @@ class TestReporter(My_SQL):
 
 				self.suite_dictionary[suite_name] = {"id": self.cursor.lastrowid}
 
-				self.log.out("Test Suite (" + suite_name + ")  added to the database.", v=1)
+				self.log.out("Test Suite (" + suite_name + ") added to the database.", v=1)
 				return True
 
 		else:
@@ -615,6 +618,8 @@ class TestReporter(My_SQL):
 		if self._common_checks(project=True, exec_id=True, user_name=True):
 			if arch in self.arch_dict:
 				if target in self.target_dict:
+					root_variant_id = None
+
 					data = (self.arch_dict[arch]["id"], self.target_dict[target]["id"], variant)
 
 					# Check to see if we have a root variant of this combination exists
@@ -624,10 +629,16 @@ class TestReporter(My_SQL):
 					rows = self.cursor.fetchall()
 
 					if len(rows) > 0:
-						print "Found something!!!!"
-
+						root_variant_id = rows[0][0];
 					else:
-						print "None Found"
+						query = 'INSERT INTO root_variant (fk_arch_id, fk_target_id, variant, created) VALUES (%s, %s, %s, NOW())'
+						self.query(query, data)
+						root_variant_id = self.cursor.lastrowid
+						self.log.out("Root Variant (" +  str(target) + "-" + str(arch) + "-" +  str(variant) + ") added to the database.", v=0)
+
+
+					print root_variant_id
+
 				else:
 					self._error_macro("Target (" + str(target) + ") is not in the database. Please call add_target before this function.")
 					return False
@@ -641,7 +652,7 @@ class TestReporter(My_SQL):
 
 
 
-exec_id=1
+exec_id=None
 
 rdb = TestReporter("serenity.bts.rim.net", user.sql_name, user.sql_password, db_name="result_db");
 
@@ -658,7 +669,63 @@ rdb.add_arch("arm", "Yellow")
 rdb.add_arch("x86_64", "Purple")
 rdb.add_arch("aarch64", "Cyan")
 
+rdb.add_target("adsom-7222")
+rdb.add_target("advantech-7226")
+rdb.add_target("aimb272-12185")
+rdb.add_target("amd64-dual-2")
+rdb.add_target("amdk6ii-1")
+rdb.add_target("amdk6iii-1")
+rdb.add_target("amdk7-1")
+rdb.add_target("atom-6354")
+rdb.add_target("beagleblack")
+rdb.add_target("beaglexm-1")
+rdb.add_target("beaglexm-2")
+rdb.add_target("bigbertha-8455")
+rdb.add_target("bigintel-7990")
+rdb.add_target("bigmac")
+rdb.add_target("ct11eb")
+rdb.add_target("ds81-shuttle-001")
+rdb.add_target("hasswell-bc5ff4e8872e")
+rdb.add_target("imb-151")
+rdb.add_target("imb-151-6336")
 rdb.add_target("imb-151-6342")
+rdb.add_target("imb-151-6352")
+rdb.add_target("imx600044-20015160")
+rdb.add_target("imx6q-sabresmart-00049f02e082")
+rdb.add_target("imx6q-sabresmart-6115")
+rdb.add_target("ivybridge-2554")
+rdb.add_target("jasper-8092")
+rdb.add_target("kontron-flex-7229")
+rdb.add_target("kontron-flex-7230")
+rdb.add_target("ktron-uepc-7234")
+rdb.add_target("mvdove-7213")
+rdb.add_target("mvdove-7791")
+rdb.add_target("mx6q-sabrelite-12252")
+rdb.add_target("nvidia-7903")
+rdb.add_target("nvidia-erista-8091")
+rdb.add_target("nvidia-erista-8093")
+rdb.add_target("nvidia-loki-6769")
+rdb.add_target("nvidia-loki-6790")
+rdb.add_target("nvidia-loki-6961")
+rdb.add_target("omap3530-6363")
+rdb.add_target("omap3530-7098")
+rdb.add_target("omap3530-7099")
+rdb.add_target("omap3530-7567")
+rdb.add_target("omap4430-9095")
+rdb.add_target("omap4430-9221")
+rdb.add_target("omap5432-es2-2206")
+rdb.add_target("omap5432-es2-2716")
+rdb.add_target("panda-12659")
+rdb.add_target("panda-12660")
+rdb.add_target("panda-12676")
+rdb.add_target("panda-12677")
+rdb.add_target("pcm9562-8166")
+rdb.add_target("qnet02")
+rdb.add_target("qnet04")
+rdb.add_target("qnet05")
+rdb.add_target("sandybridge-001")
+rdb.add_target("smpmpxpii")
+rdb.add_target("tolapai-6109")
 
 
 rdb.register_project("Mainline", "Mainline/Trunk Regression Thread", "Red")
