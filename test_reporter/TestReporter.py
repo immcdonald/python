@@ -17,6 +17,9 @@ class TestReporter(My_SQL):
 		self.selected_project = None
 		self.report_user_name = None
 
+		# can be a number between 0 and 128
+		self.unique_root_test_id = 0
+
 		#Identififiers
 		self.project_id = None
 		self.exec_id = None
@@ -29,8 +32,9 @@ class TestReporter(My_SQL):
 		self.target_dict = {}
 		self.tag_dict = {}
 		self.crash_type_dict = {}
-		self.suite_dictionary = {}
-
+		self.suite_dict = {}
+		self.test_root_dict = {}
+		self.test_revision_dict = {}
 
 	def __init__(self, host, usr, passwd, db_name, log=None, commit_on_close=False, mask=None):
 		self.init()
@@ -41,6 +45,8 @@ class TestReporter(My_SQL):
 		self.refresh_projects_list()
 		self.refresh_arch_list()
 		self.refresh_target_list()
+		self.refresh_test_root()
+		self.refresh_test_revision()
 
 	def set_report_user_name(self, user_name):
 		if user_name is not None:
@@ -144,7 +150,7 @@ class TestReporter(My_SQL):
 
 					self.query(query,data)
 
-					self.project_dict[project_name] = {"id": self.cursor.lastrowid}
+					self.refresh_projects_list()
 
 					self.select_project(project_name)
 
@@ -205,7 +211,7 @@ class TestReporter(My_SQL):
 
 					self.query(query, data)
 
-					self.arch_dict[arch] = {"id": self.cursor.lastrowid}
+					self.refresh_arch_list()
 
 					self.log.out("Arch (" + arch + ") added to the database.", v=1)
 
@@ -274,7 +280,7 @@ class TestReporter(My_SQL):
 
 				self.query(query, data)
 
-				self.target_dict[target_name] = {"id": self.cursor.lastrowid}
+				self.refresh_target_list()
 
 				self.log.out("Target (" + target_name + ") added to the database.", v=0)
 
@@ -285,10 +291,10 @@ class TestReporter(My_SQL):
 	def refresh_tags(self):
 		if self._common_checks(project=True):
 			self.tag_dict = {}
-			query = "SELECT tag_id, result, relative_offset from tag WHERE fk_project_id=" + str(self.project_id) + " ORDER BY tag_id ASC"
+			query = "SELECT tag_id, result, project_offset from tag WHERE fk_project_id=" + str(self.project_id) + " ORDER BY tag_id ASC"
 			self.query(query)
 			for row in self.cursor:
-				self.tag_dict[row[1]] = {"id":row[0], "relative_offset": row[2]}
+				self.tag_dict[row[1]] = {"id":row[0], "project_offset": row[2]}
 			return True
 		else:
 			return False
@@ -303,7 +309,7 @@ class TestReporter(My_SQL):
 					format = ["%s"]
 					data = [self.project_id]
 
-					value.append("relative_offset")
+					value.append("project_offset")
 					format.append("%s")
 					data.append(len(self.tag_dict))
 
@@ -348,9 +354,7 @@ class TestReporter(My_SQL):
 					query = "INSERT INTO tag (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
 					self.query(query, data)
 
-					list_len = len(self.tag_dict)
-
-					self.tag_dict[tag] = {"id": self.cursor.lastrowid, "local_index": list_len}
+					self.refresh_tags()
 
 					self.log.out("Result tag (" + tag + ") added to the database.", v=1)
 
@@ -424,7 +428,7 @@ class TestReporter(My_SQL):
 					query = "INSERT INTO crash_type (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
 					self.query(query, data)
 
-					self.crash_type_dict[crash_type] = {"id": self.cursor.lastrowid}
+					self.refresh_crash_type();
 
 					self.log.out("Crash type (" + crash_type + ") added to the database.", v=1)
 
@@ -535,21 +539,25 @@ class TestReporter(My_SQL):
 			else:
 				self._error_macro(str(source_type) + " is not a valid source type")
 				return False
+		else:
+			return False
 
 	def refresh_suite_names(self):
 		if self._common_checks(project=True, exec_id=True):
-			self.suite_dictionary = {}
+			self.suite_dict = {}
 			query = "SELECT test_suite_id, suite_name from test_suite WHERE fk_exec_id=" + str(self.exec_id) + " ORDER BY suite_name"
 			self.query(query)
 			for row in self.cursor:
-				self.suite_dictionary[row[1]] = row[0]
+				self.suite_dict[row[1]] = row[0]
 			return True
+		else:
+			return False
 
 	def add_test_suite(self, suite_name, description=None, html_style=None):
 		if self._common_checks(project=True, exec_id=True):
-			if suite_name in self.suite_dictionary:
+			if suite_name in self.suite_dict:
 				self.log.out('Suite name (' + suite_name + ") already in the database.", WARNING, v=0)
-				self.suite_id =  self.suite_dictionary[suite_name];
+				self.suite_id =  self.suite_dict[suite_name];
 				return True
 			else:
 				value = []
@@ -605,14 +613,13 @@ class TestReporter(My_SQL):
 				query = "INSERT INTO test_suite (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
 				self.query(query, data)
 
-				self.suite_dictionary[suite_name] = {"id": self.cursor.lastrowid}
+				self.refresh_suite_names()
 
 				self.log.out("Test Suite (" + suite_name + ") added to the database.", v=1)
 				return True
 
 		else:
 			return False
-
 
 	def add_variant(self, target, arch, variant):
 		if self._common_checks(project=True, exec_id=True, user_name=True):
@@ -636,8 +643,51 @@ class TestReporter(My_SQL):
 						root_variant_id = self.cursor.lastrowid
 						self.log.out("Root Variant (" +  str(target) + "-" + str(arch) + "-" +  str(variant) + ") added to the database.", v=0)
 
+					if root_variant_id:
 
-					print root_variant_id
+						value = []
+						format = []
+						data = []
+
+						value.append("fk_project_id")
+						format.append("%s")
+						data.append(self.project_id)
+
+						value.append("fk_exec_id")
+						format.append("%s")
+						data.append(self.exec_id)
+
+						value.append("fk_root_variant_id")
+						format.append("%s")
+						data.append(root_variant_id)
+
+						value.append("user_name")
+						format.append("%s")
+						data.append(self.report_user_name)
+
+						# check to see if the variant already exists
+						query = "SELECT variant_id FROM variant WHERE " + "=%s and ".join(value) + "=%s"
+
+						self.query(query, data)
+
+						rows = self.cursor.fetchall()
+
+						if len(rows) > 0:
+							self.log.out('Variant (' + str(target) + "-" + str(arch) + "-" +  str(variant)  + ") already exists for Execution: " + str(self.exec_id), WARNING, v=0)
+
+							self.variant_id = rows[0][0]
+						else:
+							query = "INSERT INTO variant (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
+							self.query(query, data)
+
+							self.variant_id = self.cursor.lastrowid
+
+							self.log.out("Variant (" +  str(target) + "-" + str(arch) + "-" +  str(variant) + ") added to the database for Execution: " + str(self.exec_id))
+
+							return True
+					else:
+						self._error_macro("Failed to resolve root variant")
+						return False
 
 				else:
 					self._error_macro("Target (" + str(target) + ") is not in the database. Please call add_target before this function.")
@@ -649,10 +699,193 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	def refresh_test_root(self):
+		if self._common_checks():
+			self.suite_dict = {}
+			query = "SELECT test_root_id, name, params, src_path, unique_id from test_root  ORDER BY name"
+			self.query(query)
+			for row in self.cursor:
+				self.test_root_dict[row[1]+ " " + str(row[2])+ " [" + str(row[4]) + "]"] = {"id": row[0], "name": row[1], "params":row[2], "src_path":row[3], "unique":row[4]}
+			return True
+		else:
+			return False
+
+	def add_test_root(self, test_name, test_params,  src_path=None, unique_id=None):
+		if unique_id is None:
+			unique_id = self.unique_root_test_id
+
+		if type(unique_id) is not type(1):
+			self._error_macro("Unique ID must be an integer")
+			return False
+
+		if (unique_id < 0) or (unique_id > 255):
+			self._error_macro("Unique ID must be between 0 and 127")
+			return False
+
+		test_path = str(test_name) + " " + str(test_params) + " [" + str(unique_id) + "]"
+
+		if self._common_checks():
+
+			if test_path in self.test_root_dict:
+				self.log.out('Test Root (' + test_path + ") already in the database.", WARNING, v=1)
+				return self.test_root_dict[test_path]["id"]
+			else:
+				value = []
+				format = []
+				data = []
+
+				value.append("unique_id")
+				format.append("%s")
+				data.append(unique_id)
+
+				if len(test_name) < 2:
+					self._error_macro("test name is to short")
+					return -1
+
+				if len(test_name) > 50:
+					self._error_macro("test name is to long")
+					return -1
+
+				value.append("name")
+				format.append("%s")
+				data.append(test_name)
+
+				if len(test_params) > 100:
+					self._error_macro("test name is to long")
+					return -1
+
+				value.append("params")
+				format.append("%s")
+				data.append(test_params)
+
+				if 	src_path is not None:
+					if len(src_path) < 10:
+						self._error_macro("source path is to short")
+						return -1
+
+					if len(src_path) > 256:
+						self._error_macro("source path is to long")
+						return -1
+
+					value.append("src_path")
+					format.append("%s")
+					data.append(src_path)
+
+				query = "INSERT INTO test_root (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
+				self.query(query, data)
+
+				self.refresh_test_root();
+
+				self.log.out("Test Root (" + test_path + ") added to the database.")
+				return self.cursor.lastrowid
+		else:
+			return -1
+
+	def refresh_test_revision(self):
+		if self._common_checks():
+			self.test_revision_dict = {}
+			query = "SELECT test_revision_id, fk_test_root_id, exec_path, unique_rev_id from test_revision"
+			self.query(query)
+			for row in self.cursor:
+				self.test_revision_dict[str(row[1]) + "_" + str(row[2]) + "_" + str(row[3])] = {"id":row[0], "fk_test_root_id":row[1], "exec_path":row[2], "unique_rev_id":row[3]}
+			return True
+		else:
+			return False
 
 
+	def add_test(self, exec_path, test_name, test_params, unique_rev_id="0", support_arch="all", src_path=None, description=None, unique_id=None, html_style=None):
+		rc = self.add_test_root(test_name, test_params, src_path, unique_id)
 
-exec_id=None
+		if rc > 0:
+			test_key = str(rc) + "_" + exec_path + "_" + unique_rev_id
+			if test_key in self.test_revision_dict:
+			   	self.log.out('Test (' + os.path.join(exec_path, test_name) + " " + str(test_params) + " rev_ud: " + unique_rev_id + "" + ") already in the database.", WARNING, v=0)
+				return self.test_revision_dict[test_key]["id"]
+			else:
+				value = []
+				format = []
+				data = []
+
+				value.append("fk_test_root_id")
+				format.append("%s")
+				data.append(rc)
+
+				if len(exec_path) < 1:
+					self._error_macro("execution path is to short")
+					return -1
+
+				if len(exec_path) > 65535:
+					self._error_macro("execution path is to long")
+					return -1
+
+				value.append("exec_path")
+				format.append("%s")
+				data.append(exec_path)
+
+				if len(unique_rev_id) < 1:
+					self._error_macro("unique revision id is to short")
+					return -1
+
+				if len(unique_rev_id) > 80:
+					self._error_macro("unique revision id is to long")
+					return -1
+
+				value.append("unique_rev_id")
+				format.append("%s")
+				data.append(unique_rev_id)
+
+
+				if len(support_arch) < 2:
+					self._error_macro("support arch is to short")
+					return -1
+
+				if len(support_arch) > 100:
+					self._error_macro("support arch is to long")
+					return -1
+
+				value.append("arch_list")
+				format.append("%s")
+				data.append(support_arch)
+
+
+				if description is not None:
+					if len(description) > 2:
+						self._error_macro("description is to short")
+						return -1
+
+					if len(description) > 65535:
+						self._error_macro("description is to long")
+						return -1
+
+					value.append("description")
+					format.append("%s")
+					data.append(description)
+
+				if html_style is not None:
+					if len(html_style) < 3:
+						self._error_macro("description is to short")
+						return -1
+
+					if len(html_style) > 65535:
+						self._error_macro("description is to long")
+						return -1
+
+					value.append("test_rev_html_style")
+					format.append("%s")
+					data.append(html_style)
+
+				query = "INSERT INTO test_revision (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
+				self.query(query, data)
+
+				# Get the last row value before the queries in refresh the test list blow it away.
+				last_row = self.cursor.lastrowid;
+
+				self.refresh_test_revision()
+
+				return last_row
+		else:
+			return -1
+
 
 rdb = TestReporter("serenity.bts.rim.net", user.sql_name, user.sql_password, db_name="result_db");
 
@@ -727,14 +960,13 @@ rdb.add_target("sandybridge-001")
 rdb.add_target("smpmpxpii")
 rdb.add_target("tolapai-6109")
 
-
 rdb.register_project("Mainline", "Mainline/Trunk Regression Thread", "Red")
 rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
 rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
-rdb.add_tag("XPASS", "The test completed with a XPASS status", "YELLOW")
+rdb.add_tag("XPASS", "The test completed with a XFAIL status", "YELLOW")
 rdb.add_tag("XFAIL", "The test completed with a XPASS status", "ORANGE")
-rdb.add_tag("UNRESOLVED", "The test completed with a XPASS status", "PURPLE")
-rdb.add_tag("UNTESTED", "The test completed with a XPASS status", "BLUE")
+rdb.add_tag("UNRESOLVED", "The test completed with a UNRESOLVED status", "PURPLE")
+rdb.add_tag("UNTESTED", "The test completed with a UNTESTED status", "BLUE")
 rdb.add_crash_type("SIGSERV", "Crash")
 rdb.add_crash_type("SIGILL", "Crash")
 rdb.add_crash_type("SIGBUS", "Crash")
@@ -744,10 +976,10 @@ rdb.add_crash_type("SHUTDOWN", "Crash")
 rdb.register_project("dev_64b", "64 Bit initial development project", "Yellow")
 rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
 rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
-rdb.add_tag("XPASS", "The test completed with a XPASS status", "YELLOW")
+rdb.add_tag("XPASS", "The test completed with a XFAIL status", "YELLOW")
 rdb.add_tag("XFAIL", "The test completed with a XPASS status", "ORANGE")
-rdb.add_tag("UNRESOLVED", "The test completed with a XPASS status", "PURPLE")
-rdb.add_tag("UNTESTED", "The test completed with a XPASS status", "BLUE")
+rdb.add_tag("UNRESOLVED", "The test completed with a UNRESOLVED status", "PURPLE")
+rdb.add_tag("UNTESTED", "The test completed with a UNTESTED status", "BLUE")
 rdb.add_crash_type("SIGSERV", "Crash")
 rdb.add_crash_type("SIGILL", "Crash")
 rdb.add_crash_type("SIGBUS", "Crash")
@@ -757,10 +989,10 @@ rdb.add_crash_type("SHUTDOWN", "Crash")
 rdb.register_project("Qnx_sdp_7", "Qnx 7.0 SDP Branch")
 rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
 rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
-rdb.add_tag("XPASS", "The test completed with a XPASS status", "YELLOW")
+rdb.add_tag("XPASS", "The test completed with a XFAIL status", "YELLOW")
 rdb.add_tag("XFAIL", "The test completed with a XPASS status", "ORANGE")
-rdb.add_tag("UNRESOLVED", "The test completed with a XPASS status", "PURPLE")
-rdb.add_tag("UNTESTED", "The test completed with a XPASS status", "BLUE")
+rdb.add_tag("UNRESOLVED", "The test completed with a UNRESOLVED status", "PURPLE")
+rdb.add_tag("UNTESTED", "The test completed with a UNTESTED status", "BLUE")
 rdb.add_crash_type("SIGSERV", "Crash")
 rdb.add_crash_type("SIGILL", "Crash")
 rdb.add_crash_type("SIGBUS", "Crash")
@@ -768,6 +1000,8 @@ rdb.add_crash_type("KDUMP", "Crash")
 rdb.add_crash_type("SHUTDOWN", "Crash")
 
 rdb.select_project("Mainline");
+
+exec_id=1
 
 if exec_id is None:
 	rdb.register_exec()
@@ -780,6 +1014,10 @@ rdb.add_test_suite("testware_aps", "APS specific tests")
 
 rdb.add_variant("imb-151-6342", "x86", "o.smp")
 
-
 rdb.register_src("svn", "http://svn.ott.qnx.com/qa/mainline/testware", "123457")
+
+print ">", rdb.add_test("/test/cool/", "ian", "is superman")
+print ">", rdb.add_test("/test/cool/", "ian", "is superman")
+print ">", rdb.add_test("/test/cool/", "ian", "is green latern")
+
 rdb.commit()
