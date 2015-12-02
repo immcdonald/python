@@ -29,7 +29,7 @@ class my_ftp():
 		self.ftp_debug_level = 2  #2 or higher produces the max amount of debug logs from ftplib
 
 	def __init__(self, host, user_name, password,
-				 list_expression=DEFAULT_LIST_REGEX_EXPRESSION, ftp_debug_level=0):
+				 list_expression=DEFAULT_LIST_REGEX_EXPRESSION, ftp_debug_level=0, log=None):
 		self.init()
 		self.dir_list_pattern = my_ftp.re.compile(list_expression)
 		self.ftp_debug_level = ftp_debug_level
@@ -92,8 +92,13 @@ class my_ftp():
 			print("Not connected!")
 			return None
 
-	def mkdir(self, directory):
+	def mkdir(self, directory, check_exists=False):
 		if self.ftp is not None:
+			if check_exists:
+				dir_list = self.dir_list()
+				if directory in dir_list:
+					return True
+
 			try:
 				self.ftp.mkd(directory)
 			except:

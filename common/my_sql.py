@@ -55,6 +55,9 @@ class My_SQL(object):
 
 		self.log.out(self.error, ERROR, v=verbosity, mask=self.mask, frameinfo=frameinfo)
 
+	def get_log(self):
+		return self.log
+
 	def commit(self):
 		if self.conn is not None:
 			self.conn.commit()
