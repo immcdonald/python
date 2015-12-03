@@ -783,9 +783,14 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
-	def add_attachments(self, full_attachment_src_path, omit_exec_id=False, omit_variant_id=False):
+	def add_attachments(self, full_attachment_src_path, attachment_type="general", mime_type="application/octet-stream", comment=None, omit_exec_id=False, omit_variant_id=False):
 		if self._common_checks(project=True):
 			known_compressed_extensions = [".zip", ".gz"]
+			valid_attachment_types = ['primary', 'general', 'crash', 'symbol', 'profile', 'json', 'history', 'pre_json', 'post_json']
+
+			if attachment_type not in valid_attachment_types:
+				self._error_macro(str(attachment_type) + " is an unknown attachment type.")
+				return -1
 
 			if os.path.exists(full_attachment_src_path):
 
@@ -796,7 +801,16 @@ class TestReporter(My_SQL):
 							)
 
 				if ftp.connect():
+					value = []
+					format = []
+					data = []
+
+					value.append("fk_project_id")
+					format.append("%s")
+					data.append(self.project_id)
+
 					dest_path = ""
+
 
 					# Attempt to change to the project directory.
 					if ftp.chdir(self.project_dict[self.selected_project]["attachment_path"]) is not True:
@@ -806,9 +820,16 @@ class TestReporter(My_SQL):
 
 					# Is exec_id set:
 					if self.exec_id is not None:
+
+						value.append("fk_exec_id")
+						format.append("%s")
+						data.append(self.exec_id)
+
 						if omit_exec_id is False:
-							if ftp.mkdir(str(self.exec_id), True):
-								dest_path = os.path.join(dest_path, str(self.exec_id))
+							exec_id_dir = "%06d" % int(self.exec_id);
+
+							if ftp.mkdir(str(exec_id_dir), True):
+								dest_path = os.path.join(dest_path, exec_id_dir)
 
 								if ftp.chdir(dest_path) is not True:
 									return -1
@@ -816,6 +837,11 @@ class TestReporter(My_SQL):
 								return -1
 
 						if self.variant_id is not None:
+
+							value.append("fk_variant_id")
+							format.append("%s")
+							data.append(self.variant_id)
+
 							if ftp.mkdir(str(self.variant_dict[self.variant_id]["target"]), True):
 								dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["target"]))
 
@@ -846,8 +872,7 @@ class TestReporter(My_SQL):
 
 					# We want to store only compressed files on the server
 					# so see if this file is already compressed.
-
-					if parts[1] not in known_compressed_extensions:
+					if extension not in known_compressed_extensions:
 						# if not then we will compress it before we copy it
 
 						new_file_name = "";
@@ -856,9 +881,9 @@ class TestReporter(My_SQL):
 
 						for index in range(-1, 1000):
 							if index == -1:
-								file_name = root_file_name + extension + ".zip"
+								file_name = root_file_name + extension + ".gz"
 							else:
-								file_name = root_file_name + extension + "-%03d" % str(index) + ".zip"
+								file_name = root_file_name + extension + "-%03d" % index + ".gz"
 
 							output_path = os.path.join(local_dir_name, file_name)
 
@@ -869,15 +894,109 @@ class TestReporter(My_SQL):
 							self._error_macro(full_attachment_src_path + " Failed to find an acceptable name to generate a compressed file.")
 							return -1
 
+						dest_file_name = os.path.join(dest_path, file_name)
+
+						value.append("path")
+						format.append("%s")
+						data.append(dest_file_name)
+
+						# Look to see if we already have this file int he database
+						query = "SELECT attachment_id FROM attachment WHERE " + "=%s and ".join(value) + "=%s"
+						self.query(query, data)
+
+						rows = self.cursor.fetchall()
+
+						if len(rows) > 0:
+							self.log.out(dest_file_name + " already exists in the database.", WARNING, v=0)
+							return rows[0][0]
+
+						value.append("attach_type")
+						format.append("%s")
+						data.append(attachment_type)
+
+						value.append("mime_type")
+						format.append("%s")
+						data.append(mime_type)
+
+
+						value.append("compress_mode")
+						format.append("%s")
+						data.append("post_compressed_gz")
+
+
+						if comment is not None:
+							if len(comment) < 3:
+								self._error_macro("comment is to short")
+								return -1
+
+							if len(comment) > 65535:
+								self._error_macro("comment is to long")
+								return -1
+
+							value.append("comment")
+							format.append("%s")
+							data.append(comment)
+
 						with open(full_attachment_src_path, "rb") as fp_in:
 							with gzip.open(output_path, "wb") as fp_output:
 								shutil.copyfileobj(fp_in, fp_output)
+
+						if ftp.binary_file_transfer_2_file(output_path, dest_file_name):
+							query = "INSERT INTO attachment (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
+							self.query(query, data)
+							#Remove the file that we created
+							os.remove(output_path)
+							return self.cursor.lastrowid
+						else:
+							return -1
 					else:
-						pass
-						# if it is compressed we just copy it as is..
+						dest_file_name = os.path.join(dest_path, file_name)
+
+						# Look to see if we already have this file int he database
+						query = "SELECT attachment_id FROM attachment WHERE " + "=%s and ".join(value) + "=%s"
+						self.query(query, data)
+
+						rows = self.cursor.fetchall()
+
+						if len(rows) > 0:
+							self.log.out(dest_file_name + " already exists in the database.", WARNING, v=0)
+							return rows[0][0]
+
+						value.append("attach_type")
+						format.append("%s")
+						data.append(attachment_type)
+
+						value.append("mime_type")
+						format.append("%s")
+						data.append(mime_type)
+
+						if comment is not None:
+							if len(comment) < 3:
+								self._error_macro("comment is to short")
+								return -1
+
+							if len(comment) > 65535:
+								self._error_macro("comment is to long")
+								return -1
+							value.append("comment")
+							format.append("%s")
+							data.append(comment)
+
+
+						value.append("compress_mode")
+						format.append("%s")
+						data.append("src_compressed")
+
+
+						if ftp.binary_file_transfer_2_file(full_attachment_src_path, dest_file_name):
+							query = "INSERT INTO attachment (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
+							self.query(query, data)
+
+							return self.cursor.lastrowid
+						else:
+							return -1
 				else:
 					return -1
-
 			else:
 				self._error_macro(full_attachment_src_path + " was not found or is not accessible.")
 				return -1
@@ -1065,11 +1184,11 @@ class TestReporter(My_SQL):
 
 				if html_style is not None:
 					if len(html_style) < 3:
-						self._error_macro("description is to short")
+						self._error_macro("html style is to short")
 						return -1
 
 					if len(html_style) > 65535:
-						self._error_macro("description is to long")
+						self._error_macro("html style is to long")
 						return -1
 
 					value.append("test_rev_html_style")
