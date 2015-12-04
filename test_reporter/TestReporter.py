@@ -690,7 +690,7 @@ class TestReporter(My_SQL):
 				query = "INSERT INTO test_suite (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
 				self.query(query, data)
 
-				self.suite_id = self.cursor.lastrowid;
+				self.suite_id = self.cursor.lastrowid
 
 				self.refresh_suite_names()
 
@@ -783,7 +783,7 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
-	def add_attachments(self, full_attachment_src_path, attachment_type="general", mime_type="application/octet-stream", comment=None, omit_exec_id=False, omit_variant_id=False):
+	def add_attachments(self, full_attachment_src_path, attachment_type="general", mime_type="application/octet-stream", test_result_id=None, comment=None, omit_exec_id=False, omit_variant_id=False):
 		if self._common_checks(project=True):
 			known_compressed_extensions = [".zip", ".gz"]
 			valid_attachment_types = ['primary', 'general', 'crash', 'symbol', 'profile', 'json', 'history', 'pre_json', 'post_json']
@@ -805,12 +805,16 @@ class TestReporter(My_SQL):
 					format = []
 					data = []
 
+					if test_result_id is not None:
+						value.append("fk_result_id")
+						format.append("%s")
+						data.append(self.test_result_id)
+
 					value.append("fk_project_id")
 					format.append("%s")
 					data.append(self.project_id)
 
 					dest_path = ""
-
 
 					# Attempt to change to the project directory.
 					if ftp.chdir(self.project_dict[self.selected_project]["attachment_path"]) is not True:
@@ -820,12 +824,10 @@ class TestReporter(My_SQL):
 
 					# Is exec_id set:
 					if self.exec_id is not None:
-
-						value.append("fk_exec_id")
-						format.append("%s")
-						data.append(self.exec_id)
-
 						if omit_exec_id is False:
+							value.append("fk_exec_id")
+							format.append("%s")
+							data.append(self.exec_id)
 							exec_id_dir = "%06d" % int(self.exec_id);
 
 							if ftp.mkdir(str(exec_id_dir), True):
@@ -837,34 +839,34 @@ class TestReporter(My_SQL):
 								return -1
 
 						if self.variant_id is not None:
+							if omit_variant_id is False:
+								value.append("fk_variant_id")
+								format.append("%s")
+								data.append(self.variant_id)
 
-							value.append("fk_variant_id")
-							format.append("%s")
-							data.append(self.variant_id)
+								if ftp.mkdir(str(self.variant_dict[self.variant_id]["target"]), True):
+									dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["target"]))
 
-							if ftp.mkdir(str(self.variant_dict[self.variant_id]["target"]), True):
-								dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["target"]))
-
-								if ftp.chdir(dest_path) is not True:
+									if ftp.chdir(dest_path) is not True:
+										return -1
+								else:
 									return -1
-							else:
-								return -1
 
-							if ftp.mkdir(str(self.variant_dict[self.variant_id]["arch"]), True):
-								dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["arch"]))
+								if ftp.mkdir(str(self.variant_dict[self.variant_id]["arch"]), True):
+									dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["arch"]))
 
-								if ftp.chdir(dest_path) is not True:
+									if ftp.chdir(dest_path) is not True:
+										return -1
+								else:
 									return -1
-							else:
-								return -1
 
-							if ftp.mkdir(str(self.variant_dict[self.variant_id]["variant"]), True):
-								dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["variant"]))
+								if ftp.mkdir(str(self.variant_dict[self.variant_id]["variant"]), True):
+									dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["variant"]))
 
-								if ftp.chdir(dest_path) is not True:
+									if ftp.chdir(dest_path) is not True:
+										return -1
+								else:
 									return -1
-							else:
-								return -1
 
 					local_dir_name = os.path.dirname(full_attachment_src_path)
 					base_name = os.path.basename(full_attachment_src_path)
@@ -918,7 +920,6 @@ class TestReporter(My_SQL):
 						format.append("%s")
 						data.append(mime_type)
 
-
 						value.append("compress_mode")
 						format.append("%s")
 						data.append("post_compressed_gz")
@@ -944,6 +945,7 @@ class TestReporter(My_SQL):
 						if ftp.binary_file_transfer_2_file(output_path, dest_file_name):
 							query = "INSERT INTO attachment (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
 							self.query(query, data)
+
 							#Remove the file that we created
 							os.remove(output_path)
 							return self.cursor.lastrowid
@@ -1000,7 +1002,6 @@ class TestReporter(My_SQL):
 			else:
 				self._error_macro(full_attachment_src_path + " was not found or is not accessible.")
 				return -1
-
 
 	def refresh_test_root(self):
 		if self._common_checks():
@@ -1199,7 +1200,7 @@ class TestReporter(My_SQL):
 				self.query(query, data)
 
 				# Get the last row value before the queries in refresh the test list blow it away.
-				self.test_revision_id = self.cursor.lastrowid;
+				self.test_revision_id = self.cursor.lastrowid
 
 				self.refresh_test_revision()
 
@@ -1258,7 +1259,7 @@ class TestReporter(My_SQL):
 				self.query(query, data)
 
 				# Get the last row value before the queries in refresh the test list blow it away.
-				self.test_id = self.cursor.lastrowid;
+				self.test_id = self.cursor.lastrowid
 
 				self.refresh_test_dict()
 
@@ -1326,7 +1327,7 @@ class TestReporter(My_SQL):
 
 					if len(rows) > 0:
 						self.log.out('Test result is already in the database.', WARNING, v=0)
-						return True
+						return rows[0][0]
 
 				if custom_jason:
 					value.append("crash_counter")
@@ -1337,12 +1338,12 @@ class TestReporter(My_SQL):
 
 				self.query(query, data)
 
-				return True
+				return self.cursor.lastrowid
 			else:
 				self._error_macro("Please call add_test before calling this function.")
-				return False
+				return -1
 		else:
-			return False
+			return -1
 
 	def refresh_bug_root(self):
 		if self._common_checks():
@@ -1393,7 +1394,7 @@ class TestReporter(My_SQL):
 
 					query = "INSERT INTO bug_root (" + ",".join(value) + ",created) VALUES (" + ",".join(format) + ", NOW())"
 					self.query(query, data)
-					self.root_bug_id  = self.cursor.lastrowid;
+					self.root_bug_id  = self.cursor.lastrowid
 
 					self.refresh_bug_root()
 
@@ -1450,7 +1451,6 @@ class TestReporter(My_SQL):
 						self.project_bug_dict[bug_root_id] = {"id": self.cursor.lastrowid}
 
 						return self.project_bug_dict[bug_root_id]["id"]
-
 				else:
 					return bug_root_id
 			else:
@@ -1458,6 +1458,48 @@ class TestReporter(My_SQL):
 				return -1
 		else:
 			return -1
+
+	def add_crash(self, test_result_id, crash_type, line_number, known_crash_id=None):
+		if crash_type in self.crash_type_dict:
+			value = []
+			format = []
+			data = []
+
+			value.append("fk_crash_type_id")
+			format.append("%s")
+			data.append(self.crash_type_dict[crash_type])
+
+			value.append("fk_result_id")
+			format.append("%s")
+			data.append(test_result_id)
+
+			value.append("line_number")
+			format.append("%s")
+			data.append(line_number)
+
+			#check to see if this one is already in the database
+			query = "SELECT crash_id FROM crash WHERE " + "=%s and ".join(value) + "=%s"
+			self.query(query, data)
+
+			rows = self.cursor.fetchall()
+
+			if len(rows) > 0:
+				self.log.out('Crash information is already in the database.', WARNING, v=0)
+				return rows[0][0]
+
+			if known_crash_id is not None:
+				value.append("fk_known_crash_id")
+				format.append("%s")
+				data.append(known_crash_id)
+
+			query = "INSERT INTO crash (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
+			self.query(query, data)
+
+			return self.cursor.lastrowid
+		else:
+			self._error_macro(crash_type + " is not a registed crash type. Please call add_crash_type function first or use an already added crash type.")
+			return -1
+
 
 
 rdb = TestReporter("serenity.bts.rim.net", user.sql_name, user.sql_password, db_name="result_db");
@@ -1604,13 +1646,12 @@ test_rev_id = rdb.add_test_revision("/test/cool/", "ian", "is bob", arch="x86, x
 
 test_id = rdb.add_test()
 
-print rdb.add_test_result("PASS")
+result_id = rdb.add_test_result("PASS")
 
-print rdb.add_bug_root("jira", "123456789", "This is a stupid JIRA summary")
-print rdb.add_project_bug("jira", "123456789", "This is a stupid JIRA summary")
+print "Add Crash:",  rdb.add_crash(result_id, 'SIGSERV', 100)
 
-print rdb.add_attachments("./TestReporter.py")
-
-
+print "Add bug Root:", rdb.add_bug_root("jira", "123456789", "This is a stupid JIRA summary")
+print "Add project bug:",rdb.add_project_bug("jira", "123456789", "This is a stupid JIRA summary")
+print "Add Attachment ", rdb.add_attachments("./TestReporter.py")
 
 rdb.commit()
