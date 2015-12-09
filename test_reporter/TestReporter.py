@@ -15,6 +15,15 @@ from my_ftp import *
 
 class TestReporter(My_SQL):
 
+	'''
+	Desc: Basic init funciton.
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def init(self):
 		super(TestReporter, self).init()
 		self.selected_project = None
@@ -48,10 +57,32 @@ class TestReporter(My_SQL):
 		self.bug_root_dict = {}
 		self.project_bug_dict = {}
 
+	'''
+	Desc: Constructor for this class
+
+		-= Params =-
+	   host 	- sql host
+	   usr 		- sql user name
+	   passwd 	- sql password
+	   db_name 	- database name
+
+
+		-= Returns =-
+		N/A
+	'''
 	def __init__(self, host, usr, passwd, db_name, log=None, commit_on_close=False, mask=None):
 		self.init()
 		super(TestReporter, self).__init__(host, usr, passwd, db_name, log, commit_on_close, mask)
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def connect(self):
 		super(TestReporter, self).connect()
 		self.refresh_projects_list()
@@ -59,6 +90,15 @@ class TestReporter(My_SQL):
 		self.refresh_target_list()
 		self.refresh_bug_root()
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def set_report_user_name(self, user_name):
 		if user_name is not None:
 			if len(user_name) > 1:
@@ -75,7 +115,13 @@ class TestReporter(My_SQL):
 			return False
 
 	'''
+	Desc:
 
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
 	'''
 	def _common_checks(self, project=False, user_name=False, exec_id=False, variant_id=False, connected=True):
 		frameinfo =  getframeinfo(stack()[1][0])
@@ -107,6 +153,15 @@ class TestReporter(My_SQL):
 
 		return True
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_projects_list(self):
 		if self._common_checks():
 			self.project_dict = {}
@@ -235,6 +290,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def select_project(self, project_name):
 		if self._common_checks():
 			if project_name in self.project_dict:
@@ -253,6 +317,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_arch_list(self):
 		if self._common_checks():
 			self.arch_dict={}
@@ -264,6 +337,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_arch(self, arch, html_style=None):
 		if self._common_checks():
 			if arch is not None:
@@ -298,6 +380,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_target_list(self):
 		if self._common_checks():
 			self.target_dict={}
@@ -309,6 +400,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_target(self, target_name, description=None, html_style=None):
 		if self._common_checks():
 			if target_name in self.target_dict:
@@ -364,6 +464,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_tags(self):
 		if self._common_checks(project=True):
 			self.tag_dict = {}
@@ -375,6 +484,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_tag(self, tag, comment=None, html_style=None):
 		if self._common_checks(project=True):
 			if tag is not None:
@@ -441,6 +559,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_crash_type(self):
 		if self._common_checks(project=True):
 			self.crash_type_dict = {}
@@ -452,7 +579,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
 
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_crash_type(self, crash_type, comment, html_style=None):
 		if self._common_checks(project=True):
 			if crash_type is not None:
@@ -515,6 +650,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def register_exec(self):
 		if self._common_checks(project=True, user_name=True):
 			value  = ["fk_project_id"]
@@ -531,6 +675,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def set_exec_id(self, exec_id):
 		if self._common_checks(project=True):
 			query = 'SELECT exec_id FROM exec WHERE fk_project_id=' + str(self.project_id) +  ' and exec_id=' + str(exec_id)
@@ -548,6 +701,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def register_src(self, source_type, url_path, unique_id, description=None):
 		allowed_source_types = ['build', 'cvs', 'svn', 'git', 'other', 'path']
 		if self._common_checks(project=True, exec_id=True):
@@ -619,6 +781,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_suite_names(self):
 		if self._common_checks(project=True, exec_id=True):
 			self.suite_dict = {}
@@ -630,6 +801,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_test_suite(self, suite_name, description=None, html_style=None):
 		if self._common_checks(project=True, exec_id=True):
 			if suite_name in self.suite_dict:
@@ -700,6 +880,15 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_variant(self, target, arch, variant):
 		if self._common_checks(project=True, exec_id=True, user_name=True):
 			if arch in self.arch_dict:
@@ -783,6 +972,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_attachments(self, full_attachment_src_path, attachment_type="general", mime_type="application/octet-stream", test_result_id=None, comment=None, omit_exec_id=False, omit_variant_id=False):
 		if self._common_checks(project=True):
 			known_compressed_extensions = [".zip", ".gz"]
@@ -814,13 +1012,13 @@ class TestReporter(My_SQL):
 					format.append("%s")
 					data.append(self.project_id)
 
-					dest_path = ""
+					dest_path = self.project_dict[self.selected_project]["attachment_path"]
+					relative_dest_path = self.selected_project.replace(" ", "_")
+
 
 					# Attempt to change to the project directory.
-					if ftp.chdir(self.project_dict[self.selected_project]["attachment_path"]) is not True:
+					if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
 						return -1
-					else:
-						dest_path = self.project_dict[self.selected_project]["attachment_path"]
 
 					# Is exec_id set:
 					if self.exec_id is not None:
@@ -831,9 +1029,9 @@ class TestReporter(My_SQL):
 							exec_id_dir = "%06d" % int(self.exec_id);
 
 							if ftp.mkdir(str(exec_id_dir), True):
-								dest_path = os.path.join(dest_path, exec_id_dir)
+								relative_dest_path = os.path.join(relative_dest_path, exec_id_dir)
 
-								if ftp.chdir(dest_path) is not True:
+								if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
 									return -1
 							else:
 								return -1
@@ -845,25 +1043,25 @@ class TestReporter(My_SQL):
 								data.append(self.variant_id)
 
 								if ftp.mkdir(str(self.variant_dict[self.variant_id]["target"]), True):
-									dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["target"]))
+									relative_dest_path = os.path.join(relative_dest_path, str(self.variant_dict[self.variant_id]["target"]))
 
-									if ftp.chdir(dest_path) is not True:
+									if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
 										return -1
 								else:
 									return -1
 
 								if ftp.mkdir(str(self.variant_dict[self.variant_id]["arch"]), True):
-									dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["arch"]))
+									relative_dest_path = os.path.join(relative_dest_path, str(self.variant_dict[self.variant_id]["arch"]))
 
-									if ftp.chdir(dest_path) is not True:
+									if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
 										return -1
 								else:
 									return -1
 
 								if ftp.mkdir(str(self.variant_dict[self.variant_id]["variant"]), True):
-									dest_path = os.path.join(dest_path, str(self.variant_dict[self.variant_id]["variant"]))
+									relative_dest_path = os.path.join(relative_dest_path, str(self.variant_dict[self.variant_id]["variant"]))
 
-									if ftp.chdir(dest_path) is not True:
+									if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
 										return -1
 								else:
 									return -1
@@ -875,8 +1073,8 @@ class TestReporter(My_SQL):
 					# We want to store only compressed files on the server
 					# so see if this file is already compressed.
 					if extension not in known_compressed_extensions:
-						# if not then we will compress it before we copy it
 
+						# If not then we will compress it before we copy it
 						new_file_name = "";
 						index = 0
 						output_path = ""
@@ -896,7 +1094,7 @@ class TestReporter(My_SQL):
 							self._error_macro(full_attachment_src_path + " Failed to find an acceptable name to generate a compressed file.")
 							return -1
 
-						dest_file_name = os.path.join(dest_path, file_name)
+						dest_file_name = os.path.join(relative_dest_path, file_name)
 
 						value.append("path")
 						format.append("%s")
@@ -909,7 +1107,7 @@ class TestReporter(My_SQL):
 						rows = self.cursor.fetchall()
 
 						if len(rows) > 0:
-							self.log.out(dest_file_name + " already exists in the database.", WARNING, v=0)
+							self.log.out("./" + dest_file_name + " already exists in the database.", WARNING, v=0)
 							return rows[0][0]
 
 						value.append("attach_type")
@@ -938,11 +1136,12 @@ class TestReporter(My_SQL):
 							format.append("%s")
 							data.append(comment)
 
+						# Compressed the file
 						with open(full_attachment_src_path, "rb") as fp_in:
 							with gzip.open(output_path, "wb") as fp_output:
 								shutil.copyfileobj(fp_in, fp_output)
 
-						if ftp.binary_file_transfer_2_file(output_path, dest_file_name):
+						if ftp.binary_file_transfer_2_file(output_path, os.path.join(dest_path, dest_file_name)):
 							query = "INSERT INTO attachment (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
 							self.query(query, data)
 
@@ -952,7 +1151,7 @@ class TestReporter(My_SQL):
 						else:
 							return -1
 					else:
-						dest_file_name = os.path.join(dest_path, file_name)
+						dest_file_name = os.path.join(relative_dest_path, file_name)
 
 						# Look to see if we already have this file int he database
 						query = "SELECT attachment_id FROM attachment WHERE " + "=%s and ".join(value) + "=%s"
@@ -961,7 +1160,7 @@ class TestReporter(My_SQL):
 						rows = self.cursor.fetchall()
 
 						if len(rows) > 0:
-							self.log.out(dest_file_name + " already exists in the database.", WARNING, v=0)
+							self.log.out("./" + dest_file_name + " already exists in the database.", WARNING, v=0)
 							return rows[0][0]
 
 						value.append("attach_type")
@@ -989,8 +1188,7 @@ class TestReporter(My_SQL):
 						format.append("%s")
 						data.append("src_compressed")
 
-
-						if ftp.binary_file_transfer_2_file(full_attachment_src_path, dest_file_name):
+						if ftp.binary_file_transfer_2_file(full_attachment_src_path, os.path.join(dest_path, dest_file_name)):
 							query = "INSERT INTO attachment (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
 							self.query(query, data)
 
@@ -1003,6 +1201,15 @@ class TestReporter(My_SQL):
 				self._error_macro(full_attachment_src_path + " was not found or is not accessible.")
 				return -1
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_test_root(self):
 		if self._common_checks():
 			self.suite_dict = {}
@@ -1020,6 +1227,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_test_root(self, exec_path, name, params=None, src_path=None):
 		if self._common_checks(project=True):
 			test_key = os.path.join(exec_path, name)
@@ -1099,6 +1315,15 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_test_revision(self):
 		if self._common_checks():
 			self.test_revision_dict = {}
@@ -1111,6 +1336,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_test_revision(self, exec_path, name, params, unique_rev_id="base", arch="all", src_path=None, description=None, html_style=None):
 		test_root_id = self.add_test_root(exec_path, name, params, src_path)
 
@@ -1118,7 +1352,7 @@ class TestReporter(My_SQL):
 			test_key = str(test_root_id) + "_" + str(unique_rev_id)
 
 			if test_key in self.test_revision_dict:
-			   	self.log.out('Test Revision (' + os.path.join(exec_path, name) + " " + str(params) + " rev_ud: " + str(unique_rev_id) + ") already in the database.", WARNING, v=0)
+				self.log.out('Test Revision (' + os.path.join(exec_path, name) + " " + str(params) + " rev_ud: " + str(unique_rev_id) + ") already in the database.", WARNING, v=0)
 				self.test_revision_id = self.test_revision_dict[test_key]["id"]
 				return self.test_revision_id
 			else:
@@ -1208,6 +1442,15 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_test_dict(self):
 		if self._common_checks():
 			self.test_dict = {}
@@ -1220,6 +1463,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_test(self, test_suite_id=None, test_rev_id=None):
 		if self._common_checks(project=True, exec_id=True):
 
@@ -1267,6 +1519,15 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_test_result(self, result, start_line=-1, end_line=-1, exec_time=-1, other_time=-1, crash_counter=0, custom_jason=None, pre_check=True):
 		if self._common_checks(project=True, exec_id=True, variant_id=True):
 			if self.test_id is not None:
@@ -1345,6 +1606,15 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_bug_root(self):
 		if self._common_checks():
 			self.bug_root_dict = {}
@@ -1358,6 +1628,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_bug_root(self, record_type, reference_id, summary=None, html_style=None):
 		if self._common_checks():
 			valid_report_type = ['pr', 'jira']
@@ -1405,7 +1684,15 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	'''
+	Desc:
 
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_project_bugs(self):
 		if self._common_checks(project=True):
 			self.project_bug_dict = {}
@@ -1417,6 +1704,15 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_project_bug(self, record_type, reference_id, summary=None, entered="test_reference"):
 		if self._common_checks(project=True):
 			valid_entered_values = ['test_reference', 'website', 'other']
@@ -1459,6 +1755,15 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def add_crash(self, test_result_id, crash_type, line_number, known_crash_id=None):
 		if crash_type in self.crash_type_dict:
 			value = []
@@ -1576,7 +1881,7 @@ rdb.add_target("sandybridge-001")
 rdb.add_target("smpmpxpii")
 rdb.add_target("tolapai-6109")
 
-rdb.register_project("Mainline", "Mainline/Trunk Regression Thread", user.ftp_host, user.ftp_usr_name, user.ftp_password, "/media/BackUp/regression_data/logs/mainline" , "Red")
+rdb.register_project("Mainline", "Mainline/Trunk Regression Thread", user.ftp_host, user.ftp_usr_name, user.ftp_password, "/media/BackUp/regression_data/logs/" , "Red")
 rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
 rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
 rdb.add_tag("XPASS", "The test completed with a XFAIL status", "YELLOW")
@@ -1589,7 +1894,7 @@ rdb.add_crash_type("SIGBUS", "Crash")
 rdb.add_crash_type("KDUMP", "Crash")
 rdb.add_crash_type("SHUTDOWN", "Crash")
 
-rdb.register_project("dev_64b", "64 Bit initial development project", user.ftp_host, user.ftp_usr_name, user.ftp_password, "/media/BackUp/regression_data/logs/dev_64b", "Yellow")
+rdb.register_project("dev_64b", "64 Bit initial development project", user.ftp_host, user.ftp_usr_name, user.ftp_password, "/media/BackUp/regression_data/logs/", "Yellow")
 rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
 rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
 rdb.add_tag("XPASS", "The test completed with a XFAIL status", "YELLOW")
@@ -1602,7 +1907,7 @@ rdb.add_crash_type("SIGBUS", "Crash")
 rdb.add_crash_type("KDUMP", "Crash")
 rdb.add_crash_type("SHUTDOWN", "Crash")
 
-rdb.register_project("Qnx_sdp_7", "Qnx 7.0 SDP Branch", user.ftp_host, user.ftp_usr_name, user.ftp_password, "/media/BackUp/regression_data/logs/qnx7")
+rdb.register_project("Qnx_sdp_7", "Qnx 7.0 SDP Branch", user.ftp_host, user.ftp_usr_name, user.ftp_password, "/media/BackUp/regression_data/logs/")
 rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
 rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
 rdb.add_tag("XPASS", "The test completed with a XFAIL status", "YELLOW")
@@ -1628,7 +1933,6 @@ rdb.register_src("svn", "http://svn.ott.qnx.com/qa/mainline/testware", "123457")
 rdb.add_variant("imb-151-6342", "x86", "o.smp")
 
 suite_id = rdb.add_test_suite("testware_sanitytest")
-
 
 test_rev_id = rdb.add_test_revision("/test/cool/", "ian", "is superman")
 
