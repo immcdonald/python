@@ -1755,6 +1755,19 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+
+	def add_exec_bug(self, result_id, line_number, record_type, reference_id, summary=None):
+		if self._common_checks(project=True, exec_id=True):
+			project_bug_id = self.add_project_bug(record_type, reference_id, summary)
+			if project_bug_id > 0:
+				pass
+
+			else:
+				return project_bug_id;
+		else:
+			return -1
+
+
 	'''
 	Desc:
 
@@ -1957,5 +1970,6 @@ print "Add Crash:",  rdb.add_crash(result_id, 'SIGSERV', 100)
 print "Add bug Root:", rdb.add_bug_root("jira", "123456789", "This is a stupid JIRA summary")
 print "Add project bug:",rdb.add_project_bug("jira", "123456789", "This is a stupid JIRA summary")
 print "Add Attachment ", rdb.add_attachments("./TestReporter.py")
+
 
 rdb.commit()
