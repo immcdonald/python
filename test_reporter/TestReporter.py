@@ -84,11 +84,20 @@ class TestReporter(My_SQL):
 		N/A
 	'''
 	def connect(self):
-		super(TestReporter, self).connect()
-		self.refresh_projects_list()
-		self.refresh_arch_list()
-		self.refresh_target_list()
-		self.refresh_bug_root()
+		rc = super(TestReporter, self).connect()
+		if rc:
+			rc = self.refresh_projects_list()
+
+		if rc:
+			rc = self.refresh_arch_list()
+
+		if rc:
+			rc = self.refresh_target_list()
+
+		if rc:
+			self.refresh_bug_root()
+
+		return rc
 
 	'''
 	Desc:
@@ -184,9 +193,7 @@ class TestReporter(My_SQL):
 			if project_name is not None:
 				if project_name in self.project_dict:
 					self.log.out(project_name + " already registered in the database", WARNING, v=2)
-					self.select_project(project_name)
-					return True
-
+					return self.select_project(project_name)
 				else:
 					value = []
 					format = []
@@ -194,11 +201,11 @@ class TestReporter(My_SQL):
 
 					if len(project_name) < 3:
 						self._error_macro("Project name is to short")
-						return False
+						return -1
 
 					if len(project_name) > 45:
 						self._error_macro("Project name is to long")
-						return False
+						return -1
 
 					value.append("name")
 					format.append("%s")
@@ -206,15 +213,15 @@ class TestReporter(My_SQL):
 
 					if description is None:
 						self._error_macro("Project description can not be None")
-						return False
+						return -1
 
 					if len(description) < 10:
 						self._error_macro("Project description is to short")
-						return False
+						return -1
 
 					if len(description) > 65535:
 						self._error_macro("Project description is to long")
-						return False
+						return -1
 
 					value.append("description")
 					format.append("%s")
@@ -222,11 +229,11 @@ class TestReporter(My_SQL):
 
 					if len(ftp_host) < 10:
 						self._error_macro("FTP host is to short")
-						return False
+						return -1
 
 					if len(ftp_host) > 65535:
 						self._error_macro("ftp host is to long")
-						return False
+						return -1
 
 					value.append("ftp_host")
 					format.append("%s")
@@ -234,11 +241,11 @@ class TestReporter(My_SQL):
 
 					if len(ftp_user_name) < 1:
 						self._error_macro("FTP user name is to short")
-						return False
+						return -1
 
 					if len(ftp_user_name) > 20:
 						self._error_macro("ftp user name is to long")
-						return False
+						return -1
 
 					value.append("ftp_user_name")
 					format.append("%s")
@@ -246,11 +253,11 @@ class TestReporter(My_SQL):
 
 					if len(ftp_password) < 1:
 						self._error_macro("FTP password is to short")
-						return False
+						return -1
 
 					if len(ftp_password) > 64:
 						self._error_macro("ftp password is to long")
-						return False
+						return -1
 
 					value.append("ftp_password")
 					format.append("%s")
@@ -258,11 +265,11 @@ class TestReporter(My_SQL):
 
 					if len(attachment_path) < 1:
 						self._error_macro("FTP host is to short")
-						return False
+						return -1
 
 					if len(attachment_path) > 65535:
 						self._error_macro("ftp host is to long")
-						return False
+						return -1
 
 					value.append("attachment_path")
 					format.append("%s")
@@ -279,16 +286,16 @@ class TestReporter(My_SQL):
 
 					self.refresh_projects_list()
 
-					self.select_project(project_name)
+					project_id = self.select_project(project_name)
 
 					self.log.out("(" + project_name + ") registered as project name.", v=1)
-					return True
+					return project_id
 
 			else:
 				self._error_macro("Project name cannot be None")
-				return False
+				return -1
 		else:
-			return False
+			return -1
 
 	'''
 	Desc:
@@ -310,11 +317,12 @@ class TestReporter(My_SQL):
 				self.refresh_test_revision()
 				self.refresh_project_bugs()
 				self.log.out("(" + project_name + ") is now the active project")
+				return self.project_id
 			else:
 				self._error_macro("(" + project_name + ") does not appear in the database. Try reconnecting or calling refresh_projects_list")
-				return False
+				return -1
 		else:
-			return False
+			return -1
 
 	'''
 	Desc:
@@ -1856,158 +1864,3 @@ class TestReporter(My_SQL):
 			self._error_macro(crash_type + " is not a registed crash type. Please call add_crash_type function first or use an already added crash type.")
 			return -1
 
-
-
-rdb = TestReporter("serenity.bts.rim.net", user.sql_name, user.sql_password, db_name="result_db");
-
-
-rdb.connect()
-rdb.set_report_user_name("iamcdonald")
-
-rdb.select_db("result_db")
-
-rdb.add_arch("x86","Red")
-rdb.add_arch("sh", "Green")
-rdb.add_arch("mips", "Black")
-rdb.add_arch("ppc", "Blue")
-rdb.add_arch("arm", "Yellow")
-rdb.add_arch("x86_64", "Purple")
-rdb.add_arch("aarch64", "Cyan")
-
-rdb.add_target("adsom-7222")
-rdb.add_target("advantech-7226")
-rdb.add_target("aimb272-12185")
-rdb.add_target("amd64-dual-2")
-rdb.add_target("amdk6ii-1")
-rdb.add_target("amdk6iii-1")
-rdb.add_target("amdk7-1")
-rdb.add_target("atom-6354")
-rdb.add_target("beagleblack")
-rdb.add_target("beaglexm-1")
-rdb.add_target("beaglexm-2")
-rdb.add_target("bigbertha-8455")
-rdb.add_target("bigintel-7990")
-rdb.add_target("bigmac")
-rdb.add_target("ct11eb")
-rdb.add_target("ds81-shuttle-001")
-rdb.add_target("hasswell-bc5ff4e8872e")
-rdb.add_target("imb-151")
-rdb.add_target("imb-151-6336")
-rdb.add_target("imb-151-6342")
-rdb.add_target("imb-151-6352")
-rdb.add_target("imx600044-20015160")
-rdb.add_target("imx6q-sabresmart-00049f02e082")
-rdb.add_target("imx6q-sabresmart-6115")
-rdb.add_target("ivybridge-2554")
-rdb.add_target("jasper-8092")
-rdb.add_target("kontron-flex-7229")
-rdb.add_target("kontron-flex-7230")
-rdb.add_target("ktron-uepc-7234")
-rdb.add_target("mvdove-7213")
-rdb.add_target("mvdove-7791")
-rdb.add_target("mx6q-sabrelite-12252")
-rdb.add_target("nvidia-7903")
-rdb.add_target("nvidia-erista-8091")
-rdb.add_target("nvidia-erista-8093")
-rdb.add_target("nvidia-loki-6769")
-rdb.add_target("nvidia-loki-6790")
-rdb.add_target("nvidia-loki-6961")
-rdb.add_target("omap3530-6363")
-rdb.add_target("omap3530-7098")
-rdb.add_target("omap3530-7099")
-rdb.add_target("omap3530-7567")
-rdb.add_target("omap4430-9095")
-rdb.add_target("omap4430-9221")
-rdb.add_target("omap5432-es2-2206")
-rdb.add_target("omap5432-es2-2716")
-rdb.add_target("panda-12659")
-rdb.add_target("panda-12660")
-rdb.add_target("panda-12676")
-rdb.add_target("panda-12677")
-rdb.add_target("pcm9562-8166")
-rdb.add_target("qnet02")
-rdb.add_target("qnet04")
-rdb.add_target("qnet05")
-rdb.add_target("sandybridge-001")
-rdb.add_target("smpmpxpii")
-rdb.add_target("tolapai-6109")
-
-rdb.register_project("Mainline", "Mainline/Trunk Regression Thread", user.ftp_host, user.ftp_usr_name, user.ftp_password, "/media/BackUp/regression_data/logs/" , "Red")
-rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
-rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
-rdb.add_tag("XPASS", "The test completed with a XFAIL status", "YELLOW")
-rdb.add_tag("XFAIL", "The test completed with a XPASS status", "ORANGE")
-rdb.add_tag("UNRESOLVED", "The test completed with a UNRESOLVED status", "PURPLE")
-rdb.add_tag("UNTESTED", "The test completed with a UNTESTED status", "BLUE")
-rdb.add_crash_type("SIGSERV", "Crash")
-rdb.add_crash_type("SIGILL", "Crash")
-rdb.add_crash_type("SIGBUS", "Crash")
-rdb.add_crash_type("KDUMP", "Crash")
-rdb.add_crash_type("SHUTDOWN", "Crash")
-
-rdb.register_project("dev_64b", "64 Bit initial development project", user.ftp_host, user.ftp_usr_name, user.ftp_password, "/media/BackUp/regression_data/logs/", "Yellow")
-rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
-rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
-rdb.add_tag("XPASS", "The test completed with a XFAIL status", "YELLOW")
-rdb.add_tag("XFAIL", "The test completed with a XPASS status", "ORANGE")
-rdb.add_tag("UNRESOLVED", "The test completed with a UNRESOLVED status", "PURPLE")
-rdb.add_tag("UNTESTED", "The test completed with a UNTESTED status", "BLUE")
-rdb.add_crash_type("SIGSERV", "Crash")
-rdb.add_crash_type("SIGILL", "Crash")
-rdb.add_crash_type("SIGBUS", "Crash")
-rdb.add_crash_type("KDUMP", "Crash")
-rdb.add_crash_type("SHUTDOWN", "Crash")
-
-rdb.register_project("Qnx_sdp_7", "Qnx 7.0 SDP Branch", user.ftp_host, user.ftp_usr_name, user.ftp_password, "/media/BackUp/regression_data/logs/")
-rdb.add_tag("PASS", "The test completed with a PASS status", "GREEN")
-rdb.add_tag("FAIL", "The test completed with a FAILED status", "RED")
-rdb.add_tag("XPASS", "The test completed with a XFAIL status", "YELLOW")
-rdb.add_tag("XFAIL", "The test completed with a XPASS status", "ORANGE")
-rdb.add_tag("UNRESOLVED", "The test completed with a UNRESOLVED status", "PURPLE")
-rdb.add_tag("UNTESTED", "The test completed with a UNTESTED status", "BLUE")
-rdb.add_crash_type("SIGSERV", "Crash")
-rdb.add_crash_type("SIGILL", "Crash")
-rdb.add_crash_type("SIGBUS", "Crash")
-rdb.add_crash_type("KDUMP", "Crash")
-rdb.add_crash_type("SHUTDOWN", "Crash")
-rdb.select_project("Mainline");
-
-exec_id=1
-
-if rdb.set_exec_id(exec_id) is False:
-	rdb.register_exec()
-
-rdb.commit()
-
-
-rdb.register_src("svn", "http://svn.ott.qnx.com/qa/mainline/testware", "123457")
-rdb.add_variant("imb-151-6342", "x86", "o.smp")
-
-suite_id = rdb.add_test_suite("testware_sanitytest")
-
-test_rev_id = rdb.add_test_revision("/test/cool/", "ian", "is superman")
-
-test_id =  rdb.add_test()
-
-test_rev_id = rdb.add_test_revision("/test/cool/", "ian", "is superman")
-
-testud = rdb.add_test()
-
-test_rev_id = rdb.add_test_revision("/test/cool/", "ian", "is the green latern")
-
-test_id = rdb.add_test()
-
-test_rev_id = rdb.add_test_revision("/test/cool/", "ian", "is bob", arch="x86, x86_64")
-
-test_id = rdb.add_test()
-
-result_id = rdb.add_test_result("PASS")
-attachment_id =  rdb.add_attachments("./TestReporter.py")
-
-print "Add Crash:",  rdb.add_crash(result_id, 'SIGSERV', 100)
-print "Add bug Root:", rdb.add_bug_root("jira", "123456789", "This is a stupid JIRA summary")
-print "Add project bug:",rdb.add_project_bug("jira", "123456789", "This is a stupid JIRA summary")
-print rdb.add_exec_bug(result_id, "jira", "123456789", "This is a stupid JIRA summary", attachment_id, 100)
-print rdb.add_exec_bug(result_id, "jira", "454567100", "Another stupid JIRA summary", attachment_id, 100)
-
-rdb.commit()
