@@ -309,7 +309,6 @@ class TestReporter(My_SQL):
 				self.refresh_test_root()
 				self.refresh_test_revision()
 				self.refresh_project_bugs()
-
 				self.log.out("(" + project_name + ") is now the active project")
 			else:
 				self._error_macro("(" + project_name + ") does not appear in the database. Try reconnecting or calling refresh_projects_list")
@@ -1699,9 +1698,11 @@ class TestReporter(My_SQL):
 			query = "SELECT bug_id, fk_bug_root_id from project_bug WHERE fk_project_id=" + str(self.project_id);
 			self.query(query)
 			for row in self.cursor:
-				self.project_bug_dict[str(row[1])] = {"id":row[0]}
+				self.project_bug_dict[row[1]] = {"id":row[0]}
 			return True
 		else:
+
+
 			return False
 
 	'''
@@ -1721,10 +1722,12 @@ class TestReporter(My_SQL):
 				bug_root_id = self.add_bug_root(record_type,reference_id, summary)
 
 				if bug_root_id > 0:
-					if str(bug_root_id) in self.project_bug_dict:
-						self.project_bug_id = self.project_bug_dict[str(bug_root_id)]["id"];
+					if bug_root_id in self.project_bug_dict:
+						self.project_bug_id = self.project_bug_dict[bug_root_id]["id"];
 						return self.project_bug_id
 					else:
+						print "Project Bug: ", record_type, reference_id, "Adding to the database!!"
+
 						value = []
 						format = []
 						data = []
@@ -1756,12 +1759,47 @@ class TestReporter(My_SQL):
 			return -1
 
 
-	def add_exec_bug(self, result_id, line_number, record_type, reference_id, summary=None):
+	def add_exec_bug(self, result_id, record_type, reference_id, summary=None, attachment_id=None, line_number=None, pre_check=True):
 		if self._common_checks(project=True, exec_id=True):
 			project_bug_id = self.add_project_bug(record_type, reference_id, summary)
 			if project_bug_id > 0:
-				pass
 
+				value = []
+				format = []
+				data = []
+
+				value.append("fk_project_bug_id")
+				format.append("%s")
+				data.append(project_bug_id)
+
+				value.append("fk_result_id")
+				format.append("%s")
+				data.append(result_id)
+
+				if attachment_id is not None:
+					value.append("fk_attachment_id")
+					format.append("%s")
+					data.append(attachment_id)
+
+				if line_number is not None:
+					if attachment_id is not None:
+						value.append("line_number")
+						format.append("%s")
+						data.append(line_number)
+
+
+				if pre_check:
+					query = "SELECT bug_exec_id FROM bug_exec WHERE " + "=%s and ".join(value) + "=%s"
+					self.query(query, data)
+					rows = self.cursor.fetchall()
+					if len(rows) > 0:
+						self.log.out('bug exec result is already in the database.', WARNING, v=0)
+						return rows[0][0]
+
+				query = "INSERT INTO bug_exec (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
+				self.query(query, data)
+
+				return self.cursor.lastrowid;
 			else:
 				return project_bug_id;
 		else:
@@ -1964,12 +2002,12 @@ test_rev_id = rdb.add_test_revision("/test/cool/", "ian", "is bob", arch="x86, x
 test_id = rdb.add_test()
 
 result_id = rdb.add_test_result("PASS")
+attachment_id =  rdb.add_attachments("./TestReporter.py")
 
 print "Add Crash:",  rdb.add_crash(result_id, 'SIGSERV', 100)
-
 print "Add bug Root:", rdb.add_bug_root("jira", "123456789", "This is a stupid JIRA summary")
 print "Add project bug:",rdb.add_project_bug("jira", "123456789", "This is a stupid JIRA summary")
-print "Add Attachment ", rdb.add_attachments("./TestReporter.py")
-
+print rdb.add_exec_bug(result_id, "jira", "123456789", "This is a stupid JIRA summary", attachment_id, 100)
+print rdb.add_exec_bug(result_id, "jira", "454567100", "Another stupid JIRA summary", attachment_id, 100)
 
 rdb.commit()
