@@ -57,7 +57,7 @@ class Convert(My_SQL):
 
 
 	def process_variant_only_level_attachments(self, variant_id, target, arch, variant):
-		base_path = "/media/BackUp/regression_data/tree"
+		base_path = "/media/BackUp/regression_data/gz"
 
 		query = 'SELECT type, file_name, file_comment, mime_type, exec_id from attachment WHERE  test_result_id=0 and  variant_id=' + str(variant_id)
 		self.query(query)
@@ -75,10 +75,14 @@ class Convert(My_SQL):
 			file_path = os.path.join(file_path, arch)
 			file_path = os.path.join(file_path, variant)
 			file_path = os.path.join(file_path, varinat_attachment_row[1])
+
+			if not os.path.exists(file_path):
+				file_path = file_path + ".gz"
+
 			if os.path.exists(file_path):
 				self.report.add_attachments(file_path, varinat_attachment_row[0], varinat_attachment_row[0], comment=varinat_attachment_row[1])
 			else:
-				raise Exception(file_path + "does not exist");
+				raise Exception(file_path + " does not exist");
 
 	def process_variants(self, exec_id):
 		query = 'SELECT id, target, arch, variant, hide, abort_flag, time from variant WHERE exec_id=' + str(exec_id)

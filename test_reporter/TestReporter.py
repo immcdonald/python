@@ -1020,7 +1020,7 @@ class TestReporter(My_SQL):
 		-= Returns =-
 		N/A
 	'''
-	def add_attachments(self, full_attachment_src_path, attachment_type="general", mime_type="application/octet-stream", test_result_id=None, comment=None, omit_exec_id=False, omit_variant_id=False):
+	def add_attachments(self, full_attachment_src_path, attachment_type="general", mime_type="application/octet-stream", test_result_id=None, comment=None, omit_exec_id=False, omit_variant_id=False, force_post_compress_tag=False):
 		if self._common_checks(project=True):
 			known_compressed_extensions = [".zip", ".gz"]
 			valid_attachment_types = ['primary', 'general', 'crash', 'symbol', 'profile', 'json', 'history', 'pre_json', 'post_json']
@@ -1161,7 +1161,6 @@ class TestReporter(My_SQL):
 						format.append("%s")
 						data.append("post_compressed_gz")
 
-
 						if comment is not None:
 							if len(comment) < 3:
 								self._error_macro("comment is to short")
@@ -1222,10 +1221,13 @@ class TestReporter(My_SQL):
 							format.append("%s")
 							data.append(comment)
 
-
 						value.append("compress_mode")
 						format.append("%s")
-						data.append("src_compressed")
+
+						if force_post_compress_tag:
+							data.append("post_compressed_gz")
+						else:
+							data.append("src_compressed")
 
 						if ftp.binary_file_transfer_2_file(full_attachment_src_path, os.path.join(dest_path, dest_file_name)):
 							query = "INSERT INTO attachment (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
