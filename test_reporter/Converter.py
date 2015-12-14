@@ -49,7 +49,7 @@ class Convert(My_SQL):
 
 		for result_row in result_rows:
 			suite_id = self.report.add_test_suite(result_row[6])
-			test_rev_id = self.report.add_test_revision(result_row[6], result_row[9], result_row[10])
+			test_rev_id = self.report.add_test_revision(result_row[8], result_row[9], result_row[10])
 			test_id = self.report.add_test(suite_id, test_rev_id)
 
 
@@ -75,9 +75,7 @@ class Convert(My_SQL):
 
 			# update test results for this variant just after it was added.
 			self.process_results(variant_row[0])
-
-
-
+			self.report.commit()
 
 	def process_on_exec(self):
 		query = 'SELECT * from exec_tracker'

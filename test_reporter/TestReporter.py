@@ -820,7 +820,7 @@ class TestReporter(My_SQL):
 	def add_test_suite(self, suite_name, description=None, html_style=None):
 		if self._common_checks(project=True, exec_id=True):
 			if suite_name in self.suite_dict:
-				self.log.out('Suite name (' + suite_name + ") already in the database.", WARNING, v=0)
+				self.log.out('Suite name (' + suite_name + ") already in the database.", WARNING, v=1)
 				self.suite_id =  self.suite_dict[suite_name]["id"];
 				return self.suite_id
 			else:
@@ -1236,7 +1236,7 @@ class TestReporter(My_SQL):
 	'''
 	def refresh_test_root(self):
 		if self._common_checks():
-			self.suite_dict = {}
+			self.test_root_dict = {}
 			query = "SELECT test_root_id, exec_path, name, params from test_root WHERE fk_project_id=" + str(self.project_id) + " ORDER BY name"
 			self.query(query)
 			for row in self.cursor:
@@ -1376,7 +1376,7 @@ class TestReporter(My_SQL):
 			test_key = str(test_root_id) + "_" + str(unique_rev_id)
 
 			if test_key in self.test_revision_dict:
-				self.log.out('Test Revision (' + os.path.join(exec_path, name) + " " + str(params) + " rev_ud: " + str(unique_rev_id) + ") already in the database.", WARNING, v=0)
+				self.log.out('Test Revision (' + os.path.join(exec_path, name) + " " + str(params) + " rev_ud: " + str(unique_rev_id) + ") already in the database.", WARNING, v=1)
 				self.test_revision_id = self.test_revision_dict[test_key]["id"]
 				return self.test_revision_id
 			else:
@@ -1515,7 +1515,7 @@ class TestReporter(My_SQL):
 
 			test_key = str(test_suite_id) + "_" + str(test_rev_id)
 			if test_key in self.test_dict:
-				self.log.out('Test already in the database.', WARNING, v=0)
+				self.log.out('Test already in the database.', WARNING, v=1)
 				self.test_id = self.test_dict[test_key]["id"]
 				return self.test_id
 			else:
