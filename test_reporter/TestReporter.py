@@ -333,6 +333,21 @@ class TestReporter(My_SQL):
 		-= Returns =-
 		N/A
 	'''
+	def get_project(self):
+		if self._common_checks():
+			return self.selected_project
+		else:
+			return None
+
+	'''
+	Desc:
+
+		-= Params =-
+		N/A
+
+		-= Returns =-
+		N/A
+	'''
 	def refresh_arch_list(self):
 		if self._common_checks():
 			self.arch_dict={}

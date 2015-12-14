@@ -55,11 +55,35 @@ class Convert(My_SQL):
 
 			self.report.add_test_result(result_row[7].upper(), result_row[1], result_row[2], result_row[4], result_row[3], result_row[5])
 
+
+	def process_variant_only_level_attachments(self, variant_id, target, arch, variant):
+		base_path = "/media/BackUp/regression_data/tree"
+
+		query = 'SELECT type, file_name, file_comment, mime_type, exec_id from attachment WHERE  test_result_id=0 and  variant_id=' + str(variant_id)
+		self.query(query)
+		variant_attachment_rows = self.cursor.fetchall()
+
+		project = self.report.get_project()
+
+		if project is None:
+			raise Exception("Project name was returned as NONE that should not happen.")
+
+		for varinat_attachment_row in variant_attachment_rows:
+			file_path = os.path.join(base_path, project)
+			file_path = os.path.join(file_path, str(varinat_attachment_row[4]))
+			file_path = os.path.join(file_path, target)
+			file_path = os.path.join(file_path, arch)
+			file_path = os.path.join(file_path, variant)
+			file_path = os.path.join(file_path, varinat_attachment_row[1])
+			if os.path.exists(file_path):
+				self.report.add_attachments(file_path, varinat_attachment_row[0], varinat_attachment_row[0], comment=varinat_attachment_row[1])
+			else:
+				raise Exception(file_path + "does not exist");
+
 	def process_variants(self, exec_id):
 		query = 'SELECT id, target, arch, variant, hide, abort_flag, time from variant WHERE exec_id=' + str(exec_id)
 		self.query(query)
 		variant_rows = self.cursor.fetchall()
-
 
 		for variant_row in variant_rows:
 			varinat = variant_row[3]
@@ -72,6 +96,9 @@ class Convert(My_SQL):
 						varinat = varinat[:pos] + ".uni" + varinat[pos:]
 
 			self.report.add_variant(variant_row[1], variant_row[2], varinat, variant_row[6],  variant_row[5], variant_row[4])
+
+			# process variant only level attachments
+			self.process_variant_only_level_attachments(variant_row[0], variant_row[1], variant_row[2], variant_row[3])
 
 			# update test results for this variant just after it was added.
 			self.process_results(variant_row[0])
