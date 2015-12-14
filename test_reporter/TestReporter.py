@@ -896,7 +896,7 @@ class TestReporter(My_SQL):
 		-= Returns =-
 		N/A
 	'''
-	def add_variant(self, target, arch, variant):
+	def add_variant(self, target, arch, variant, time=None, abort_flag=None, hide=None):
 		if self._common_checks(project=True, exec_id=True, user_name=True):
 			if arch in self.arch_dict:
 				if target in self.target_dict:
@@ -955,6 +955,22 @@ class TestReporter(My_SQL):
 							self.variant_dict[self.variant_id] = {"target": target, "arch": arch, "variant": variant}
 
 						else:
+							if time is not None:
+								value.append("time")
+								format.append("%s")
+								data.append(time)
+
+							if hide is not None:
+								value.append("hide")
+								format.append("%s")
+								data.append(hide)
+
+							if abort_flag is not None:
+								value.append("abort_flag")
+								format.append("%s")
+								data.append(abort_flag)
+
+
 							query = "INSERT INTO variant (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
 							self.query(query, data)
 
@@ -978,6 +994,7 @@ class TestReporter(My_SQL):
 				return False
 		else:
 			return False
+
 
 	'''
 	Desc:
@@ -1496,7 +1513,7 @@ class TestReporter(My_SQL):
 					self._error_macro("test revision id was not previously set")
 					return -1
 
-			test_key = str(suite_id) + "_" + str(test_rev_id)
+			test_key = str(test_suite_id) + "_" + str(test_rev_id)
 			if test_key in self.test_dict:
 				self.log.out('Test already in the database.', WARNING, v=0)
 				self.test_id = self.test_dict[test_key]["id"]
@@ -1535,7 +1552,7 @@ class TestReporter(My_SQL):
 		-= Returns =-
 		N/A
 	'''
-	def add_test_result(self, result, start_line=-1, end_line=-1, exec_time=-1, other_time=-1, crash_counter=0, custom_jason=None, pre_check=True):
+	def add_test_result(self, result, start_line=-1, end_line=-1, exec_time=-1, other_time=-1, crash_counter=0, custom_json=None, pre_check=True):
 		if self._common_checks(project=True, exec_id=True, variant_id=True):
 			if self.test_id is not None:
 				tag_id = None
@@ -1597,7 +1614,7 @@ class TestReporter(My_SQL):
 						self.log.out('Test result is already in the database.', WARNING, v=0)
 						return rows[0][0]
 
-				if custom_jason:
+				if custom_json:
 					value.append("crash_counter")
 					format.append("%s")
 					data.append(crash_counter)

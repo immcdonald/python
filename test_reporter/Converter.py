@@ -42,14 +42,41 @@ class Convert(My_SQL):
 		for sources_row in sources_rows:
 			self.report.register_src(sources_row[2], sources_row[4], sources_row[5], description=sources_row[3])
 
+	def process_results(self, variant_id):
+		query = 'SELECT id, start_line, end_line, download_time, exec_time, crash_counter, suite_name, result, test_path, test_name, test_params FROM master WHERE variant_id=' + str(variant_id)
+		self.query(query)
+		result_rows = self.cursor.fetchall()
+
+		for result_row in result_rows:
+			suite_id = self.report.add_test_suite(result_row[6])
+			test_rev_id = self.report.add_test_revision(result_row[6], result_row[9], result_row[10])
+			test_id = self.report.add_test(suite_id, test_rev_id)
+
+
+			self.report.add_test_result(result_row[7].upper(), result_row[1], result_row[2], result_row[4], result_row[3], result_row[5])
 
 	def process_variants(self, exec_id):
-		query = 'SELECT target, arch, variant, hide, abort_flag, time from variant WHERE exec_id=' + str(exec_id)
+		query = 'SELECT id, target, arch, variant, hide, abort_flag, time from variant WHERE exec_id=' + str(exec_id)
 		self.query(query)
 		variant_rows = self.cursor.fetchall()
 
+
 		for variant_row in variant_rows:
-			print pformat(variant_row);
+			varinat = variant_row[3]
+			if varinat.find("smp") == -1:
+				if varinat.find("uni") == -1:
+					pos = varinat.find(".")
+					if pos == -1:
+						varinat = varinat + ".uni"
+					else:
+						varinat = varinat[:pos] + ".uni" + varinat[pos:]
+
+			self.report.add_variant(variant_row[1], variant_row[2], varinat, variant_row[6],  variant_row[5], variant_row[4])
+
+			# update test results for this variant just after it was added.
+			self.process_results(variant_row[0])
+
+
 
 
 	def process_on_exec(self):
@@ -64,6 +91,12 @@ class Convert(My_SQL):
 			#Set the user name
 			self.report.set_report_user_name(exec_row[2])
 
+			print "=" * 20, exec_row[0], type(exec_row[0]), "=" * 20
+
+			if exec_row[0] == 56:
+				# We missed an exec (55) in the old database so add a stub for it here so 56 aligns correctly.
+				self.report.register_exec()
+
 			#Register the exec in the new DB
 			if self.report.set_exec_id(exec_row[0]) is False:
 				self.report.register_exec()
@@ -73,14 +106,7 @@ class Convert(My_SQL):
 			self.process_sources(exec_row[0])
 
 			# process the variants for the execution
-			#self.process_variants(exec_row[0])
-
-
-
-
-
-
-
+			self.process_variants(exec_row[0])
 
 	def go(self, to_host, to_sql_user, to_sql_password, to_db):
 		self.project_dict = {}
