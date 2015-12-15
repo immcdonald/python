@@ -681,16 +681,41 @@ class TestReporter(My_SQL):
 		-= Returns =-
 		N/A
 	'''
-	def register_exec(self):
+	def register_exec(self, comment=None, time=None):
 		if self._common_checks(project=True, user_name=True):
+
 			value  = ["fk_project_id"]
 			format = ["%s"]
 			data = [self.project_id]
+
 			value.append("user_name")
 			format.append("%s")
 			data.append(self.report_user_name)
-			query = "INSERT INTO exec (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
+
+			if comment is not None:
+				if len(comment) < 1:
+					self._error_macro("Comment is to short")
+					return False
+
+				if len(comment) > 65535:
+					self._error_macro("comment is to long")
+					return False
+
+				value.append("comment")
+				format.append("%s")
+				data.append(comment)
+
+			if time is None:
+				query = "INSERT INTO exec (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
+			else:
+				value.append("created")
+				format.append("%s")
+				data.append(time)
+
+				query = "INSERT INTO exec (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
+
 			self.query(query, data)
+
 			self.exec_id = self.cursor.lastrowid
 			self.log.out("Exec registered as (" + str(self.exec_id) + ").", v=0)
 			return True
@@ -1029,6 +1054,7 @@ class TestReporter(My_SQL):
 				self._error_macro(str(attachment_type) + " is an unknown attachment type.")
 				return -1
 
+			# Confirm that the source file exists
 			if os.path.exists(full_attachment_src_path):
 
 				ftp = my_ftp(self.project_dict[self.selected_project]["ftp_host"],
@@ -1052,11 +1078,21 @@ class TestReporter(My_SQL):
 					data.append(self.project_id)
 
 					dest_path = self.project_dict[self.selected_project]["attachment_path"]
-					relative_dest_path = self.selected_project.replace(" ", "_")
-
 
 					# Attempt to change to the project directory.
-					if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
+					if ftp.chdir(dest_path) is not True:
+						return -1
+
+					project_name = self.selected_project.replace(" ", "_")
+
+					relative_dest_path = "";
+					#Create the project path if it does not exist:
+					if ftp.mkdir(project_name, True):
+						if ftp.chdir(project_name):
+							relative_dest_path = project_name
+						else:
+							return -1
+					else:
 						return -1
 
 					# Is exec_id set:
@@ -1189,7 +1225,12 @@ class TestReporter(My_SQL):
 						else:
 							return -1
 					else:
-						dest_file_name = os.path.join(relative_dest_path, file_name)
+
+						dest_file_name = os.path.join(relative_dest_path, base_name)
+
+						value.append("path")
+						format.append("%s")
+						data.append(dest_file_name)
 
 						# Look to see if we already have this file int he database
 						query = "SELECT attachment_id FROM attachment WHERE " + "=%s and ".join(value) + "=%s"
@@ -1828,7 +1869,6 @@ class TestReporter(My_SQL):
 						value.append("line_number")
 						format.append("%s")
 						data.append(line_number)
-
 
 				if pre_check:
 					query = "SELECT bug_exec_id FROM bug_exec WHERE " + "=%s and ".join(value) + "=%s"

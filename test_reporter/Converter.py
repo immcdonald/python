@@ -52,25 +52,43 @@ class Convert(My_SQL):
 			test_rev_id = self.report.add_test_revision(result_row[8], result_row[9], result_row[10])
 			test_id = self.report.add_test(suite_id, test_rev_id)
 
+			result_id = self.report.add_test_result(result_row[7].upper(), result_row[1], result_row[2], result_row[4], result_row[3], result_row[5])
 
-			self.report.add_test_result(result_row[7].upper(), result_row[1], result_row[2], result_row[4], result_row[3], result_row[5])
+			if result_id > 0:
+				pass
+			else:
+				raise Exception("This is no good!")
 
 
-	def process_variant_only_level_attachments(self, variant_id, target, arch, variant):
+	def process_variant_only_level_attachments(self, variant_id, exec_id, target, arch, variant):
+
 		base_path = "/media/BackUp/regression_data/gz"
+
+		project = self.report.get_project()
+
+		file_path = os.path.join(base_path, project)
+		file_path = os.path.join(file_path, str(exec_id))
+		file_path = os.path.join(file_path, target)
+		file_path = os.path.join(file_path, arch)
+		file_path = os.path.join(file_path, variant)
+		file_path = os.path.join(file_path, "yoyo.log.gz")
+
+		add_id = self.report.add_attachments(file_path, "primary", "text/plain", force_post_compress_tag=True)
+
+		if add_id < 0:
+			raise Exception("Adding the file has failed!!!")
 
 		query = 'SELECT type, file_name, file_comment, mime_type, exec_id from attachment WHERE  test_result_id=0 and  variant_id=' + str(variant_id)
 		self.query(query)
 		variant_attachment_rows = self.cursor.fetchall()
 
-		project = self.report.get_project()
-
 		if project is None:
 			raise Exception("Project name was returned as NONE that should not happen.")
 
 		for varinat_attachment_row in variant_attachment_rows:
+			force_post_compress_tag = False
 			file_path = os.path.join(base_path, project)
-			file_path = os.path.join(file_path, str(varinat_attachment_row[4]))
+			file_path = os.path.join(file_path, str(exec_id))
 			file_path = os.path.join(file_path, target)
 			file_path = os.path.join(file_path, arch)
 			file_path = os.path.join(file_path, variant)
@@ -78,9 +96,20 @@ class Convert(My_SQL):
 
 			if not os.path.exists(file_path):
 				file_path = file_path + ".gz"
+				force_post_compress_tag = True
 
 			if os.path.exists(file_path):
-				self.report.add_attachments(file_path, varinat_attachment_row[0], varinat_attachment_row[0], comment=varinat_attachment_row[1])
+
+				comment = None
+				if varinat_attachment_row[1] != "yoyo.sum":
+					comment = varinat_attachment_row[1]
+
+					if len(comment) <= 0:
+						comment=None
+				add_id = self.report.add_attachments(file_path, varinat_attachment_row[0], varinat_attachment_row[0], comment=comment, force_post_compress_tag=force_post_compress_tag)
+
+				if add_id < 0:
+					raise Exception("Adding the file has failed!!!")
 			else:
 				raise Exception(file_path + " does not exist");
 
@@ -102,14 +131,14 @@ class Convert(My_SQL):
 			self.report.add_variant(variant_row[1], variant_row[2], varinat, variant_row[6],  variant_row[5], variant_row[4])
 
 			# process variant only level attachments
-			self.process_variant_only_level_attachments(variant_row[0], variant_row[1], variant_row[2], variant_row[3])
+			self.process_variant_only_level_attachments(variant_row[0], exec_id, variant_row[1], variant_row[2], variant_row[3])
 
 			# update test results for this variant just after it was added.
 			self.process_results(variant_row[0])
 			self.report.commit()
 
 	def process_on_exec(self):
-		query = 'SELECT * from exec_tracker'
+		query = 'SELECT id, project_id, user_name, created, description from exec_tracker'
 		self.query(query)
 		exec_rows = self.cursor.fetchall()
 
@@ -128,10 +157,9 @@ class Convert(My_SQL):
 
 			#Register the exec in the new DB
 			if self.report.set_exec_id(exec_row[0]) is False:
-				self.report.register_exec()
+				self.report.register_exec(exec_row[4], time=exec_row[3])
 
-
-			# process the sources associated witht he exec
+			# process the sources associated with the exec
 			self.process_sources(exec_row[0])
 
 			# process the variants for the execution
@@ -214,9 +242,6 @@ class Convert(My_SQL):
 				if self.connect():
 					self._copy_projects()
 					self.process_on_exec()
-
-
-
 				else:
 					self._error_macro("Failed to connect to the old DB")
 
