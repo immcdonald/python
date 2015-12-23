@@ -163,6 +163,7 @@ class My_SQL(object):
 		return self.error
 
 	def query(self, query, data=None, supress=False):
+		#print query, data
 		if self.conn is not None:
 			if self.cursor is not None:
 				if data is not None:
@@ -233,3 +234,41 @@ class My_SQL(object):
 			for line in rows:
 				data.append(line[0])
 			return data
+
+	def select(self, get_list, table, fields, data, where_addition=None):
+		if type(get_list) != list:
+			get_list = [get_list]
+
+		get_string = ",".join(get_list)
+
+		query = "SELECT " + get_string + " FROM " + table
+
+		if where_addition:
+			query = query + where_addition
+
+		if fields:
+			if self.size(fields) > 0:
+				query = query + " WHERE " + "=%s and ".join(fields) + "=%s"
+
+		self.query(query, data)
+		return self.cursor.fetchall()
+
+
+	def insert(self, table, fields, data, created=False):
+		format = ["%s"] * self.size(fields)
+
+		if created:
+			query = "INSERT INTO " + table + " (" + ",".join(fields) + ", created) VALUES (" + ",".join(format) + ", NOW())"
+		else:
+			query = "INSERT INTO " + table + " (" + ",".join(fields) + ") VALUES (" + ",".join(format) + ")"
+
+		self.query(query, data)
+
+		return self.cursor.lastrowid
+
+	def size(self, value):
+		if value is None:
+			return 0
+		else:
+			return len(value)
+
