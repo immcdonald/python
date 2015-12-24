@@ -17,12 +17,14 @@ class TestReporter(My_SQL):
 
 	def reset_project_child(self):
 		self.project_child_id = None
+		self.project_child_name = ""
 		self.result_tag_dict = {}
 		self.crash_type_dict = {}
 
 	def reset_project_root(self):
 		self.reset_project_child()
 		self.project_root_id = None
+		self.project_root_name = ""
 
 	'''
 	Desc: Basic init funciton.
@@ -153,6 +155,7 @@ class TestReporter(My_SQL):
 
 				if self.size(project_rows) > 0:
 					self.reset_project_root()
+					self.project_root_name = project_root
 					self.project_root_id = project_rows[0][0]
 				else:
 					if comment:
@@ -164,6 +167,7 @@ class TestReporter(My_SQL):
 					if db_id > 0:
 						self.reset_project_root()
 						self.project_root_id = db_id
+						self.project_root_name = project_root
 						self.history(str(project_root) + " added as project root.", "project_root_added", "auto", use_child_id=False)
 					else:
 						return -1
@@ -188,6 +192,7 @@ class TestReporter(My_SQL):
 
 			if self.size(project_rows) > 0:
 				self.reset_project_root()
+				self.project_root_name = project_root
 				self.project_root_id = project_rows[0][0]
 				return self.project_root_id
 			else:
@@ -223,7 +228,9 @@ class TestReporter(My_SQL):
 
 				if self.size(project_rows) > 0:
 					self.reset_project_child()
+					self.project_child_name = project_child
 					self.project_child_id = project_rows[0][0]
+					self._load_child_project_properties()
 				else:
 					if self.size(attach_path) > 0:
 						if self.size(attach_path) < 65535:
@@ -287,9 +294,8 @@ class TestReporter(My_SQL):
 					if db_id > 0:
 						self.reset_project_child()
 						self.project_child_id = db_id
-
+						self.project_child_name = project_child
 						self._load_child_project_properties()
-
 						self.history(str(project_child) + " added as project child.", "project_child_added", "auto")
 					else:
 						return -1
@@ -315,6 +321,7 @@ class TestReporter(My_SQL):
 			if self.size(project_rows) > 0:
 				self.reset_project_child()
 				self.project_child_id = project_rows[0][0]
+				self.project_child_name = project_child
 
 				#Reload things for the selected project:
 				self._load_child_project_properties()
@@ -693,6 +700,224 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	def get_test_suite_id(self, suite_name):
+		if self.common_check(project_root=True, project_child=True):
+			if self.size(suite_name) > 0:
+				if self.size(suite_name) < 61:
+					fields = []
+					data = []
+
+					fields.append("fk_project_child_id")
+					data.append(self.project_child_id)
+
+					fields.append("name")
+					data.append(suite_name)
+
+					suite_name_rows = self.select("test_suite_root_id", "test_suite_root", fields, data)
+
+					if self.size(suite_name_rows) > 0:
+						return suite_name_rows[0][0]
+					else:
+						return -2
+				else:
+					self._error_macro("Suite name is too long")
+					return -1
+			else:
+				self._error_macro("Suite name is too short")
+				return -1
+		else:
+			return -1
+
+	def add_test_suite(self, suite_name, comment=None):
+		rc = self.get_test_suite_id(suite_name)
+
+		if rc > 0:
+			return rc
+		elif rc == -2:
+			fields = []
+			data = []
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("name")
+			data.append(suite_name)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("test_suite_root", fields, data, True)
+			if db_id > 0:
+				self.history("Test Suite: " + str(suite_name) + " added.", "suite", "auto")
+				return db_id
+		else:
+			return -1
+
+	def get_exec_abort(self, abort_name):
+		if self.common_check(project_root=True, project_child=True):
+			if self.size(abort_name) > 0:
+				if self.size(abort_name) < 46:
+					fields = []
+					data = []
+
+					fields.append("fk_project_child_id")
+					data.append(self.project_child_id)
+
+					fields.append("name")
+					data.append(abort_name)
+
+					exec_abort = self.select("exec_abort_id", "exec_abort", fields, data)
+
+					if self.size(exec_abort) > 0:
+						return exec_abort[0][0]
+					else:
+						return -2
+				else:
+					self._error_macro("Abort name is too long")
+					return -1
+			else:
+				self._error_macro("Abort name is too short")
+				return -1
+		else:
+			return -1
+
+
+	def add_exec_abort(self, abort_name, comment=None):
+		rc = self.get_exec_abort(abort_name)
+
+		if rc > 0:
+			return rc
+		elif rc == -2:
+			fields = []
+			data = []
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("name")
+			data.append(abort_name)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("exec_abort", fields, data, True)
+			if db_id > 0:
+				self.history("Abort Type: " + str(abort_name) + " added.", "exec", "auto")
+				return db_id
+		else:
+			return -1
+
+	def get_test_root(self, exec_path, name, params=None):
+		if self.common_check(project_root=True, project_child=True):
+			if self.size(exec_path) > 0:
+				if self.size(exec_path) < 65535:
+					if self.size(name) > 0:
+						if self.size(name) < 50:
+							fields = []
+							data = []
+
+							fields.append("fk_project_child_id")
+							data.append(self.project_child_id)
+
+							fields.append("name")
+							data.append(name)
+
+							fields.append("exec_path")
+							data.append(exec_path)
+
+
+							if params:
+								if self.size(params) > 0:
+									if self.size(params) < 65535:
+										fields.append("params")
+										data.append(params)
+									else:
+										self._error_macro("Parameter stringis too long")
+										return -1
+								else:
+									self._error_macro("Parameter string is too long")
+									return -1
+
+
+							test_root_rows = self.select("test_root_id", "test_root", fields, data)
+
+							if self.size(test_root_rows) > 0:
+								return test_root_rows[0][0]
+							else:
+								return -2
+
+						else:
+							self._error_macro("Test name is too long")
+							return -1
+					else:
+						self._error_macro("Test name is too short")
+						return -1
+				else:
+					self._error_macro("exec path is too long")
+					return -1
+			else:
+				self._error_macro("exec_path is too short")
+				return -1
+		else:
+			return -1
+
+	def add_test_root(self, exec_path, name, params=None, comment=None):
+		rc = self.get_test_root(exec_path, name, params)
+
+		if rc > 0:
+			return rc
+		elif rc == -2:
+			fields = []
+			data = []
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("name")
+			data.append(name)
+
+			fields.append("exec_path")
+			data.append(exec_path)
+
+			fields.append("params")
+			data.append(params)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("test_root", fields, data, True)
+			if db_id > 0:
+				self.history("Test root: " + str(exec_path) + "/" + str(name) + " " + str(params) + " added.", "test", "auto")
+				return db_id
+		else:
+			return -1
 
 report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project_db")
 
@@ -790,5 +1015,22 @@ if report.connect():
 	print "Add Crash Type: ", report.add_crash_type("shutdown")
 	print "Add Crash Type: ", report.add_crash_type("kdump")
 	print "Add Crash Type: ", report.add_crash_type("sigsegv")
+	print "Get Test Suite: ", report.get_test_suite_id("Testware_bob")
+	print "Add Test Suite: ", report.add_test_suite("Testware_bob")
+	print "Add Test Suite: ", report.add_test_suite("Testware_Fred")
+	print "Add Test Suite: ", report.add_test_suite("Testware_Juan")
+	print "Add Test Suite: ", report.add_test_suite("Testware_bob")
+	print "Get Test Suite: ", report.get_test_suite_id("Testware_bob")
+	print "Get Exec Abort: ", report.get_exec_abort("user_abort")
+	print "Get Exec Abort: ", report.add_exec_abort("user_abort")
+	print "Get Exec Abort: ", report.add_exec_abort("timeout")
+	print "Get Exec Abort: ", report.add_exec_abort("user_abort")
+	print "Get Exec Abort: ", report.get_exec_abort("user_abort")
+
+	print "Get Test Root:", report.get_test_root("./", "Ian", "-is -the best")
+	print "Get Test Root:", report.add_test_root("./", "Ian", "-is -the best")
+	print "Get Test Root:", report.add_test_root("./", "Norman", "-is -odd")
+	print "Get Test Root:", report.add_test_root("./", "Ian", "-is -the best")
+	print "Get Test Root:", report.get_test_root("./", "Ian", "-is -the best")
 
 	report.commit()
