@@ -370,7 +370,6 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-
 	def load_line_marker_types(self):
 		if self.common_check():
 			fields = []
@@ -395,7 +394,7 @@ class TestReporter(My_SQL):
 				self._error_macro(str(line_marker_type) + " line marker type not found. Try calling add first.")
 			return -1
 
-	def add_line_marker_type(self, line_marker_type):
+	def add_line_marker_type(self, line_marker_type, comment=None):
 		if self.common_check():
 			if self.size(line_marker_type) > 0:
 				if self.size(line_marker_type) < 46:
@@ -411,6 +410,17 @@ class TestReporter(My_SQL):
 						fields.append("name")
 						data.append(line_marker_type)
 
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
+							else:
+								self._error_macro("The comment is too short")
+								return -1
 
 						db_id = self.insert("line_marker_type", fields, data, True)
 
@@ -426,9 +436,6 @@ class TestReporter(My_SQL):
 				return -1
 		else:
 			return -1
-
-
-
 
 	def load_result_tags(self):
 		if self.common_check(project_root=True, project_child=True):
@@ -853,9 +860,8 @@ class TestReporter(My_SQL):
 										self._error_macro("Parameter stringis too long")
 										return -1
 								else:
-									self._error_macro("Parameter string is too long")
+									self._error_macro("Parameter string is too short")
 									return -1
-
 
 							test_root_rows = self.select("test_root_id", "test_root", fields, data)
 
@@ -919,6 +925,73 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	def get_test_revision(self, exec_path, name, params, revision_string):
+		rc = self.get_test_root(exec_path, name, params)
+
+		if rc > 0:
+			fields = []
+			data = []
+
+			fields.append("fk_test_root_id")
+			data.append(rc)
+
+			fields.append("unique_ref")
+			data.append(revision_string)
+
+			test_rev_rows = self.select("test_revision_id", "test_revision", fields, data)
+
+			if self.size(test_rev_rows) > 0:
+				return test_rev_rows[0][0]
+			else:
+				return -2
+		else:
+			return -1
+
+	def add_test_revision(self, exec_path, name, params, revision_string, comment=None):
+		rc = self.get_test_revision(exec_path, name, params, revision_string)
+		if rc > 0:
+			return rc
+		else:
+			test_root_id = self.add_test_root(exec_path, name, params, comment)
+
+			if test_root_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_test_root_id")
+				data.append(test_root_id)
+
+				if self.size(revision_string) > 0:
+					if self.size(revision_string) < 65535:
+						fields.append("unique_ref")
+						data.append(revision_string)
+					else:
+						self._error_macro("The revision string is too long")
+						return -1
+				else:
+					self._error_macro("The revision string is too short")
+					return -1
+
+				if comment:
+					if self.size(comment) > 0:
+						if self.size(comment) < 65535:
+							fields.append("comment")
+							data.append(comment)
+						else:
+							self._error_macro("The comment is too long")
+							return -1
+					else:
+						self._error_macro("The comment is too short")
+						return -1
+
+				db_id = self.insert("test_revision", fields, data, True)
+
+				if db_id > 0:
+					self.history("Test revision: " + str(exec_path) + "/" + str(name) + " " + str(params) + "Rev: (" + revision_string + ") added.", "test", "auto")
+					return db_id
+			else:
+				return -1
+
 report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project_db")
 
 if report.connect():
@@ -934,6 +1007,7 @@ if report.connect():
 	print "Add Arch:", report.add_arch("mips")
 	print "Add Arch:", report.add_arch("x86")
 	print "Line Marker:", report.add_line_marker_type("test download")
+	print "Line Marker:", report.add_line_marker_type("bad_transfer")
 	print "Line Marker:", report.add_line_marker_type("test")
 	print "Line Marker:", report.add_line_marker_type("bug reference")
 	print "Line Marker:", report.add_line_marker_type("crash")
@@ -1032,5 +1106,13 @@ if report.connect():
 	print "Get Test Root:", report.add_test_root("./", "Norman", "-is -odd")
 	print "Get Test Root:", report.add_test_root("./", "Ian", "-is -the best")
 	print "Get Test Root:", report.get_test_root("./", "Ian", "-is -the best")
+
+	print "Get Test Rev:", report.get_test_revision("./", "Ian", "-is -the best", "2123411")
+	print "Add Test Rev:", report.add_test_revision("./", "Ian", "-is -the best", "2123411")
+	print "Add Test Rev:", report.add_test_revision("./", "Ian", "-is -the best", "2123411")
+	print "Get Test Rev:", report.get_test_revision("./", "Ian", "-is -the best", "2123411")
+	print "Add Test Rev:", report.add_test_revision("./", "Rebecca", "- awesome", "1")
+	print "Get Test Rev:", report.get_test_revision("./", "Rebecca", "- awesome", "1")
+
 
 	report.commit()
