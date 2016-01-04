@@ -3,6 +3,7 @@ import argparse
 import user
 import gzip
 import shutil
+import getpass
 
 parentPath = os.path.abspath("../common")
 
@@ -15,7 +16,11 @@ from my_ftp import *
 
 class TestReporter(My_SQL):
 
+	def reset_exec_id(self):
+		self.exec_id = None
+
 	def reset_project_child(self):
+		self.reset_exec_id()
 		self.project_child_id = None
 		self.project_child_name = ""
 		self.result_tag_dict = {}
@@ -39,6 +44,8 @@ class TestReporter(My_SQL):
 		super(TestReporter, self).init()
 		self.reset_project_root()
 		self.line_marker_dict = {}
+		self.set_user_name(getpass.getuser())
+
 
 	'''
 	Desc: Constructor for this class
@@ -73,7 +80,7 @@ class TestReporter(My_SQL):
 			rc = self.load_line_marker_types()
 		return rc
 
-	def common_check(self, project_root=False, project_child=False):
+	def common_check(self, project_root=False, project_child=False, exec_id=False):
 		if self.conn is None:
 			self._error_macro("Not connected to the database. Please call connect before this call.")
 			return False
@@ -87,6 +94,13 @@ class TestReporter(My_SQL):
 			if self.project_child_id is None:
 				self._error_macro("Project child not selected. Please call select_project_child to select the project")
 				return False
+
+		if exec_id:
+			if self.exec_id is None:
+				self._error_macro("Exec id has not been registered. Please call register exec before calling this function.")
+				return False
+
+
 		return True
 
 	def history(self, string, type_enum="general", entry_enum="manual", use_child_id=True, pre_check=False):
@@ -202,6 +216,18 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+
+	def set_user_name(self, user_name):
+		if self.size(user_name) > 0:
+			if self.size(user_name) < 46:
+				self.reporter_user_name = user_name
+				return True
+			else:
+				self._error_macro("The attachment path is too long")
+				return False
+		else:
+			self._error_macro("The attachment path is too short")
+			return False
 
 	def add_project_child(self, project_child, attach_path, ftp_host, ftp_user_name, ftp_password, comment=None):
 		project_child = project_child.replace(" ", "_")
@@ -565,7 +591,7 @@ class TestReporter(My_SQL):
 			return -1
 
 
-	def add_bug_root(self, recorder_type, unique_ref, summary=None, comment=None):
+	def get_bug_root(self, recorder_type, unique_ref):
 		valid_record_type = ["pr", "jira"]
 
 		if recorder_type not in valid_record_type:
@@ -573,10 +599,8 @@ class TestReporter(My_SQL):
 			return -1
 
 		if self.common_check():
-
 			if self.size(unique_ref) > 0:
 				if self.size(unique_ref) < 65535:
-
 					fields = []
 					data = []
 
@@ -591,42 +615,138 @@ class TestReporter(My_SQL):
 					if self.size(bug_root_rows) > 0:
 						return bug_root_rows[0][0]
 					else:
-
-						if comment:
-							if self.size(comment) > 0:
-								if self.size(comment) < 65535:
-									fields.append("comment")
-									data.append(comment)
-								else:
-									self._error_macro("The comment is too long")
-									return -1
-							else:
-								self._error_macro("The comment is too short")
-								return -1
-
-						if summary:
-							if self.size(summary) > 0:
-								if self.size(summary) < 65535:
-									fields.append("summary")
-									data.append(summary)
-								else:
-									self._error_macro("The summary is too long")
-									return -1
-							else:
-								self._error_macro("The summary is too short")
-								return -1
-
-						db_id = self.insert("bug_root", fields, data, True)
-
-						if db_id > 0:
-							return db_id
-					return -1
+						return -2
 				else:
 					self._error_macro("Unique reference is too long")
 					return -1
 			else:
 				self._error_macro("Unique refernce is too short")
 				return -1
+		else:
+			return -1
+
+	def add_bug_root(self, recorder_type, unique_ref, summary=None, comment=None):
+		bug_root_id = self.get_bug_root(recorder_type, unique_ref)
+
+		if bug_root_id > 0:
+			return bug_root_id
+		elif bug_root_id == -2:
+			fields = []
+			data = []
+
+			fields.append("recorder_enum")
+			data.append(recorder_type)
+
+			fields.append("unique_ref")
+			data.append(unique_ref)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			if summary:
+				if self.size(summary) > 0:
+					if self.size(summary) < 65535:
+						fields.append("summary")
+						data.append(summary)
+					else:
+						self._error_macro("The summary is too long")
+						return -1
+				else:
+					self._error_macro("The summary is too short")
+					return -1
+
+			db_id = self.insert("bug_root", fields, data, True)
+
+			if db_id > 0:
+				return db_id
+			else:
+				return -1
+		else:
+			return bug_root_id
+
+	def get_project_bug(self, recorder_type, unique_ref):
+		if self.common_check(project_root=True, project_child=True):
+			bug_root_id = self.get_bug_root(recorder_type, unique_ref)
+			if bug_root_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_bug_root_id")
+				data.append(bug_root_id)
+
+				fields.append("fk_project_child_id")
+				data.append(self.project_child_id)
+
+				project_bug_rows = self.select("project_bug_id", "project_bug", fields, data)
+
+				if self.size(project_bug_rows) > 0:
+					return project_bug_rows[0][0]
+				else:
+					return -2
+
+			else:
+				return bug_root_id
+		else:
+			return -1
+
+	def add_project_bug(self, recorder_type, unique_ref, summary=None, comment=None):
+		if self.common_check(project_root=True, project_child=True):
+			bug_root_id = self.add_bug_root(recorder_type, unique_ref, summary, comment)
+
+			if bug_root_id > 0:
+				project_bug_id = self.get_project_bug(recorder_type, unique_ref)
+
+				if project_bug_id > 0:
+					return project_bug_id
+				else:
+					fields = []
+					data = []
+
+					fields.append("fk_bug_root_id")
+					data.append(bug_root_id)
+
+					fields.append("fk_project_child_id")
+					data.append(self.project_child_id)
+
+					fields.append("triaged_enum")
+					data.append("no")
+
+					fields.append("resolved_enum")
+					data.append("no")
+
+					fields.append("added_enum")
+					data.append("test_ref")
+
+					if comment:
+						if self.size(comment) > 0:
+							if self.size(comment) < 65535:
+								fields.append("comment")
+								data.append(comment)
+							else:
+								self._error_macro("The comment is too long")
+								return -1
+						else:
+							self._error_macro("The comment is too short")
+							return -1
+
+					db_id = self.insert("project_bug", fields, data, True)
+
+					if db_id > 0:
+						return db_id
+					else:
+						return -1
+
+			else:
+				return bug_root_id
 		else:
 			return -1
 
@@ -850,7 +970,6 @@ class TestReporter(My_SQL):
 							fields.append("exec_path")
 							data.append(exec_path)
 
-
 							if params:
 								if self.size(params) > 0:
 									if self.size(params) < 65535:
@@ -925,7 +1044,7 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-	def get_test_revision(self, exec_path, name, params, revision_string):
+	def get_test_revision(self, exec_path, name, params, revision_string=None):
 		rc = self.get_test_root(exec_path, name, params)
 
 		if rc > 0:
@@ -935,8 +1054,17 @@ class TestReporter(My_SQL):
 			fields.append("fk_test_root_id")
 			data.append(rc)
 
-			fields.append("unique_ref")
-			data.append(revision_string)
+			if self.size(revision_string) > 0:
+				if self.size(revision_string) < 65535:
+					fields.append("unique_ref")
+					data.append(revision_string)
+				else:
+					self._error_macro("The revision string is too long")
+					return -1
+			else:
+				revision_string = "base"
+				fields.append("unique_ref")
+				data.append("base")
 
 			test_rev_rows = self.select("test_revision_id", "test_revision", fields, data)
 
@@ -947,7 +1075,7 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-	def add_test_revision(self, exec_path, name, params, revision_string, comment=None):
+	def add_test_revision(self, exec_path, name, params, revision_string=None, comment=None):
 		rc = self.get_test_revision(exec_path, name, params, revision_string)
 		if rc > 0:
 			return rc
@@ -969,8 +1097,9 @@ class TestReporter(My_SQL):
 						self._error_macro("The revision string is too long")
 						return -1
 				else:
-					self._error_macro("The revision string is too short")
-					return -1
+					revision_string = "base"
+					fields.append("unique_ref")
+					data.append("base")
 
 				if comment:
 					if self.size(comment) > 0:
@@ -989,8 +1118,75 @@ class TestReporter(My_SQL):
 				if db_id > 0:
 					self.history("Test revision: " + str(exec_path) + "/" + str(name) + " " + str(params) + "Rev: (" + revision_string + ") added.", "test", "auto")
 					return db_id
+				else:
+					return db_id
 			else:
 				return -1
+
+	def set_exec_id(self, exec_id):
+		if self.common_check(project_root=True, project_child=True):
+			if isinstance( exec_id, int ):
+				if exec_id > 0:
+					fields = []
+					data = []
+
+					fields.append("fk_project_child_id")
+					data.append(self.project_child_id)
+
+					fields.append("exec_id")
+					data.append(exec_id)
+
+					exec_rows = self.select("exec_id", "exec", fields, data)
+
+					if self.size(exec_rows) > 0:
+						self.reset_exec_id()
+						self.exec_id = exec_rows[0][0]
+						return exec_rows[0][0]
+					else:
+						self._error_macro("The provided exec id ("+ str(exec_id) +") was not found for the current specified child project.")
+						return -2
+				else:
+					self._error_macro("Exec id must be an positive integer greater then 0.")
+					return -1
+			else:
+				self._error_macro("Exec id must be an integer.")
+				return -1
+		else:
+			return -1
+
+	def register_exec(self, comment=None):
+		if self.common_check(project_root=True, project_child=True):
+			fields = []
+			data = []
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("user_name")
+			data.append(self.reporter_user_name)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("exec", fields, data, True)
+
+			if db_id > 0:
+				self.reset_exec_id()
+				self.exec_id = db_id
+				return db_id
+			else:
+				return db_id
+		else:
+			return -1
 
 report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project_db")
 
@@ -1083,6 +1279,16 @@ if report.connect():
 	print "Add Bug Root:", report.add_bug_root("jira", "123456789", "This is a stupid summary")
 	print "Add Bug Root:", report.add_bug_root("jira", "123456789", "This is a stupid summary")
 
+	print "Get Project Bug:", report.get_project_bug("jira", "123456789")
+	print "Get Project Bug:", report.get_project_bug("jira", "123456790")
+	print "Add Project Bug:", report.add_project_bug("jira", "123456789")
+	print "Add Project Bug:", report.add_project_bug("jira", "123456789")
+	print "Add Project Bug:", report.add_project_bug("jira", "123456790")
+	print "Add Project Bug:", report.add_project_bug("jira", "123456790")
+	print "Get Project Bug:", report.get_project_bug("jira", "123456789")
+	print "Get Project Bug:", report.get_project_bug("jira", "123456790")
+
+
 	print "Add Crash Type: ", report.add_crash_type("sigsegv")
 	print "Add Crash Type: ", report.add_crash_type("sigill")
 	print "Add Crash Type: ", report.add_crash_type("sigbus")
@@ -1111,8 +1317,16 @@ if report.connect():
 	print "Add Test Rev:", report.add_test_revision("./", "Ian", "-is -the best", "2123411")
 	print "Add Test Rev:", report.add_test_revision("./", "Ian", "-is -the best", "2123411")
 	print "Get Test Rev:", report.get_test_revision("./", "Ian", "-is -the best", "2123411")
-	print "Add Test Rev:", report.add_test_revision("./", "Rebecca", "- awesome", "1")
-	print "Get Test Rev:", report.get_test_revision("./", "Rebecca", "- awesome", "1")
+	print "Add Test Rev:", report.add_test_revision("./", "Rebecca", "-awesome", "1")
+	print "Get Test Rev:", report.get_test_revision("./", "Rebecca", "-awesome", "1")
 
+	print "Get Test Rev:", report.get_test_revision("./", "None", "-awesome")
+	print "Add Test Rev:", report.add_test_revision("./", "None", "-awesome")
+	print "Get Test Rev:", report.get_test_revision("./", "None", "-awesome")
+
+	print "Set Exec:", report.set_exec_id(100000)
+	print "Set Exec:", report.set_exec_id(1)
+	print "Register Exec:", report.register_exec()
+	print "Set Exec:", report.set_exec_id(1)
 
 	report.commit()
