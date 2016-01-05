@@ -329,7 +329,12 @@ class TestReporter(My_SQL):
 						self.reset_project_child()
 						self.project_child_id = db_id
 						self.project_child_name = project_child
+						self.ftp_host = ftp_host
+						self.ftp_user_name = ftp_user_name
+						self.ftp_password = ftp_password
+						self.attachment_path = attach_path
 						self._load_child_project_properties()
+
 						self.history(str(project_child) + " added as project child.", "project_child_added", "auto")
 					else:
 						return -1
@@ -350,12 +355,18 @@ class TestReporter(My_SQL):
 
 			fields.append("name")
 			data.append(project_child)
-			project_rows = self.select("project_child_id", "project_child", fields, data)
+
+			project_rows = self.select("project_child_id, ftp_host, ftp_user_name, ftp_password, attach_path", "project_child", fields, data)
 
 			if self.size(project_rows) > 0:
 				self.reset_project_child()
+
 				self.project_child_id = project_rows[0][0]
 				self.project_child_name = project_child
+				self.ftp_host = project_rows[0][1]
+				self.ftp_user_name = project_rows[0][2]
+				self.ftp_password = project_rows[0][3]
+				self.attachment_path = project_rows[0][4]
 
 				#Reload things for the selected project:
 				self._load_child_project_properties()
@@ -698,6 +709,31 @@ class TestReporter(My_SQL):
 		else:
 			return variant_root_id
 
+
+	def get_variant_exec_info(self, variant_exec_id):
+		if self.common_check():
+			query = 'SELECT target.name as target, arch.name as arch, variant_root.variant FROM target, arch, variant_root, variant_exec WHERE variant_exec.fk_variant_root_id=variant_root.variant_root_id and variant_root.fk_target_id=target.target_id and variant_root.fk_arch_id=arch.arch_id and variant_exec_id=%s'
+			self.query(query, (variant_exec_id, ))
+
+			result_rows = self.cursor.fetchall()
+
+			size = self.size(result_rows)
+
+			if size == 0:
+				self._error_macro("No records where found for the provided variant exec_id")
+				return None
+			elif size == 1:
+				return {"target": result_rows[0][0], "arch": result_rows[0][1], "variant": result_rows[0][2]}
+			elif size > 1:
+				self._error_macro("Expected only one record to be found for the provided variant exec id, but found %d" % size)
+				return None
+			else:
+				self._error_macro("This should not happen size value set to ")
+				return None
+		else:
+			return None
+
+
 	def get_variant_exec_id(self, target, arch, variant, display_error=True):
 		if self.common_check(project_root=True, project_child=True, exec_id=True):
 			variant_root_id = self.get_variant_root_id(target, arch, variant, display_error=display_error)
@@ -767,6 +803,8 @@ class TestReporter(My_SQL):
 				return db_id
 			else:
 				return variant_root_id
+
+
 
 
 	def get_bug_root_id(self, recorder_type, unique_ref, display_error=True):
@@ -1538,13 +1576,202 @@ class TestReporter(My_SQL):
 					self._error_macro("The comment is too short")
 					return -1
 
-
 			db_id = self.insert("attachment_type", fields, data, True)
 
 			return db_id
 
 		else:
 			return attachment_type_id
+
+
+	def get_attachment_id(self, full_attachment_src_path, display_error=True):
+		if self.common_check(project_root=True, project_child=True):
+			fields = []
+			data = []
+
+			local_dir_name = os.path.dirname(full_attachment_src_path)
+			base_name = os.path.basename(full_attachment_src_path)
+			root_file_name, extension = os.path.splitext(base_name)
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("src_path")
+			data.append(local_dir_name)
+
+			fields.append("base_file_name")
+			data.append(root_file_name)
+
+			fields.append("ext")
+			data.append(extension)
+
+			attachment_rows = self.select("attachment_id", "attachment", fields, data)
+
+			if self.size(attachment_rows) > 0:
+				return attachment_rows[0][0]
+			else:
+				if display_error:
+					self._error_macro("Attachment (" + str(full_attachment_src_path) + ") not found.")
+				return -2
+		else:
+			return -1
+
+	def add_attachment(self, attachment_type, full_attachment_src_path, test_result_id=None, supress_exec_id=False, supress_variant_exec_id=False, ):
+
+		known_compressed_extensions = [".zip", ".gz"]
+
+		if os.path.exists(full_attachment_src_path):
+			if self.common_check(project_root=True, project_child=True):
+				attachment_id = self.get_attachment_id(full_attachment_src_path, display_error=False)
+
+				if attachment_id == -2:
+					attachment_type_id = self.get_attachment_type_id(attachment_type)
+
+					if attachment_type_id > 0:
+						local_dir_name = os.path.dirname(full_attachment_src_path)
+						base_name = os.path.basename(full_attachment_src_path)
+						root_file_name, extension = os.path.splitext(base_name)
+
+						fields = []
+						data = []
+
+						fields.append("fk_project_child_id")
+						data.append(self.project_child_id)
+
+						fields.append("src_path")
+						data.append(local_dir_name)
+
+						ftp = my_ftp(self.ftp_host,
+									 self.ftp_user_name,
+									 self.ftp_password,
+									 log=self.get_log()
+									)
+						if ftp:
+							if ftp.connect():
+
+								# Attempt to change to the attachment directory.
+								if ftp.chdir(str(self.attachment_path)) is not True:
+									return -1
+
+								dest_path = self.attachment_path
+								relative_dest_path = "";
+
+								if ftp.mkdir(self.project_root_name, True):
+									if ftp.chdir(self.project_root_name):
+										relative_dest_path = os.path.join(relative_dest_path, self.project_root_name)
+									else:
+										return -1
+								else:
+									return -1
+
+								# Now create or move into the project child direcotry
+								if ftp.mkdir(self.project_child_name, True):
+									if ftp.chdir(self.project_child_name):
+										relative_dest_path = os.path.join(relative_dest_path, self.project_child_name)
+
+									else:
+										return -1
+								else:
+									return -1
+
+								if self.exec_id is not None:
+									if supress_exec_id is False:
+										fields.append("fk_exec_id")
+										data.append(self.exec_id)
+
+										exec_id_dir = "%06d" % int(self.exec_id);
+
+										if ftp.mkdir(str(exec_id_dir), True):
+											relative_dest_path = os.path.join(relative_dest_path, exec_id_dir)
+
+											if ftp.chdir(os.path.join(dest_path, relative_dest_path)):
+
+												if self.variant_exec_id is not None:
+													if supress_variant_exec_id is False:
+
+														variant_data = report.get_variant_exec_info(self.variant_exec_id)
+
+														if variant_data:
+															fields.append("fk_variant_exec_id")
+															data.append(self.variant_exec_id)
+
+															if ftp.mkdir(variant_data["target"], True):
+																if ftp.chdir(variant_data["target"]):
+																	relative_dest_path = os.path.join(relative_dest_path, variant_data["target"])
+																else:
+																	return -1
+															else:
+																return -1
+
+															if ftp.mkdir(variant_data["arch"], True):
+																if ftp.chdir(variant_data["arch"]):
+																	relative_dest_path = os.path.join(relative_dest_path, variant_data["arch"])
+																else:
+																	return -1
+															else:
+																return -1
+
+															if ftp.mkdir(variant_data["variant"], True):
+																if ftp.chdir(variant_data["variant"]):
+																	relative_dest_path = os.path.join(relative_dest_path, variant_data["variant"])
+																else:
+																	return -1
+															else:
+																return -1
+														else:
+															return -1
+											else:
+												return -1
+										else:
+											return -1
+
+								if test_result_id:
+									fields.append("fk_test_result_id")
+									data.append(test_result_id)
+
+								# We want to store only compressed files on the server
+								# so see if this file is already compressed.
+								if extension not in known_compressed_extensions:
+
+									# If not then we will compress it before we copy it
+									new_file_name = "";
+									index = 0
+									output_path = ""
+
+									for index in range(-1, 1000):
+										if index == -1:
+												file_name = root_file_name + extension + ".gz"
+										else:
+												file_name = root_file_name + extension + "-%03d" % index + ".gz"
+
+										output_path = os.path.join(local_dir_name, file_name)
+
+										if os.path.exists(output_path) is False:
+											break
+
+									if index >= 1000:
+										self._error_macro(full_attachment_src_path + " Failed to find an acceptable name to generate a compressed file.")
+										return -1
+
+									dest_file_name = os.path.join(relative_dest_path, file_name)
+
+									print dest_file_name
+								else:
+									pass
+							else:
+								return -1
+						else:
+							self._error_macro("Failed to create ftp object.")
+							return -1
+					else:
+						return attachment_type_id
+				else:
+					return attachment_id
+			else:
+				return -1
+		else:
+			self._error_macro(full_attachment_src_path + " does not exist or is not accessable")
+			return -1
 
 	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, test_unique_ref=None, start_line=-1, endline=-1,  display_error=True):
 		pass
@@ -1554,7 +1781,7 @@ report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project
 if report.connect():
 	print "Project Root:", report.add_project_root("Mainline")
 	print "Select Project Root:", report.select_project_root("Mainline")
-	print "Project Child:", report.add_project_child("Kernel", "/media/Backup/regression_data/logs/", user.ftp_host, user.ftp_usr_name, user.ftp_password)
+	print "Project Child:", report.add_project_child("Kernel", "/media/BackUp/regression_data/logs", user.ftp_host, user.ftp_usr_name, user.ftp_password)
 	print "Select Child:", report.select_project_child("Kernel")
 
 	print "Get Attachment Type:", report.get_attachment_type_id("primary_log")
@@ -1567,7 +1794,6 @@ if report.connect():
 	print "Add Attachment Type:", report.add_attachment_type("kdump_index", "plain/text", "Kdump index file")
 	print "Add Attachment Type:", report.add_attachment_type("kdump", "plain/text", "Kdump File")
 	print "Get Attachment Type:", report.get_attachment_type_id("primary_log")
-
 
 	print "Add Arch:", report.add_arch("x86")
 	print "Add Arch:", report.add_arch("x86_64")
@@ -1717,6 +1943,11 @@ if report.connect():
 	print "Get Variant Exec:", report.get_variant_exec_id("qnet04", "x86_64", "o.smp")
 
 	print "Get Variant Exec:", report.get_test_exec_id("pass", "Testware_Juan", "Ian",  "-is -the best", "2123411")
+
+
+	print "Get file id", report.get_attachment_id("./blob.txt")
+	print "Add file", report.add_attachment("primary_log", "./blob.txt")
+	print "Add file", report.add_attachment("primary_log", "./TestReporter.py")
 
 
 	report.commit()
