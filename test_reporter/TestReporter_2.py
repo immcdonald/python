@@ -16,7 +16,11 @@ from my_ftp import *
 
 class TestReporter(My_SQL):
 
+	def reset_variant_exec_id(self):
+		self.variant_exec_id = None
+
 	def reset_exec_id(self):
+		self.reset_variant_exec_id()
 		self.exec_id = None
 
 	def reset_project_child(self):
@@ -80,7 +84,7 @@ class TestReporter(My_SQL):
 			rc = self.load_line_marker_types()
 		return rc
 
-	def common_check(self, project_root=False, project_child=False, exec_id=False):
+	def common_check(self, project_root=False, project_child=False, exec_id=False, variant_exec_id=False):
 		if self.conn is None:
 			self._error_macro("Not connected to the database. Please call connect before this call.")
 			return False
@@ -100,6 +104,10 @@ class TestReporter(My_SQL):
 				self._error_macro("Exec id has not been registered. Please call register exec before calling this function.")
 				return False
 
+		if variant_exec_id:
+			if self.variant_exec_id is None:
+				self._error_macro("variant exec id has not been registered. Please call add variant exec before calling this function.")
+				return False
 
 		return True
 
@@ -365,9 +373,8 @@ class TestReporter(My_SQL):
 		self.load_crash_types()
 
 
-	def add_arch(self, arch):
+	def get_arch_id(self, arch, display_error=True):
 		arch = arch.replace(" ", "_")
-
 		if self.common_check():
 			if self.size(arch) > 0:
 				if self.size(arch) < 46:
@@ -382,19 +389,35 @@ class TestReporter(My_SQL):
 					if self.size(arch_rows) > 0:
 						return arch_rows[0][0]
 					else:
-						db_id = self.insert("arch", fields, data, True)
-
-						if db_id > 0:
-							return db_id
-					return -1
+						if display_error:
+							self._error_macro("Arch not found.")
+						return -2
 				else:
 					self._error_macro("Arch is too long")
 					return -1
 			else:
 				self._error_macro("Arch is too short")
 				return -1
+
 		else:
 			return -1
+
+	def add_arch(self, arch):
+		arch_id = self.get_arch_id(arch, display_error=False)
+
+		if arch_id == -2:
+			arch = arch.replace(" ", "_")
+			fields = []
+			data = []
+
+			fields.append("name")
+			data.append(arch)
+
+			db_id = self.insert("arch", fields, data, True)
+			return db_id
+		else:
+			return arch_id
+
 
 	def load_line_marker_types(self):
 		if self.common_check():
@@ -412,11 +435,11 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
-	def get_line_marker(self, line_marker_type, show_error=True):
+	def get_line_marker_id(self, line_marker_type, display_error=True):
 		if line_marker_type in self.line_marker_dict:
 			return self.line_marker_dict[line_marker_type]
 		else:
-			if show_error:
+			if display_error:
 				self._error_macro(str(line_marker_type) + " line marker type not found. Try calling add first.")
 			return -1
 
@@ -425,7 +448,7 @@ class TestReporter(My_SQL):
 			if self.size(line_marker_type) > 0:
 				if self.size(line_marker_type) < 46:
 
-					line_marker_id = self.get_line_marker(line_marker_type, False)
+					line_marker_id = self.get_line_marker_id(line_marker_type, display_error=False)
 
 					if line_marker_id > 0:
 						return line_marker_id
@@ -486,11 +509,11 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
-	def get_tag_result_id(self, tag, show_error=True):
+	def get_tag_result_id(self, tag, display_error=True):
 		if tag in self.result_tag_dict:
 			return self.result_tag_dict[tag]["id"]
 		else:
-			if show_error:
+			if display_error:
 				self._error_macro(str(tag) + " result tag not found. Try calling add first.")
 			return -1
 
@@ -499,7 +522,7 @@ class TestReporter(My_SQL):
 			if self.size(tag) > 0:
 				if self.size(tag) < 16:
 
-					result_id = self.get_tag_result_id(tag, False)
+					result_id = self.get_tag_result_id(tag, display_error=False)
 
 					if result_id > 0:
 						return result_id
@@ -545,7 +568,7 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-	def add_target(self, name, comment=None):
+	def get_target_id(self, name, display_error=True):
 		if self.common_check(project_root=True, project_child=True):
 			if self.size(name) > 0:
 				if self.size(name) < 46:
@@ -560,27 +583,9 @@ class TestReporter(My_SQL):
 					if self.size(target_rows) > 0:
 						return target_rows[0][0]
 					else:
-						if comment:
-							if self.size(comment) > 0:
-								if self.size(comment) < 65535:
-									fields.append("comment")
-									data.append(comment)
-								else:
-									self._error_macro("The comment is too long")
-									return -1
-							else:
-								self._error_macro("The comment is too short")
-								return -1
-
-						fields.append("fk_project_child_id")
-						data.append(self.project_child_id)
-
-						db_id = self.insert("target", fields, data, True)
-
-						if db_id > 0:
-							self.history("Target: " + str(name) + " added.", "target", "auto")
-							return db_id
-					return -1
+						if display_error:
+							self._error_macro("target not found.")
+						return -2
 				else:
 					self._error_macro("Target name is too long")
 					return -1
@@ -590,8 +595,181 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	def add_target(self, name, comment=None):
+		target_id = self.get_target_id(name, display_error=False)
 
-	def get_bug_root(self, recorder_type, unique_ref):
+		if target_id == -2:
+			fields = []
+			data = []
+			fields.append("name")
+			data.append(name)
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			db_id = self.insert("target", fields, data, True)
+
+			if db_id > 0:
+				self.history("Target: " + str(name) + " added.", "target", "auto")
+				return db_id
+			else:
+				return db_id
+		else:
+			return target_id
+
+	def get_variant_root_id(self, target, arch, variant, display_error=True):
+		target_id = self.get_target_id(target, display_error=display_error)
+
+		if target_id > 0:
+			arch_id = self.get_arch_id(arch, display_error=display_error)
+			if arch_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_target_id")
+				data.append(target_id)
+
+				fields.append("fk_arch_id")
+				data.append(arch_id)
+
+
+				if self.size(variant) > 0:
+					if self.size(variant) <  81:
+						fields.append("variant")
+						data.append(variant)
+					else:
+						self._error_macro("The variant is too long")
+						return -1
+				else:
+					self._error_macro("The variant is too short")
+					return -1
+
+				variant_rows = self.select("variant_root_id", "variant_root", fields, data)
+
+				if self.size(variant_rows) > 0:
+					return variant_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("Variant root not found.")
+					return -2
+			else:
+				return arch_id
+		else:
+			return target_id
+
+
+	def add_variant_root(self, target, arch, variant, comment=None):
+		variant_root_id = self.get_variant_root_id(target, arch, variant, display_error=False)
+
+		if variant_root_id == -2:
+			target_id = self.get_target_id(target)
+			arch_id = self.get_arch_id(arch)
+
+			fields = []
+			data = []
+
+			fields.append("fk_target_id")
+			data.append(target_id)
+
+			fields.append("fk_arch_id")
+			data.append(arch_id)
+
+			fields.append("variant")
+			data.append(variant)
+
+			db_id = self.insert("variant_root", fields, data, True)
+
+			if db_id > 0:
+				return db_id
+			else:
+				return db_id
+
+		else:
+			return variant_root_id
+
+	def get_variant_exec_id(self, target, arch, variant, display_error=True):
+		if self.common_check(project_root=True, project_child=True, exec_id=True):
+			variant_root_id = self.get_variant_root_id(target, arch, variant, display_error=display_error)
+
+			if variant_root_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_exec_id")
+				data.append(self.exec_id)
+
+				fields.append("fk_variant_root_id")
+				data.append(variant_root_id)
+
+				variant_exec_rows = self.select("variant_exec_id", "variant_exec", fields, data)
+
+				if self.size(variant_exec_rows) > 0:
+					return variant_exec_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("Variant root not found.")
+					return -2
+			else:
+				return variant_root_id
+		else:
+			return -1
+
+
+	def add_variant_exec(self, target, arch, variant, comment=None):
+		variant_exec_id = self.get_variant_exec_id(target, arch, variant, display_error=False)
+
+		if variant_exec_id != -2:
+			self.reset_variant_exec_id()
+			self.variant_exec_id = variant_exec_id
+			return variant_exec_id
+		else:
+			variant_root_id = self.get_variant_root_id(target, arch, variant)
+
+			if variant_root_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_exec_id")
+				data.append(self.exec_id)
+
+				fields.append("fk_variant_root_id")
+				data.append(variant_root_id)
+
+				if comment:
+					if self.size(comment) > 0:
+						if self.size(comment) < 65535:
+							fields.append("comment")
+							data.append(comment)
+						else:
+							self._error_macro("The comment is too long")
+							return -1
+					else:
+						self._error_macro("The comment is too short")
+						return -1
+
+				db_id = self.insert("variant_exec", fields, data, True)
+
+				if db_id > 0:
+					self.reset_variant_exec_id()
+					self.variant_exec_id = variant_exec_id
+
+				return db_id
+			else:
+				return variant_root_id
+
+
+	def get_bug_root_id(self, recorder_type, unique_ref, display_error=True):
 		valid_record_type = ["pr", "jira"]
 
 		if recorder_type not in valid_record_type:
@@ -615,6 +793,8 @@ class TestReporter(My_SQL):
 					if self.size(bug_root_rows) > 0:
 						return bug_root_rows[0][0]
 					else:
+						if display_error:
+							self._error_macro("project root not found.")
 						return -2
 				else:
 					self._error_macro("Unique reference is too long")
@@ -626,11 +806,9 @@ class TestReporter(My_SQL):
 			return -1
 
 	def add_bug_root(self, recorder_type, unique_ref, summary=None, comment=None):
-		bug_root_id = self.get_bug_root(recorder_type, unique_ref)
+		bug_root_id = self.get_bug_root_id(recorder_type, unique_ref, display_error=False)
 
-		if bug_root_id > 0:
-			return bug_root_id
-		elif bug_root_id == -2:
+		if bug_root_id == -2:
 			fields = []
 			data = []
 
@@ -673,9 +851,9 @@ class TestReporter(My_SQL):
 		else:
 			return bug_root_id
 
-	def get_project_bug(self, recorder_type, unique_ref):
+	def get_project_bug_id(self, recorder_type, unique_ref, display_error=True):
 		if self.common_check(project_root=True, project_child=True):
-			bug_root_id = self.get_bug_root(recorder_type, unique_ref)
+			bug_root_id = self.get_bug_root_id(recorder_type, unique_ref, display_error=display_error)
 			if bug_root_id > 0:
 				fields = []
 				data = []
@@ -691,6 +869,8 @@ class TestReporter(My_SQL):
 				if self.size(project_bug_rows) > 0:
 					return project_bug_rows[0][0]
 				else:
+					if display_error:
+						self._error_macro("project bug not found.")
 					return -2
 
 			else:
@@ -703,7 +883,7 @@ class TestReporter(My_SQL):
 			bug_root_id = self.add_bug_root(recorder_type, unique_ref, summary, comment)
 
 			if bug_root_id > 0:
-				project_bug_id = self.get_project_bug(recorder_type, unique_ref)
+				project_bug_id = self.get_project_bug_id(recorder_type, unique_ref, display_error=False)
 
 				if project_bug_id > 0:
 					return project_bug_id
@@ -772,11 +952,11 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
-	def get_crash_type(self, name, show_error=True):
+	def get_crash_type_id(self, name, display_error=True):
 		if name in self.crash_type_dict:
 			return self.crash_type_dict[name]
 		else:
-			if show_error:
+			if display_error:
 				self._error_macro(str(name) + " crash type not found. Try calling add first.")
 			return -1
 
@@ -785,7 +965,7 @@ class TestReporter(My_SQL):
 			if self.size(name) > 0:
 				if self.size(name) < 46:
 
-					crash_type_id = self.get_crash_type(name, False)
+					crash_type_id = self.get_crash_type_id(name, display_error=False)
 
 					if crash_type_id  > 0:
 						return crash_type_id
@@ -827,7 +1007,7 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-	def get_test_suite_id(self, suite_name):
+	def get_test_suite_id(self, suite_name, display_error=True):
 		if self.common_check(project_root=True, project_child=True):
 			if self.size(suite_name) > 0:
 				if self.size(suite_name) < 61:
@@ -845,6 +1025,8 @@ class TestReporter(My_SQL):
 					if self.size(suite_name_rows) > 0:
 						return suite_name_rows[0][0]
 					else:
+						if display_error:
+							self._error_macro("test suite name not found.")
 						return -2
 				else:
 					self._error_macro("Suite name is too long")
@@ -856,11 +1038,9 @@ class TestReporter(My_SQL):
 			return -1
 
 	def add_test_suite(self, suite_name, comment=None):
-		rc = self.get_test_suite_id(suite_name)
+		test_suite_id = self.get_test_suite_id(suite_name, display_error=False)
 
-		if rc > 0:
-			return rc
-		elif rc == -2:
+		if test_suite_id == -2:
 			fields = []
 			data = []
 
@@ -887,9 +1067,9 @@ class TestReporter(My_SQL):
 				self.history("Test Suite: " + str(suite_name) + " added.", "suite", "auto")
 				return db_id
 		else:
-			return -1
+			return test_suite_id
 
-	def get_exec_abort(self, abort_name):
+	def get_exec_abort_id(self, abort_name, display_error=True):
 		if self.common_check(project_root=True, project_child=True):
 			if self.size(abort_name) > 0:
 				if self.size(abort_name) < 46:
@@ -907,6 +1087,8 @@ class TestReporter(My_SQL):
 					if self.size(exec_abort) > 0:
 						return exec_abort[0][0]
 					else:
+						if display_error:
+							self._error_macro("exec abort name not found.")
 						return -2
 				else:
 					self._error_macro("Abort name is too long")
@@ -917,13 +1099,10 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-
 	def add_exec_abort(self, abort_name, comment=None):
-		rc = self.get_exec_abort(abort_name)
+		exec_abort_id = self.get_exec_abort_id(abort_name, display_error=False)
 
-		if rc > 0:
-			return rc
-		elif rc == -2:
+		if exec_abort_id == -2:
 			fields = []
 			data = []
 
@@ -950,9 +1129,9 @@ class TestReporter(My_SQL):
 				self.history("Abort Type: " + str(abort_name) + " added.", "exec", "auto")
 				return db_id
 		else:
-			return -1
+			return exec_abort_id
 
-	def get_test_root(self, exec_path, name, params=None):
+	def get_test_root_id(self, exec_path, name, params=None, display_error=True):
 		if self.common_check(project_root=True, project_child=True):
 			if self.size(exec_path) > 0:
 				if self.size(exec_path) < 65535:
@@ -987,6 +1166,8 @@ class TestReporter(My_SQL):
 							if self.size(test_root_rows) > 0:
 								return test_root_rows[0][0]
 							else:
+								if display_error:
+									self._error_macro("Test root not found.")
 								return -2
 
 						else:
@@ -1005,11 +1186,9 @@ class TestReporter(My_SQL):
 			return -1
 
 	def add_test_root(self, exec_path, name, params=None, comment=None):
-		rc = self.get_test_root(exec_path, name, params)
+		test_root_id = self.get_test_root_id(exec_path, name, params, display_error=False)
 
-		if rc > 0:
-			return rc
-		elif rc == -2:
+		if test_root_id == -2:
 			fields = []
 			data = []
 
@@ -1042,17 +1221,17 @@ class TestReporter(My_SQL):
 				self.history("Test root: " + str(exec_path) + "/" + str(name) + " " + str(params) + " added.", "test", "auto")
 				return db_id
 		else:
-			return -1
+			return test_root_id
 
-	def get_test_revision(self, exec_path, name, params, revision_string=None):
-		rc = self.get_test_root(exec_path, name, params)
+	def get_test_revision_id(self, exec_path, name, params, revision_string=None, display_error=True):
+		test_root_id = self.get_test_root_id(exec_path, name, params, display_error=display_error)
 
-		if rc > 0:
+		if test_root_id > 0:
 			fields = []
 			data = []
 
 			fields.append("fk_test_root_id")
-			data.append(rc)
+			data.append(test_root_id)
 
 			if self.size(revision_string) > 0:
 				if self.size(revision_string) < 65535:
@@ -1071,14 +1250,16 @@ class TestReporter(My_SQL):
 			if self.size(test_rev_rows) > 0:
 				return test_rev_rows[0][0]
 			else:
+				if display_error:
+					self._error_macro("Test revision was not found!")
 				return -2
 		else:
-			return -1
+			return test_root_id
 
 	def add_test_revision(self, exec_path, name, params, revision_string=None, comment=None):
-		rc = self.get_test_revision(exec_path, name, params, revision_string)
-		if rc > 0:
-			return rc
+		test_revisison_id = self.get_test_revision_id(exec_path, name, params, revision_string, display_error=False)
+		if test_revisison_id > 0:
+			return test_revisison_id
 		else:
 			test_root_id = self.add_test_root(exec_path, name, params, comment)
 
@@ -1129,7 +1310,6 @@ class TestReporter(My_SQL):
 				if exec_id > 0:
 					fields = []
 					data = []
-
 					fields.append("fk_project_child_id")
 					data.append(self.project_child_id)
 
@@ -1188,6 +1368,187 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
+	def add_src(self, src_type, url_path, unique_id, src_description, comment=None):
+		if self.common_check(project_root=True, project_child=True, exec_id=True):
+			valid_src_types  = ['build', 'cvs', 'svn', 'git', 'other', 'path']
+
+			if src_type in valid_src_types:
+				fields = []
+				data = []
+
+				fields.append("fk_exec_id")
+				data.append(self.exec_id)
+
+				if self.size(url_path) > 0:
+					if self.size(url_path) < 65535:
+						fields.append("url_path")
+						data.append(url_path)
+					else:
+						self._error_macro("URL/Path is too long")
+						return -1
+				else:
+					self._error_macro("URL/Path is too short")
+					return -1
+
+				if self.size(unique_id) > 0:
+					if self.size(unique_id) < 65535:
+						fields.append("unique_id")
+						data.append(unique_id)
+					else:
+						self._error_macro("Unique identifier is too long")
+						return -1
+				else:
+					self._error_macro("Unique identifier is too short")
+					return -1
+
+				# Check to see if this entry already exists.
+				src_rows = self.select("src_id", "src", fields, data)
+
+				if self.size(src_rows) > 0:
+					return src_rows[0][0]
+				else:
+					if self.size(src_description) > 0:
+						if self.size(src_description) < 65535:
+							fields.append("description")
+							data.append(src_description)
+						else:
+							self._error_macro("Unique identifier is too long")
+							return -1
+					else:
+						self._error_macro("Unique identifier is too short")
+						return -1
+
+					db_id = self.insert("src", fields, data, True)
+					return db_id
+			else:
+				self._error_macro(str(src_type) + " is not a valid source type.")
+				return -1
+		else:
+			return -1
+
+	def get_test_exec_id(self, result, test_suite_name, test_exec_path, test_name, test_params, test_unique_ref=None, display_error=True):
+		if self.common_check(project_root=True, project_child=True, exec_id=True, variant_exec_id=True):
+			result_tag_id = self.get_tag_result_id(result, display_error=display_error)
+
+			if result_tag_id > 0:
+				test_suite_id = self.get_test_suite_id(test_suite_name, display_error=display_error)
+
+				if test_suite_id > 0:
+					test_rev_id = self.get_test_revision_id(test_exec_path, test_name, test_params, test_unique_ref, display_error=display_error)
+
+					if test_rev_id > 0:
+						fields = []
+						data = []
+
+						fields.append("fk_variant_exec_id")
+						data.append(self.variant_exec_id)
+
+						fields.append("fk_test_suite_root_id")
+						data.append(test_suite_id)
+
+						fields.append("fk_test_revision_id")
+						data.append(test_rev_id)
+
+						fields.append("fk_result_tag_id")
+						data.append(result_tag_id)
+
+						# Check to see if this entry already exists.
+						test_exec_rows = self.select("test_exec_id", "test_exec", fields, data)
+
+						if self.size(test_exec_rows) > 0:
+							return test_exec_rows[0][0]
+						else:
+							if display_error:
+								self._error_macro("Test execution not found.")
+							return -2
+					else:
+						return test_rev_id
+				else:
+					return test_suite_id
+			else:
+				return result_tag_id
+		else:
+			return -1
+
+	def get_attachment_type_id(self, name, display_error=True):
+		if self.common_check():
+			fields = []
+			data = []
+
+			if self.size(name) > 0:
+				if self.size(name) < 65535:
+					fields.append("name")
+					data.append(name)
+				else:
+					self._error_macro("Attachment type is too long")
+					return -1
+			else:
+				self._error_macro("Attachment type is too short")
+				return -1
+
+			attachment_type_rows = self.select("attachment_type_id", "attachment_type", fields, data)
+
+			if self.size(attachment_type_rows) > 0:
+				return attachment_type_rows[0][0]
+			else:
+				if display_error:
+					self._error_macro("Attachment type (" + str(name) + ") not found.")
+				return -2
+		else:
+			return -1
+
+	def add_attachment_type(self, name, mime_type, comment=None):
+		attachment_type_id = self.get_attachment_type_id(name, display_error=False)
+
+		if attachment_type_id == -2:
+			fields = []
+			data = []
+
+			if self.size(name) > 0:
+				if self.size(name) < 65535:
+					fields.append("name")
+					data.append(name)
+				else:
+					self._error_macro("Attachment type is too long")
+					return -1
+			else:
+				self._error_macro("Attachment type is too short")
+				return -1
+
+			if self.size(mime_type) > 0:
+				if self.size(mime_type) < 65535:
+					fields.append("mime_type")
+					data.append(mime_type)
+				else:
+					self._error_macro("The mime type is too long")
+					return -1
+			else:
+				self._error_macro("The mime type is too short")
+				return -1
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+
+			db_id = self.insert("attachment_type", fields, data, True)
+
+			return db_id
+
+		else:
+			return attachment_type_id
+
+	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, test_unique_ref=None, start_line=-1, endline=-1,  display_error=True):
+		pass
+
 report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project_db")
 
 if report.connect():
@@ -1195,6 +1556,19 @@ if report.connect():
 	print "Select Project Root:", report.select_project_root("Mainline")
 	print "Project Child:", report.add_project_child("Kernel", "/media/Backup/regression_data/logs/", user.ftp_host, user.ftp_usr_name, user.ftp_password)
 	print "Select Child:", report.select_project_child("Kernel")
+
+	print "Get Attachment Type:", report.get_attachment_type_id("primary_log")
+	print "Add Attachment Type:", report.add_attachment_type("primary_log", "plain/text", "Primary log file")
+	print "Add Attachment Type:", report.add_attachment_type("build", "plain/text", "BSP Build file")
+	print "Add Attachment Type:", report.add_attachment_type("site", "plain/text", "Site EXP File")
+	print "Add Attachment Type:", report.add_attachment_type("symbol", "binary", "Symbol File")
+	print "Add Attachment Type:", report.add_attachment_type("image", "plain/text", "Image text file")
+	print "Add Attachment Type:", report.add_attachment_type("sum", "plain/text", "Yoyo Sum File")
+	print "Add Attachment Type:", report.add_attachment_type("kdump_index", "plain/text", "Kdump index file")
+	print "Add Attachment Type:", report.add_attachment_type("kdump", "plain/text", "Kdump File")
+	print "Get Attachment Type:", report.get_attachment_type_id("primary_log")
+
+
 	print "Add Arch:", report.add_arch("x86")
 	print "Add Arch:", report.add_arch("x86_64")
 	print "Add Arch:", report.add_arch("arm")
@@ -1279,14 +1653,14 @@ if report.connect():
 	print "Add Bug Root:", report.add_bug_root("jira", "123456789", "This is a stupid summary")
 	print "Add Bug Root:", report.add_bug_root("jira", "123456789", "This is a stupid summary")
 
-	print "Get Project Bug:", report.get_project_bug("jira", "123456789")
-	print "Get Project Bug:", report.get_project_bug("jira", "123456790")
+	print "Get Project Bug:", report.get_project_bug_id("jira", "123456789")
+	print "Get Project Bug:", report.get_project_bug_id("jira", "123456790")
 	print "Add Project Bug:", report.add_project_bug("jira", "123456789")
 	print "Add Project Bug:", report.add_project_bug("jira", "123456789")
 	print "Add Project Bug:", report.add_project_bug("jira", "123456790")
 	print "Add Project Bug:", report.add_project_bug("jira", "123456790")
-	print "Get Project Bug:", report.get_project_bug("jira", "123456789")
-	print "Get Project Bug:", report.get_project_bug("jira", "123456790")
+	print "Get Project Bug:", report.get_project_bug_id("jira", "123456789")
+	print "Get Project Bug:", report.get_project_bug_id("jira", "123456790")
 
 
 	print "Add Crash Type: ", report.add_crash_type("sigsegv")
@@ -1301,32 +1675,48 @@ if report.connect():
 	print "Add Test Suite: ", report.add_test_suite("Testware_Juan")
 	print "Add Test Suite: ", report.add_test_suite("Testware_bob")
 	print "Get Test Suite: ", report.get_test_suite_id("Testware_bob")
-	print "Get Exec Abort: ", report.get_exec_abort("user_abort")
+	print "Get Exec Abort: ", report.get_exec_abort_id("user_abort")
 	print "Get Exec Abort: ", report.add_exec_abort("user_abort")
 	print "Get Exec Abort: ", report.add_exec_abort("timeout")
 	print "Get Exec Abort: ", report.add_exec_abort("user_abort")
-	print "Get Exec Abort: ", report.get_exec_abort("user_abort")
+	print "Get Exec Abort: ", report.get_exec_abort_id("user_abort")
 
-	print "Get Test Root:", report.get_test_root("./", "Ian", "-is -the best")
+	print "Get Test Root:", report.get_test_root_id("./", "Ian", "-is -the best")
 	print "Get Test Root:", report.add_test_root("./", "Ian", "-is -the best")
 	print "Get Test Root:", report.add_test_root("./", "Norman", "-is -odd")
 	print "Get Test Root:", report.add_test_root("./", "Ian", "-is -the best")
-	print "Get Test Root:", report.get_test_root("./", "Ian", "-is -the best")
+	print "Get Test Root:", report.get_test_root_id("./", "Ian", "-is -the best")
 
-	print "Get Test Rev:", report.get_test_revision("./", "Ian", "-is -the best", "2123411")
+	print "Get Test Rev:", report.get_test_revision_id("./", "Ian", "-is -the best", "2123411")
 	print "Add Test Rev:", report.add_test_revision("./", "Ian", "-is -the best", "2123411")
 	print "Add Test Rev:", report.add_test_revision("./", "Ian", "-is -the best", "2123411")
-	print "Get Test Rev:", report.get_test_revision("./", "Ian", "-is -the best", "2123411")
+	print "Get Test Rev:", report.get_test_revision_id("./", "Ian", "-is -the best", "2123411")
 	print "Add Test Rev:", report.add_test_revision("./", "Rebecca", "-awesome", "1")
-	print "Get Test Rev:", report.get_test_revision("./", "Rebecca", "-awesome", "1")
+	print "Get Test Rev:", report.get_test_revision_id("./", "Rebecca", "-awesome", "1")
 
-	print "Get Test Rev:", report.get_test_revision("./", "None", "-awesome")
+	print "Get Test Rev:", report.get_test_revision_id("./", "None", "-awesome")
 	print "Add Test Rev:", report.add_test_revision("./", "None", "-awesome")
-	print "Get Test Rev:", report.get_test_revision("./", "None", "-awesome")
+	print "Get Test Rev:", report.get_test_revision_id("./", "None", "-awesome")
 
 	print "Set Exec:", report.set_exec_id(100000)
 	print "Set Exec:", report.set_exec_id(1)
 	print "Register Exec:", report.register_exec()
 	print "Set Exec:", report.set_exec_id(1)
+	print "Add Src:", report.add_src("svn", "http://svn.shim.sham/man", "12345", "toolchain")
+	print "Add Src:", report.add_src("svn", "http://svn.shim.sham/man", "12345", "toolchain")
+
+	print "Get Test Rev:", report.get_test_revision_id("./", "None", "-awesome")
+
+	print "Get Root Variant:", report.get_variant_root_id("qnet04", "x86_64", "o.smp")
+	print "Add Root Variant:", report.add_variant_root("qnet04", "x86_64", "o.smp")
+	print "Get Root Variant:", report.get_variant_root_id("qnet04", "x86_64", "o.smp")
+
+	print "Get Variant Exec:", report.get_variant_exec_id("qnet04", "x86_64", "o.smp")
+	print "Add Variant Exec:", report.add_variant_exec("qnet04", "x86_64", "o.smp")
+	print "Add Variant Exec:", report.add_variant_exec("qnet20", "x86_64", "o.smp")
+	print "Get Variant Exec:", report.get_variant_exec_id("qnet04", "x86_64", "o.smp")
+
+	print "Get Variant Exec:", report.get_test_exec_id("pass", "Testware_Juan", "Ian",  "-is -the best", "2123411")
+
 
 	report.commit()
