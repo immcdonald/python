@@ -2020,6 +2020,73 @@ class TestReporter(My_SQL):
 		else:
 			return test_exec_id
 
+	def get_test_metric_id(self, line_marker_id, value, unit, display_error=True):
+		if self.common_check():
+			fields = []
+			data = []
+
+			fields.append("fk_line_marker_id")
+			data.append(line_marker_id)
+
+			fields.append("metric")
+			data.append(value)
+
+			if self.size(unit) > 0:
+				if self.size(unit) < 11:
+					fields.append("unit")
+					data.append(unit)
+				else:
+					self._error_macro("The unit is too long")
+					return -1
+			else:
+				self._error_macro("The unit is too short")
+				return -1
+
+			test_metric_rows = self.select("test_metric_id", "test_metric", fields, data)
+
+			if self.size(test_metric_rows) > 0:
+				return test_metric_rows[0][0]
+			else:
+				if display_error:
+					self._error_macro("Test Metric not found.")
+				return -2
+
+		else:
+			return -1
+
+	def add_test_metric(self, line_marker_id, value, unit, comment=None):
+		test_metric_id = self.get_test_metric_id(line_marker_id, value, unit, display_error=False)
+
+		if test_metric_id == -2:
+			fields = []
+			data = []
+
+			fields.append("fk_line_marker_id")
+			data.append(line_marker_id)
+
+			fields.append("metric")
+			data.append(value * 1.0)
+
+			fields.append("unit")
+			data.append(unit)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("test_metric", fields, data, False)
+
+			return db_id
+		else:
+			return test_metric_id
 
 
 report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project_db")
@@ -2211,5 +2278,13 @@ if report.connect():
 	print "Get Line Marker", report.get_line_marker_id(1,"test", 0, 100)
 	print "Add Line Marker", report.add_line_marker(1,"test", 0, None, test_exec_id=1)
 	print "Get Line Marker", report.get_line_marker_id(1,"test", 0, None)
+
+
+	print "Get Test Metric ID", report.get_test_metric_id(1, 0.234, "secs")
+	print "Add Test Metric", report.add_test_metric(1, 0.234, "secs")
+	print "Get Test Metric ID", report.get_test_metric_id(1, 0.234, "secs")
+
+
+	print "Done"
 
 	report.commit()
