@@ -798,14 +798,10 @@ class TestReporter(My_SQL):
 
 				if db_id > 0:
 					self.reset_variant_exec_id()
-					self.variant_exec_id = variant_exec_id
-
+					self.variant_exec_id = db_id
 				return db_id
 			else:
 				return variant_root_id
-
-
-
 
 	def get_bug_root_id(self, recorder_type, unique_ref, display_error=True):
 		valid_record_type = ["pr", "jira"]
@@ -1602,7 +1598,7 @@ class TestReporter(My_SQL):
 			fields.append("base_file_name")
 			data.append(root_file_name)
 
-			fields.append("ext")
+			fields.append("src_ext")
 			data.append(extension)
 
 			attachment_rows = self.select("attachment_id", "attachment", fields, data)
@@ -1616,7 +1612,7 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-	def add_attachment(self, attachment_type, full_attachment_src_path, test_result_id=None, supress_exec_id=False, supress_variant_exec_id=False, ):
+	def add_attachment(self, attachment_type, full_attachment_src_path, comment=None, supress_exec_id=False, supress_variant_exec_id=False):
 
 		known_compressed_extensions = [".zip", ".gz"]
 
@@ -1631,6 +1627,10 @@ class TestReporter(My_SQL):
 						local_dir_name = os.path.dirname(full_attachment_src_path)
 						base_name = os.path.basename(full_attachment_src_path)
 						root_file_name, extension = os.path.splitext(base_name)
+						storage_extension  = extension
+
+						if self.size(local_dir_name) == 0:
+							local_dir_name = "."
 
 						fields = []
 						data = []
@@ -1638,8 +1638,30 @@ class TestReporter(My_SQL):
 						fields.append("fk_project_child_id")
 						data.append(self.project_child_id)
 
+						fields.append("fk_attachment_type_id")
+						data.append(attachment_type_id)
+
 						fields.append("src_path")
 						data.append(local_dir_name)
+
+						fields.append("base_file_name")
+						data.append(root_file_name)
+
+						fields.append("src_ext")
+						data.append(extension)
+
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
+							else:
+								self._error_macro("The comment is too short")
+								return -1
+
 
 						ftp = my_ftp(self.ftp_host,
 									 self.ftp_user_name,
@@ -1688,7 +1710,6 @@ class TestReporter(My_SQL):
 
 												if self.variant_exec_id is not None:
 													if supress_variant_exec_id is False:
-
 														variant_data = report.get_variant_exec_info(self.variant_exec_id)
 
 														if variant_data:
@@ -1725,13 +1746,17 @@ class TestReporter(My_SQL):
 										else:
 											return -1
 
-								if test_result_id:
-									fields.append("fk_test_result_id")
-									data.append(test_result_id)
+
+								fields.append("storage_rel_path")
+								data.append(relative_dest_path)
+
+								remote_path = os.path.join(dest_path, relative_dest_path)
 
 								# We want to store only compressed files on the server
 								# so see if this file is already compressed.
 								if extension not in known_compressed_extensions:
+									fields.append("compressed_state_enum")
+									data.append("post_compressed_gz")
 
 									# If not then we will compress it before we copy it
 									new_file_name = "";
@@ -1740,9 +1765,11 @@ class TestReporter(My_SQL):
 
 									for index in range(-1, 1000):
 										if index == -1:
-												file_name = root_file_name + extension + ".gz"
+												storage_extension = ".gz"
+												file_name = root_file_name + extension + storage_extension
 										else:
-												file_name = root_file_name + extension + "-%03d" % index + ".gz"
+												storage_extension = "-%03d" % index + ".gz"
+												file_name = root_file_name + extension + storage_extension
 
 										output_path = os.path.join(local_dir_name, file_name)
 
@@ -1753,11 +1780,39 @@ class TestReporter(My_SQL):
 										self._error_macro(full_attachment_src_path + " Failed to find an acceptable name to generate a compressed file.")
 										return -1
 
-									dest_file_name = os.path.join(relative_dest_path, file_name)
+									fields.append("storage_ext")
+									data.append(storage_extension)
 
-									print dest_file_name
+									full_remote_path = os.path.join(remote_path, file_name)
+
+									# Compressed the file
+									with open(full_attachment_src_path, "rb") as fp_in:
+										with gzip.open(output_path, "wb") as fp_output:
+											shutil.copyfileobj(fp_in, fp_output)
+
+									if ftp.binary_file_transfer_2_file(output_path, full_remote_path):
+										# Now that the file has been stored. Remove the compressed file that we created from the local host.
+										os.remove(output_path)
+
+										db_id = self.insert("attachment", fields, data, True)
+
+										return db_id
+									else:
+										return -1
 								else:
-									pass
+									fields.append("compressed_state_enum")
+									data.append("src_compressed")
+
+									fields.append("storage_ext")
+									data.append(storage_extension)
+
+									full_remote_path = os.path.join(remote_path, base_name)
+
+									if ftp.binary_file_transfer_2_file(full_attachment_src_path, full_remote_path):
+										db_id = self.insert("attachment", fields, data, True)
+										return db_id
+									else:
+										return -1
 							else:
 								return -1
 						else:
@@ -1937,17 +1992,25 @@ if report.connect():
 	print "Add Root Variant:", report.add_variant_root("qnet04", "x86_64", "o.smp")
 	print "Get Root Variant:", report.get_variant_root_id("qnet04", "x86_64", "o.smp")
 
+	print "-"* 80
+
 	print "Get Variant Exec:", report.get_variant_exec_id("qnet04", "x86_64", "o.smp")
+	print "="* 80
 	print "Add Variant Exec:", report.add_variant_exec("qnet04", "x86_64", "o.smp")
 	print "Add Variant Exec:", report.add_variant_exec("qnet20", "x86_64", "o.smp")
+	print "*"* 80
 	print "Get Variant Exec:", report.get_variant_exec_id("qnet04", "x86_64", "o.smp")
 
+	print "-"* 80
+
+	#print "Get file id", report.get_attachment_id("./blob.txt")
+	#print "Add file", report.add_attachment("primary_log", "./blob.txt")
+
+	print "Add file", report.add_attachment("primary_log", "TestReporter.py")
+	print "Add file", report.add_attachment("primary_log", "TestReporter_2.py.zip")
+
+
 	print "Get Variant Exec:", report.get_test_exec_id("pass", "Testware_Juan", "Ian",  "-is -the best", "2123411")
-
-
-	print "Get file id", report.get_attachment_id("./blob.txt")
-	print "Add file", report.add_attachment("primary_log", "./blob.txt")
-	print "Add file", report.add_attachment("primary_log", "./TestReporter.py")
 
 
 	report.commit()
