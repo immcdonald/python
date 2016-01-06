@@ -709,7 +709,6 @@ class TestReporter(My_SQL):
 		else:
 			return variant_root_id
 
-
 	def get_variant_exec_info(self, variant_exec_id):
 		if self.common_check():
 			query = 'SELECT target.name as target, arch.name as arch, variant_root.variant FROM target, arch, variant_root, variant_exec WHERE variant_exec.fk_variant_root_id=variant_root.variant_root_id and variant_root.fk_target_id=target.target_id and variant_root.fk_arch_id=arch.arch_id and variant_exec_id=%s'
@@ -732,7 +731,6 @@ class TestReporter(My_SQL):
 				return None
 		else:
 			return None
-
 
 	def get_variant_exec_id(self, target, arch, variant, display_error=True):
 		if self.common_check(project_root=True, project_child=True, exec_id=True):
@@ -963,6 +961,57 @@ class TestReporter(My_SQL):
 				return bug_root_id
 		else:
 			return -1
+
+	def get_bug_exec_id(self, line_marker_id, recorder_type, unique_ref, display_error=True):
+		if self.common_check():
+			project_bug_id = self.get_project_bug_id(recorder_type, unique_ref)
+
+			if project_bug_id:
+				fields = []
+				data = []
+
+				fields.append("fk_project_bug_id")
+				data.append(project_bug_id)
+
+				fields.append("fk_line_marker_id")
+				data.append(line_marker_id)
+
+				bug_exec_rows = self.select("bug_exec_id", "bug_exec", fields, data)
+
+				if self.size(bug_exec_rows) > 0:
+					return bug_exec_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("Crash exec not found.")
+					return -2
+			else:
+				return project_bug_id
+		else:
+			return -1
+
+	def add_bug_exec(self, line_marker_id, recorder_type, unique_ref, comment=None):
+		bug_exec_id = self.get_bug_exec_id(line_marker_id, recorder_type, unique_ref, display_error=False)
+
+		if bug_exec_id == -2:
+			project_bug_id = self.get_project_bug_id(recorder_type, unique_ref)
+
+			if project_bug_id:
+				fields = []
+				data = []
+
+				fields.append("fk_project_bug_id")
+				data.append(project_bug_id)
+
+				fields.append("fk_line_marker_id")
+				data.append(line_marker_id)
+
+				db_id = self.insert("bug_exec", fields, data, False)
+
+				return db_id
+			else:
+				return project_bug_id
+		else:
+			return bug_exec_id
 
 	def load_crash_types(self):
 		if self.common_check(project_root=True, project_child=True):
@@ -2025,11 +2074,10 @@ class TestReporter(My_SQL):
 			fields = []
 			data = []
 
+			value = value + 1.0
+
 			fields.append("fk_line_marker_id")
 			data.append(line_marker_id)
-
-			fields.append("metric")
-			data.append(value)
 
 			if self.size(unit) > 0:
 				if self.size(unit) < 11:
@@ -2041,6 +2089,17 @@ class TestReporter(My_SQL):
 			else:
 				self._error_macro("The unit is too short")
 				return -1
+
+
+			query = 'SELECT test_metric_id FROM test_metric'
+
+			query = query + " WHERE " + "=%s and ".join(fields) + "=%s"
+
+			query = query + " and metric BETWEEN "  + str(value - 0.00000000001) + " and "  + str(value + 0.00000000001)
+
+			self.query(query, data)
+
+			line_markers_rows = self.cursor.fetchall()
 
 			test_metric_rows = self.select("test_metric_id", "test_metric", fields, data)
 
@@ -2088,6 +2147,56 @@ class TestReporter(My_SQL):
 		else:
 			return test_metric_id
 
+	def get_crash_exec_id(self, line_marker_id, crash_type, display_error=True):
+		if self.common_check():
+			crash_type_id = self.get_crash_type_id(crash_type)
+
+			if crash_type_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_line_marker_id")
+				data.append(line_marker_id)
+
+				fields.append("fk_crash_type_id")
+				data.append(crash_type_id)
+
+				crash_exec_rows = self.select("crash_exec_id", "crash_exec", fields, data)
+
+				if self.size(crash_exec_rows) > 0:
+					return crash_exec_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("Crash exec not found.")
+					return -2
+			else:
+				return crash_type_id
+		else:
+			return -1
+
+	def add_crash_exec(self, line_marker_id, crash_type):
+		crash_exec_id = self.get_crash_exec_id(line_marker_id, crash_type)
+
+		if crash_exec_id == -2:
+			crash_type_id = self.get_crash_type_id(crash_type)
+
+			if crash_type_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_line_marker_id")
+				data.append(line_marker_id)
+
+				fields.append("fk_crash_type_id")
+				data.append(crash_type_id)
+
+				db_id = self.insert("crash_exec", fields, data, False)
+
+				return db_id
+			else:
+				return crash_type_id
+		else:
+			return crash_exec_id
 
 report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project_db")
 
@@ -2280,9 +2389,17 @@ if report.connect():
 	print "Get Line Marker", report.get_line_marker_id(1,"test", 0, None)
 
 
-	print "Get Test Metric ID", report.get_test_metric_id(1, 0.234, "secs")
+	print "Get Test Metric ID", report.get_test_metric_id(2, 0.234, "secs")
 	print "Add Test Metric", report.add_test_metric(1, 0.234, "secs")
 	print "Get Test Metric ID", report.get_test_metric_id(1, 0.234, "secs")
+
+	print "Get Crash Exec ID", report.get_crash_exec_id(1, "sigsegv")
+	print "Add Crash Exec", report.add_crash_exec(1, "sigsegv")
+	print "Get Crash Exec ID", report.get_crash_exec_id(1, "sigsegv")
+
+	print "Get Bug EXEC ID ", report.get_bug_exec_id(1, "jira", "123456789")
+	print "Add Bug EXEC ", report.add_bug_exec(1, "jira", "123456789")
+	print "Get Bug EXEC ID ", report.get_bug_exec_id(1, "jira", "123456789")
 
 
 	print "Done"
