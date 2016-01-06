@@ -446,7 +446,7 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
-	def get_line_marker_id(self, line_marker_type, display_error=True):
+	def get_line_marker_type_id(self, line_marker_type, display_error=True):
 		if line_marker_type in self.line_marker_dict:
 			return self.line_marker_dict[line_marker_type]
 		else:
@@ -459,7 +459,7 @@ class TestReporter(My_SQL):
 			if self.size(line_marker_type) > 0:
 				if self.size(line_marker_type) < 46:
 
-					line_marker_id = self.get_line_marker_id(line_marker_type, display_error=False)
+					line_marker_id = self.get_line_marker_type_id(line_marker_type, display_error=False)
 
 					if line_marker_id > 0:
 						return line_marker_id
@@ -1589,6 +1589,9 @@ class TestReporter(My_SQL):
 			base_name = os.path.basename(full_attachment_src_path)
 			root_file_name, extension = os.path.splitext(base_name)
 
+			if self.size(local_dir_name) == 0:
+				local_dir_name = "."
+
 			fields.append("fk_project_child_id")
 			data.append(self.project_child_id)
 
@@ -1828,8 +1831,196 @@ class TestReporter(My_SQL):
 			self._error_macro(full_attachment_src_path + " does not exist or is not accessable")
 			return -1
 
-	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, test_unique_ref=None, start_line=-1, endline=-1,  display_error=True):
-		pass
+	def get_line_marker_id(self, attachment_id, marker_type, start_line, end_line=None, display_error=True):
+		if self.common_check():
+			marker_type_id = self.get_line_marker_type_id(marker_type,  display_error=display_error)
+
+			if marker_type_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_attachment_id")
+				data.append(attachment_id)
+
+				fields.append("fk_line_marker_type_id")
+				data.append(marker_type_id)
+
+				fields.append("start")
+				data.append(start_line)
+
+				query = 'SELECT line_marker_id FROM line_marker'
+
+				query = query + " WHERE " + "=%s and ".join(fields) + "=%s"
+
+				if end_line:
+					query = query + " and end=%s"
+					data.append(end_line)
+				else:
+					query = query + " and end IS NULL"
+
+				self.query(query, data)
+
+				line_markers_rows = self.cursor.fetchall()
+
+				if self.size(line_markers_rows) > 0:
+					return line_markers_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("Matching line marker not found.")
+					return -2
+			else:
+				return marker_type_id
+		else:
+			return -1
+
+
+	def add_line_marker(self, attachment_id, marker_type, start_line, end_line=None, test_exec_id=None, comment=None):
+		if self.common_check():
+			line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
+
+			if line_marker_id == -2:
+				marker_type_id = self.get_line_marker_type_id(marker_type)
+
+				if marker_type_id > 0:
+					fields = []
+					data = []
+
+					fields.append("fk_attachment_id")
+					data.append(attachment_id)
+
+					fields.append("fk_line_marker_type_id")
+					data.append(marker_type_id)
+
+					fields.append("start")
+					data.append(start_line)
+
+					if end_line:
+						fields.append("end")
+						data.append(end_line)
+
+					if test_exec_id:
+						fields.append("fk_test_exec_id")
+						data.append(test_exec_id)
+
+					if comment:
+						if self.size(comment) > 0:
+							if self.size(comment) < 65535:
+								fields.append("comment")
+								data.append(comment)
+							else:
+								self._error_macro("The comment is too long")
+								return -1
+						else:
+							self._error_macro("The comment is too short")
+							return -1
+
+
+					db_id = self.insert("line_marker", fields, data, True)
+
+					return db_id
+
+				else:
+					return marker_type_id
+			else:
+				return line_marker_id
+		else:
+			return -1
+
+	def get_test_exec_id(self, result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id=None, display_error=True):
+		if self.common_check(project_root=True, project_child=True, exec_id=True, variant_exec_id=True):
+			result_id = self.get_tag_result_id(result)
+			if result_id > 0:
+				suite_name_id = self.get_test_suite_id(test_suite_name)
+
+				if suite_name_id > 0:
+					test_revision_id = self.get_test_revision_id(test_exec_path, test_name, test_params, unique_test_rev_id)
+
+					if test_revision_id:
+						fields = []
+						data = []
+
+						fields.append("fk_variant_exec_id")
+						data.append(self.variant_exec_id)
+
+						fields.append("fk_test_suite_root_id")
+						data.append(suite_name_id)
+
+						fields.append("fk_test_revision_id")
+						data.append(test_revision_id)
+
+						fields.append("fk_result_tag_id")
+						data.append(result_id)
+
+						test_exec_rows = self.select("test_exec_id", "test_exec", fields, data)
+
+						if self.size(test_exec_rows) > 0:
+							return test_exec_rows[0][0]
+						else:
+							if display_error:
+								self._error_macro("Test Exec: [" + str(test_suite_name) + "] " + str(test_exec_path) + "/"+ test_name + " " + test_params + " {" + result + "} not found.")
+							return -2
+					else:
+						return test_revision_id
+				else:
+					return suite_name_id
+			else:
+				return result_id
+		else:
+			return -1
+
+	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id=None, comment=None):
+		test_exec_id = self.get_test_exec_id(result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id, display_error=None)
+
+		if test_exec_id == -2:
+			result_id = self.get_tag_result_id(result)
+			if result_id > 0:
+				suite_name_id = self.get_test_suite_id(test_suite_name)
+
+				if suite_name_id > 0:
+					test_revision_id = self.get_test_revision_id(test_exec_path, test_name, test_params, unique_test_rev_id)
+
+					if test_revision_id:
+						fields = []
+						data = []
+
+						fields.append("fk_variant_exec_id")
+						data.append(self.variant_exec_id)
+
+						fields.append("fk_test_suite_root_id")
+						data.append(suite_name_id)
+
+						fields.append("fk_test_revision_id")
+						data.append(test_revision_id)
+
+						fields.append("fk_result_tag_id")
+						data.append(result_id)
+
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
+							else:
+								self._error_macro("The comment is too short")
+								return -1
+
+						db_id = self.insert("test_exec", fields, data, False)
+
+						return db_id
+
+					else:
+						return test_revision_id
+				else:
+					return suite_name_id
+			else:
+				return result_id
+		else:
+			return test_exec_id
+
+
 
 report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project_db")
 
@@ -1980,8 +2171,16 @@ if report.connect():
 	print "Get Test Rev:", report.get_test_revision_id("./", "None", "-awesome")
 
 	print "Set Exec:", report.set_exec_id(100000)
-	print "Set Exec:", report.set_exec_id(1)
-	print "Register Exec:", report.register_exec()
+
+	print "Set Exec:",
+
+
+	rc = report.set_exec_id(1)
+	print  rc
+
+	if rc < 0:
+		print "Register Exec:", report.register_exec()
+
 	print "Set Exec:", report.set_exec_id(1)
 	print "Add Src:", report.add_src("svn", "http://svn.shim.sham/man", "12345", "toolchain")
 	print "Add Src:", report.add_src("svn", "http://svn.shim.sham/man", "12345", "toolchain")
@@ -1992,25 +2191,25 @@ if report.connect():
 	print "Add Root Variant:", report.add_variant_root("qnet04", "x86_64", "o.smp")
 	print "Get Root Variant:", report.get_variant_root_id("qnet04", "x86_64", "o.smp")
 
-	print "-"* 80
-
 	print "Get Variant Exec:", report.get_variant_exec_id("qnet04", "x86_64", "o.smp")
-	print "="* 80
 	print "Add Variant Exec:", report.add_variant_exec("qnet04", "x86_64", "o.smp")
 	print "Add Variant Exec:", report.add_variant_exec("qnet20", "x86_64", "o.smp")
-	print "*"* 80
 	print "Get Variant Exec:", report.get_variant_exec_id("qnet04", "x86_64", "o.smp")
 
-	print "-"* 80
-
-	#print "Get file id", report.get_attachment_id("./blob.txt")
-	#print "Add file", report.add_attachment("primary_log", "./blob.txt")
+	print "Get file id", report.get_attachment_id("./blob.txt")
+	print "Add file", report.add_attachment("primary_log", "./blob.txt")
 
 	print "Add file", report.add_attachment("primary_log", "TestReporter.py")
 	print "Add file", report.add_attachment("primary_log", "TestReporter_2.py.zip")
 
+	print "Get Test Exec:", report.get_test_exec_id("pass", "Testware_Juan", "./" ,"Ian",  "-is -the best", "2123411")
+	print "Add Test Exec:", report.add_test_exec("pass", "Testware_Juan", "./" ,"Ian",  "-is -the best", "2123411")
+	print "Get Test Exec:", report.get_test_exec_id("pass", "Testware_Juan", "./" ,"Ian",  "-is -the best", "2123411")
 
-	print "Get Variant Exec:", report.get_test_exec_id("pass", "Testware_Juan", "Ian",  "-is -the best", "2123411")
-
+	print "Get Line Marker", report.get_line_marker_id(1,"test", 0, 100)
+	print "Add Line Marker", report.add_line_marker(1,"test", 0, 100, test_exec_id=1)
+	print "Get Line Marker", report.get_line_marker_id(1,"test", 0, 100)
+	print "Add Line Marker", report.add_line_marker(1,"test", 0, None, test_exec_id=1)
+	print "Get Line Marker", report.get_line_marker_id(1,"test", 0, None)
 
 	report.commit()
