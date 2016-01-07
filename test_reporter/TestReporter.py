@@ -3,6 +3,7 @@ import argparse
 import user
 import gzip
 import shutil
+import getpass
 
 parentPath = os.path.abspath("../common")
 
@@ -15,6 +16,25 @@ from my_ftp import *
 
 class TestReporter(My_SQL):
 
+	def reset_variant_exec_id(self):
+		self.variant_exec_id = None
+
+	def reset_exec_id(self):
+		self.reset_variant_exec_id()
+		self.exec_id = None
+
+	def reset_project_child(self):
+		self.reset_exec_id()
+		self.project_child_id = None
+		self.project_child_name = ""
+		self.result_tag_dict = {}
+		self.crash_type_dict = {}
+
+	def reset_project_root(self):
+		self.reset_project_child()
+		self.project_root_id = None
+		self.project_root_name = ""
+
 	'''
 	Desc: Basic init funciton.
 
@@ -26,36 +46,10 @@ class TestReporter(My_SQL):
 	'''
 	def init(self):
 		super(TestReporter, self).init()
-		self.selected_project = None
-		self.report_user_name = None
+		self.reset_project_root()
+		self.line_marker_dict = {}
+		self.set_user_name(getpass.getuser())
 
-		# can be a number between 0 and 128
-		self.unique_root_test_id = 0
-
-		#Identififiers
-		self.project_id = None
-		self.exec_id = None
-		self.variant_id = None
-		self.suite_id = None
-		self.test_revision_id = None
-		self.test_id = None
-		self.root_bug_id = None
-		self.project_bug_id = None
-
-
-		# Dictionaries
-		self.project_dict = {}
-		self.arch_dict = {}
-		self.variant_dict = {}
-		self.target_dict = {}
-		self.tag_dict = {}
-		self.crash_type_dict = {}
-		self.suite_dict = {}
-		self.test_root_dict = {}
-		self.test_revision_dict = {}
-		self.test_dict = {}
-		self.bug_root_dict = {}
-		self.project_bug_dict = {}
 
 	'''
 	Desc: Constructor for this class
@@ -73,6 +67,7 @@ class TestReporter(My_SQL):
 	def __init__(self, host, usr, passwd, db_name, log=None, commit_on_close=False, mask=None):
 		self.init()
 		super(TestReporter, self).__init__(host, usr, passwd, db_name, log, commit_on_close, mask)
+		self.pre_check = True
 
 	'''
 	Desc:
@@ -86,1855 +81,2344 @@ class TestReporter(My_SQL):
 	def connect(self):
 		rc = super(TestReporter, self).connect()
 		if rc:
-			rc = self.refresh_projects_list()
-
-		if rc:
-			rc = self.refresh_arch_list()
-
-		if rc:
-			rc = self.refresh_target_list()
-
-		if rc:
-			self.refresh_bug_root()
-
+			rc = self.load_line_marker_types()
 		return rc
 
-	'''
-	Desc:
+	def check_ftp_path(self, host, user_name, password, path):
+		ftp = my_ftp(host, user_name, password, log=self.get_log())
 
-		-= Params =-
-		N/A
+		if ftp:
+			if ftp.connect():
 
-		-= Returns =-
-		N/A
-	'''
-	def set_report_user_name(self, user_name):
-		if user_name is not None:
-			if len(user_name) > 1:
-				if len(user_name) <= 45:
-					self.report_user_name = user_name
+				if ftp.chdir(path):
+					return True
 				else:
-					self._error_macro("User name is to long")
 					return False
 			else:
-				self._error_macro("User name is to short")
 				return False
 		else:
-			self._error_macro("user_name can not be None")
+			self._error_macro("Creation of FTP object failed");
 			return False
 
-	'''
-	Desc:
+	def common_check(self, project_root=False, project_child=False, exec_id=False, variant_exec_id=False):
+		if self.conn is None:
+			self._error_macro("Not connected to the database. Please call connect before this call.")
+			return False
 
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def _common_checks(self, project=False, user_name=False, exec_id=False, variant_id=False, connected=True):
-		frameinfo =  getframeinfo(stack()[1][0])
-
-		if connected:
-			if self.conn is None:
-				self._error_macro("Please call connect before this this function.", frameinfo=frameinfo)
+		if project_root:
+			if self.project_root_id is None:
+				self._error_macro("Project root not selected. Please call select_project_root to select the project")
 				return False
 
-		if project:
-			if self.selected_project is None:
-				self._error_macro("Please select a project before calling this function.", frameinfo=frameinfo)
-				return False
-
-		if user_name:
-			if self.report_user_name is None:
-				self._error_macro("Please set a username before calling this function.", frameinfo=frameinfo)
+		if project_child:
+			if self.project_child_id is None:
+				self._error_macro("Project child not selected. Please call select_project_child to select the project")
 				return False
 
 		if exec_id:
 			if self.exec_id is None:
-				self._error_macro("Please register an exec_id before calling this function.", frameinfo=frameinfo)
+				self._error_macro("Exec id has not been registered. Please call register exec before calling this function.")
 				return False
 
-		if variant_id:
-			if self.variant_id is None:
-				self._error_macro("Please register a variant before calling this function", frameinfo=frameinfo)
+		if variant_exec_id:
+			if self.variant_exec_id is None:
+				self._error_macro("variant exec id has not been registered. Please call add variant exec before calling this function.")
 				return False
 
 		return True
 
-	'''
-	Desc:
+	def history(self, string, type_enum="general", entry_enum="manual", use_child_id=True, pre_check=False):
+		valid_type_enum = ['general', 'error', 'project_root_added', 'project_child_added', 'result_tag', 'target' ,'suite', 'test', 'exec', "crash_type"]
+		valid_entry_enum = ['auto', 'manual']
 
-		-= Params =-
-		N/A
+		if self.pre_check:
+			pre_check = True
 
-		-= Returns =-
-		N/A
-	'''
-	def refresh_projects_list(self):
-		if self._common_checks():
-			self.project_dict = {}
+		if self.common_check(project_root=True, project_child=use_child_id):
+			fields = []
+			data = []
 
-			query = "SELECT project_id, name, attachment_path, ftp_host, ftp_user_name, ftp_password, attachment_path from project"
-			self.query(query)
+			fields.append("fk_project_root_id")
+			data.append(self.project_root_id)
 
-			for row in self.cursor:
-				self.project_dict[row[1]] = {"id":row[0], "attachment_path":row[2], "ftp_host":row[3], "ftp_user_name":row[4], "ftp_password":row[5], "attachment_path":row[6]}
+			if use_child_id:
+				fields.append("fk_project_child_id")
+				data.append(self.project_child_id)
+
+			if entry_enum not in valid_entry_enum:
+				self._error_macro(entry_enum + " is not a valid entry enum.")
+				return -1
+			else:
+				fields.append("entry_enum")
+				data.append(entry_enum)
+
+			if type_enum not in valid_type_enum:
+				self._error_macro(type_enum + " is not a valid type enum.")
+				return -1
+			else:
+				fields.append("type_enum")
+				data.append(type_enum)
+
+			fields.append("comment")
+			data.append(string)
+
+			if pre_check:
+				history_rows = self.select("history_id", "history", fields, data)
+
+				if self.size(history_rows) > 0:
+					return history_rows[0][0]
+
+			history_id = self.insert("history", fields, data, created=True)
+
+			return history_id
+		else:
+			return -1
+
+	def add_project_root(self,  project_root, comment=None):
+		project_root = project_root.replace(" ", "_")
+
+		if self.common_check():
+			if self.size(project_root) > 45:
+				self._error_macro("Project name is too long.")
+				return -1
+
+			if self.size(project_root) > 0:
+				fields = []
+				data = []
+
+				fields.append("name")
+				data.append(project_root)
+
+				project_rows = self.select("project_root_id", "project_root", fields, data)
+
+				if self.size(project_rows) > 0:
+					self.reset_project_root()
+					self.project_root_name = project_root
+					self.project_root_id = project_rows[0][0]
+				else:
+					if comment:
+						fields.append("comment")
+						data.append(comment)
+
+					db_id = self.insert("project_root", fields, data, True)
+
+					if db_id > 0:
+						self.reset_project_root()
+						self.project_root_id = db_id
+						self.project_root_name = project_root
+						self.history(str(project_root) + " added as project root.", "project_root_added", "auto", use_child_id=False)
+					else:
+						return -1
+
+				return self.project_root_id
+			else:
+				self._error_macro("Project name is too short.")
+				return -1
+		else:
+			return -1
+
+	def select_project_root(self, project_root):
+		project_root = project_root.replace(" ", "_")
+		if self.common_check():
+			fields = []
+			data = []
+
+			fields.append("name")
+			data.append(project_root)
+
+			project_rows = self.select("project_root_id", "project_root", fields, data)
+
+			if self.size(project_rows) > 0:
+				self.reset_project_root()
+				self.project_root_name = project_root
+				self.project_root_id = project_rows[0][0]
+				return self.project_root_id
+			else:
+				self._error_macro(project_root + " not found in the database")
+				return -1
+
+		else:
+			return -1
+
+
+	def set_user_name(self, user_name):
+		if self.size(user_name) > 0:
+			if self.size(user_name) < 46:
+				self.reporter_user_name = user_name
+				return True
+			else:
+				self._error_macro("The attachment path is too long")
+				return False
+		else:
+			self._error_macro("The attachment path is too short")
+			return False
+
+	def add_project_child(self, project_child, attach_path, ftp_host, ftp_user_name, ftp_password, comment=None):
+		project_child = project_child.replace(" ", "_")
+		attach_path = attach_path.rstrip("/")
+		attach_path = attach_path.rstrip("\\")
+
+		if self.common_check(project_root=True):
+
+			if self.size(project_child) > 60:
+				self._error_macro("Project child is too long.")
+				return -1
+
+			if self.size(project_child) > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_project_root_id")
+				data.append(self.project_root_id)
+
+				fields.append("name")
+				data.append(project_child)
+
+				project_rows = self.select("project_child_id", "project_child", fields, data)
+
+				if self.size(project_rows) > 0:
+					self.reset_project_child()
+					self.project_child_name = project_child
+					self.project_child_id = project_rows[0][0]
+					self._load_child_project_properties()
+				else:
+					if self.size(attach_path) > 0:
+						if self.size(attach_path) < 65535:
+							fields.append("attach_path")
+							data.append(attach_path)
+						else:
+							self._error_macro("The attachment path is too long")
+							return -1
+					else:
+						self._error_macro("The attachment path is too short")
+						return -1
+
+					if self.size(ftp_host) > 0:
+						if self.size(ftp_host) < 65535:
+							fields.append("ftp_host")
+							data.append(ftp_host)
+						else:
+							self._error_macro("The ftp host path is too long")
+							return -1
+					else:
+						self._error_macro("The ftp host path is too short")
+						return -1
+
+					if self.size(ftp_user_name) > 0:
+						if self.size(ftp_user_name) < 65535:
+							fields.append("ftp_user_name")
+							data.append(ftp_user_name)
+						else:
+							self._error_macro("The ftp user name is too long")
+							return -1
+					else:
+						self._error_macro("The ftp user name is too short")
+						return -1
+
+
+					if self.size(ftp_password) > 0:
+						if self.size(ftp_password) < 65535:
+							fields.append("ftp_password")
+							data.append(ftp_password)
+						else:
+							self._error_macro("The ftp password is too long")
+							return -1
+					else:
+						self._error_macro("The ftp password is too short")
+						return -1
+
+					if comment:
+						if self.size(comment) > 0:
+							if self.size(comment) < 65535:
+								fields.append("comment")
+								data.append(comment)
+							else:
+								self._error_macro("The comment is too long")
+								return -1
+						else:
+							self._error_macro("The comment is too short")
+							return -1
+
+					db_id = self.insert("project_child", fields, data, True)
+
+					if db_id > 0:
+						self.reset_project_child()
+						self.project_child_id = db_id
+						self.project_child_name = project_child
+						self.ftp_host = ftp_host
+						self.ftp_user_name = ftp_user_name
+						self.ftp_password = ftp_password
+						self.attachment_path = attach_path
+						self._load_child_project_properties()
+
+						self.history(str(project_child) + " added as project child.", "project_child_added", "auto")
+					else:
+						return -1
+
+				return self.project_root_id
+			else:
+				self._error_macro("Project_child is too short.")
+				return -1
+		else:
+			return -1
+
+	def select_project_child(self, project_child):
+		project_child = project_child.replace(" ", "_")
+
+		if self.common_check(project_root=True):
+			fields = []
+			data = []
+
+			fields.append("name")
+			data.append(project_child)
+
+			project_rows = self.select("project_child_id, ftp_host, ftp_user_name, ftp_password, attach_path", "project_child", fields, data)
+
+			if self.size(project_rows) > 0:
+				self.reset_project_child()
+
+				self.project_child_id = project_rows[0][0]
+				self.project_child_name = project_child
+				self.ftp_host = project_rows[0][1]
+				self.ftp_user_name = project_rows[0][2]
+				self.ftp_password = project_rows[0][3]
+				self.attachment_path = project_rows[0][4]
+
+				#Reload things for the selected project:
+				self._load_child_project_properties()
+
+				return self.project_child_id
+			else:
+				self._error_macro(str(project_child) + " not found in the database.")
+				return -1
+		else:
+			return -1
+
+	def _load_child_project_properties(self):
+		#Reload things for the selected project:
+		self.load_result_tags()
+		self.load_crash_types()
+
+
+	def get_arch_id(self, arch, display_error=True):
+		arch = arch.replace(" ", "_")
+		if self.common_check():
+			if self.size(arch) > 0:
+				if self.size(arch) < 46:
+					fields = []
+					data = []
+
+					fields.append("name")
+					data.append(arch)
+
+					arch_rows = self.select("arch_id", "arch", fields, data)
+
+					if self.size(arch_rows) > 0:
+						return arch_rows[0][0]
+					else:
+						if display_error:
+							self._error_macro("Arch not found.")
+						return -2
+				else:
+					self._error_macro("Arch is too long")
+					return -1
+			else:
+				self._error_macro("Arch is too short")
+				return -1
+
+		else:
+			return -1
+
+	def add_arch(self, arch):
+		arch_id = self.get_arch_id(arch, display_error=False)
+
+		if arch_id == -2:
+			arch = arch.replace(" ", "_")
+			fields = []
+			data = []
+
+			fields.append("name")
+			data.append(arch)
+
+			db_id = self.insert("arch", fields, data, True)
+			return db_id
+		else:
+			return arch_id
+
+
+	def load_line_marker_types(self):
+		if self.common_check():
+			fields = []
+			fields.append("line_marker_type_id")
+			fields.append("name")
+
+			line_marker_type_rows = self.select(fields, "line_marker_type", None, None)
+
+			if self.size(line_marker_type_rows) > 0:
+				self.line_marker_dict = {}
+				for row in line_marker_type_rows:
+					self.line_marker_dict[row[1]] = row[0]
 			return True
 		else:
 			return False
 
-	'''
-	Add a project to the database. Note: the new project name automatically becomes the
-	default project.
-	'''
-	def register_project(self, project_name, description, ftp_host, ftp_user_name, ftp_password, attachment_path, html_style=None):
-		if self._common_checks():
-			if project_name is not None:
-				if project_name in self.project_dict:
-					self.log.out(project_name + " already registered in the database", WARNING, v=2)
-					return self.select_project(project_name)
+	def get_line_marker_type_id(self, line_marker_type, display_error=True):
+		if line_marker_type in self.line_marker_dict:
+			return self.line_marker_dict[line_marker_type]
+		else:
+			if display_error:
+				self._error_macro(str(line_marker_type) + " line marker type not found. Try calling add first.")
+			return -1
+
+	def add_line_marker_type(self, line_marker_type, comment=None):
+		if self.common_check():
+			if self.size(line_marker_type) > 0:
+				if self.size(line_marker_type) < 46:
+
+					line_marker_id = self.get_line_marker_type_id(line_marker_type, display_error=False)
+
+					if line_marker_id > 0:
+						return line_marker_id
+					else:
+						fields = []
+						data = []
+
+						fields.append("name")
+						data.append(line_marker_type)
+
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
+							else:
+								self._error_macro("The comment is too short")
+								return -1
+
+						db_id = self.insert("line_marker_type", fields, data, True)
+
+						if db_id > 0:
+							self.line_marker_dict[line_marker_type] = db_id
+							return db_id
+					return -1
 				else:
-					value = []
-					format = []
+					self._error_macro("Line marker type is too long")
+					return -1
+			else:
+				self._error_macro("Line marker type is too short")
+				return -1
+		else:
+			return -1
+
+	def load_result_tags(self):
+		if self.common_check(project_root=True, project_child=True):
+			get_fields = []
+			where_fields = []
+			where_data = []
+
+			get_fields.append("result_tag_id")
+			get_fields.append("name")
+			get_fields.append("offset")
+
+			where_fields.append("fk_project_child_id")
+			where_data.append(self.project_child_id)
+
+			tag_result_rows = self.select(get_fields, "result_tag", where_fields, where_data)
+
+			if self.size(tag_result_rows) > 0:
+				self.result_tag_dict = {}
+				for row in tag_result_rows:
+					self.result_tag_dict[row[1]] = {"id":row[0], "offset": row[2]}
+			return True
+		else:
+			return False
+
+	def get_tag_result_id(self, tag, display_error=True):
+		if tag in self.result_tag_dict:
+			return self.result_tag_dict[tag]["id"]
+		else:
+			if display_error:
+				self._error_macro(str(tag) + " result tag not found. Try calling add first.")
+			return -1
+
+	def add_result_tag(self, tag, comment=None):
+		if self.common_check(project_root=True, project_child=True):
+			if self.size(tag) > 0:
+				if self.size(tag) < 16:
+
+					result_id = self.get_tag_result_id(tag, display_error=False)
+
+					if result_id > 0:
+						return result_id
+					else:
+						fields = []
+						data = []
+
+						fields.append("name")
+						data.append(tag)
+
+
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
+							else:
+								self._error_macro("The comment is too short")
+								return -1
+
+						fields.append("fk_project_child_id")
+						data.append(self.project_child_id)
+
+						fields.append("offset")
+						data.append(self.size(self.result_tag_dict))
+
+						db_id = self.insert("result_tag", fields, data, True)
+
+						if db_id > 0:
+							self.history("Result tag: " + str(tag) + " added.", "result_tag", "auto")
+							self.result_tag_dict[tag] = {"id":db_id, "offset": self.size(self.result_tag_dict)}
+							return db_id
+					return -1
+				else:
+					self._error_macro("Line marker type is too long")
+					return -1
+			else:
+				self._error_macro("Line marker type is too short")
+				return -1
+		else:
+			return -1
+
+	def get_target_id(self, name, display_error=True):
+		if self.common_check(project_root=True, project_child=True):
+			if self.size(name) > 0:
+				if self.size(name) < 46:
+					fields = []
 					data = []
 
-					if len(project_name) < 3:
-						self._error_macro("Project name is to short")
-						return -1
+					fields.append("name")
+					data.append(name)
 
-					if len(project_name) > 45:
-						self._error_macro("Project name is to long")
-						return -1
+					target_rows = self.select("target_id", "target", fields, data)
 
-					value.append("name")
-					format.append("%s")
-					data.append(project_name)
-
-					if description is None:
-						self._error_macro("Project description can not be None")
-						return -1
-
-					if len(description) < 10:
-						self._error_macro("Project description is to short")
-						return -1
-
-					if len(description) > 65535:
-						self._error_macro("Project description is to long")
-						return -1
-
-					value.append("description")
-					format.append("%s")
-					data.append(description)
-
-					if len(ftp_host) < 10:
-						self._error_macro("FTP host is to short")
-						return -1
-
-					if len(ftp_host) > 65535:
-						self._error_macro("ftp host is to long")
-						return -1
-
-					value.append("ftp_host")
-					format.append("%s")
-					data.append(ftp_host)
-
-					if len(ftp_user_name) < 1:
-						self._error_macro("FTP user name is to short")
-						return -1
-
-					if len(ftp_user_name) > 20:
-						self._error_macro("ftp user name is to long")
-						return -1
-
-					value.append("ftp_user_name")
-					format.append("%s")
-					data.append(ftp_user_name)
-
-					if len(ftp_password) < 1:
-						self._error_macro("FTP password is to short")
-						return -1
-
-					if len(ftp_password) > 64:
-						self._error_macro("ftp password is to long")
-						return -1
-
-					value.append("ftp_password")
-					format.append("%s")
-					data.append(ftp_password)
-
-					if len(attachment_path) < 1:
-						self._error_macro("FTP host is to short")
-						return -1
-
-					if len(attachment_path) > 65535:
-						self._error_macro("ftp host is to long")
-						return -1
-
-					value.append("attachment_path")
-					format.append("%s")
-					data.append(attachment_path)
-
-					if html_style is not None:
-						value.append("project_html_style")
-						format.append("%s")
-						data.append(html_style)
-
-					query = "INSERT INTO project (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
-
-					self.query(query, data)
-
-					self.refresh_projects_list()
-
-					project_id = self.select_project(project_name)
-
-					self.log.out("(" + project_name + ") registered as project name.", v=1)
-					return project_id
-
+					if self.size(target_rows) > 0:
+						return target_rows[0][0]
+					else:
+						if display_error:
+							self._error_macro("target not found.")
+						return -2
+				else:
+					self._error_macro("Target name is too long")
+					return -1
 			else:
-				self._error_macro("Project name cannot be None")
+				self._error_macro("Target name is too short")
 				return -1
 		else:
 			return -1
 
-	'''
-	Desc:
+	def add_target(self, name, comment=None):
+		target_id = self.get_target_id(name, display_error=False)
 
-		-= Params =-
-		N/A
+		if target_id == -2:
+			fields = []
+			data = []
+			fields.append("name")
+			data.append(name)
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
 
-		-= Returns =-
-		N/A
-	'''
-	def select_project(self, project_name):
-		if self._common_checks():
-			if project_name in self.project_dict:
-				self.selected_project = project_name
-				self.project_id = self.project_dict[project_name]["id"]
-				self.refresh_tags()
-				self.refresh_crash_type()
-				self.refresh_test_root()
-				self.refresh_test_revision()
-				self.refresh_project_bugs()
-				self.log.out("(" + project_name + ") is now the active project")
-				return self.project_id
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			db_id = self.insert("target", fields, data, True)
+
+			if db_id > 0:
+				self.history("Target: " + str(name) + " added.", "target", "auto")
+				return db_id
 			else:
-				self._error_macro("(" + project_name + ") does not appear in the database. Try reconnecting or calling refresh_projects_list")
-				return -1
+				return db_id
 		else:
-			return -1
+			return target_id
 
-	'''
-	Desc:
+	def get_variant_root_id(self, target, arch, variant, display_error=True):
+		target_id = self.get_target_id(target, display_error=display_error)
 
-		-= Params =-
-		N/A
+		if target_id > 0:
+			arch_id = self.get_arch_id(arch, display_error=display_error)
+			if arch_id > 0:
+				fields = []
+				data = []
 
-		-= Returns =-
-		N/A
-	'''
-	def get_project(self):
-		if self._common_checks():
-			return self.selected_project
+				fields.append("fk_target_id")
+				data.append(target_id)
+
+				fields.append("fk_arch_id")
+				data.append(arch_id)
+
+
+				if self.size(variant) > 0:
+					if self.size(variant) <  81:
+						fields.append("variant")
+						data.append(variant)
+					else:
+						self._error_macro("The variant is too long")
+						return -1
+				else:
+					self._error_macro("The variant is too short")
+					return -1
+
+				variant_rows = self.select("variant_root_id", "variant_root", fields, data)
+
+				if self.size(variant_rows) > 0:
+					return variant_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("Variant root not found.")
+					return -2
+			else:
+				return arch_id
+		else:
+			return target_id
+
+
+	def add_variant_root(self, target, arch, variant, comment=None):
+		variant_root_id = self.get_variant_root_id(target, arch, variant, display_error=False)
+
+		if variant_root_id == -2:
+			target_id = self.get_target_id(target)
+			arch_id = self.get_arch_id(arch)
+
+			fields = []
+			data = []
+
+			fields.append("fk_target_id")
+			data.append(target_id)
+
+			fields.append("fk_arch_id")
+			data.append(arch_id)
+
+			fields.append("variant")
+			data.append(variant)
+
+			db_id = self.insert("variant_root", fields, data, True)
+
+			if db_id > 0:
+				return db_id
+			else:
+				return db_id
+
+		else:
+			return variant_root_id
+
+	def get_variant_exec_info(self, variant_exec_id):
+		if self.common_check():
+			query = 'SELECT target.name as target, arch.name as arch, variant_root.variant FROM target, arch, variant_root, variant_exec WHERE variant_exec.fk_variant_root_id=variant_root.variant_root_id and variant_root.fk_target_id=target.target_id and variant_root.fk_arch_id=arch.arch_id and variant_exec_id=%s'
+			self.query(query, (variant_exec_id, ))
+
+			result_rows = self.cursor.fetchall()
+
+			size = self.size(result_rows)
+
+			if size == 0:
+				self._error_macro("No records where found for the provided variant exec_id")
+				return None
+			elif size == 1:
+				return {"target": result_rows[0][0], "arch": result_rows[0][1], "variant": result_rows[0][2]}
+			elif size > 1:
+				self._error_macro("Expected only one record to be found for the provided variant exec id, but found %d" % size)
+				return None
+			else:
+				self._error_macro("This should not happen size value set to ")
+				return None
 		else:
 			return None
 
-	'''
-	Desc:
+	def get_variant_exec_id(self, target, arch, variant, display_error=True):
+		if self.common_check(project_root=True, project_child=True, exec_id=True):
+			variant_root_id = self.get_variant_root_id(target, arch, variant, display_error=display_error)
 
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_arch_list(self):
-		if self._common_checks():
-			self.arch_dict={}
-			query = "SELECT arch_id, name from arch"
-			self.query(query)
-			for row in self.cursor:
-				self.arch_dict[row[1]] = {"id":row[0]}
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_arch(self, arch, html_style=None):
-		if self._common_checks():
-			if arch is not None:
-				if arch in self.arch_dict:
-					self.log.out('Arch (' + arch + ") already registered in the database", WARNING, v=1)
-				else:
-					if len(arch) < 1:
-						self._error_macro("Arch is to short")
-						return False
-
-					if len(arch) > 45:
-						self._error_macro("Arch is to long")
-						return False
-
-					if html_style is None:
-						query = "INSERT INTO arch (name, created) VALUES (%s, NOW()))"
-						data = (arch,)
-					else:
-						query = "INSERT INTO arch (name, arch_html_style, created) VALUES (%s, %s, NOW())"
-						data = (arch, html_style)
-
-					self.query(query, data)
-
-					self.refresh_arch_list()
-
-					self.log.out("Arch (" + arch + ") added to the database.", v=1)
-
-				return True
-			else:
-				self._error_macro("Arch can not be None.")
-				return False
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_target_list(self):
-		if self._common_checks():
-			self.target_dict={}
-			query = "SELECT target_id, target_name from target ORDER BY target_name"
-			self.query(query)
-			for row in self.cursor:
-				self.target_dict[row[1]] = {"id":row[0]}
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_target(self, target_name, description=None, html_style=None):
-		if self._common_checks():
-			if target_name in self.target_dict:
-				self.log.out('Target (' + target_name + ") already registered in the database", WARNING, v=0)
-			else:
-				value = []
-				format = []
+			if variant_root_id > 0:
+				fields = []
 				data = []
 
-				if len(target_name) < 5:
-					self._error_macro("Target name is to short")
-					return False
-
-				if len(target_name) > 45:
-					self._error_macro("Target name is to long")
-					return False
-
-				value.append("target_name")
-				format.append("%s")
-				data.append(target_name)
-
-				if description is not None:
-					if len(description) < 5:
-						self._error_macro("description is to short")
-						return False
-
-					if len(description) > 65535:
-						self._error_macro("description is to long")
-						return False
-
-					value.append("description")
-					format.append("%s")
-					data.append(description)
-
-				if 	html_style is not None:
-					if len(html_style) < 2:
-						self._error_macro("html style is to short")
-						return False
-
-					if len(html_style) > 65535:
-						self._error_macro("html style is to long")
-						return False
-
-				query = "INSERT INTO target (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", Now())"
-
-				self.query(query, data)
-
-				self.refresh_target_list()
-
-				self.log.out("Target (" + target_name + ") added to the database.", v=0)
-
-				return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_tags(self):
-		if self._common_checks(project=True):
-			self.tag_dict = {}
-			query = "SELECT tag_id, result, project_offset from tag WHERE fk_project_id=" + str(self.project_id) + " ORDER BY tag_id ASC"
-			self.query(query)
-			for row in self.cursor:
-				self.tag_dict[row[1]] = {"id":row[0], "project_offset": row[2]}
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_tag(self, tag, comment=None, html_style=None):
-		if self._common_checks(project=True):
-			if tag is not None:
-				if tag in self.tag_dict:
-					self.log.out('result tag (' + tag + ") already in the database", WARNING, v=1)
-				else:
-					value  = ["fk_project_id"]
-					format = ["%s"]
-					data = [self.project_id]
-
-					value.append("project_offset")
-					format.append("%s")
-					data.append(len(self.tag_dict))
-
-					if len(tag) < 2:
-						self._error_macro("Tag is to short")
-						return False
-
-					if len(tag) > 15:
-						self._error_macro("Tag is to long")
-						return False
-
-					value.append("result")
-					format.append("%s")
-					data.append(tag)
-
-					if comment is not None:
-						if len(comment) < 5:
-							self._error_macro("Comment is to short")
-							return False
-
-						if len(comment) > 65535:
-							self._error_macro("comment is to long")
-							return False
-
-						value.append("comment")
-						format.append("%s")
-						data.append(comment)
-
-					if 	html_style is not None:
-						if len(html_style) < 2:
-							self._error_macro("html style is to short")
-							return False
-
-						if len(html_style) > 65535:
-							self._error_macro("html style is to long")
-							return False
-
-						value.append("tag_html_style")
-						format.append("%s")
-						data.append(html_style)
-
-					query = "INSERT INTO tag (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
-					self.query(query, data)
-
-					self.refresh_tags()
-
-					self.log.out("Result tag (" + tag + ") added to the database.", v=1)
-
-					return True
-			else:
-				self._error_macro("Result tag can not be None.")
-				return False
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_crash_type(self):
-		if self._common_checks(project=True):
-			self.crash_type_dict = {}
-			query = "SELECT crash_id, name from crash_type WHERE fk_project_id=" + str(self.project_id) + " ORDER BY crash_id ASC"
-			self.query(query)
-			for row in self.cursor:
-				self.crash_type_dict[row[1]] = row[0]
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_crash_type(self, crash_type, comment, html_style=None):
-		if self._common_checks(project=True):
-			if crash_type is not None:
-				if crash_type in self.crash_type_dict:
-					self.log.out('crash type (' + crash_type + ") already in the database", WARNING, v=1)
-				else:
-					value  = ["fk_project_id"]
-					format = ["%s"]
-					data = [self.project_id]
-
-					if len(crash_type) < 2:
-						self._error_macro("Crash type is to short")
-						return False
-
-					if len(crash_type) > 15:
-						self._error_macro("Crash type is to long")
-						return False
-
-					value.append("name")
-					format.append("%s")
-					data.append(crash_type)
-
-					if comment is not None:
-						if len(comment) < 5:
-							self._error_macro("Comment is to short")
-							return False
-
-						if len(comment) > 65535:
-							self._error_macro("comment is to long")
-							return False
-
-						value.append("comment")
-						format.append("%s")
-						data.append(comment)
-
-					if 	html_style is not None:
-						if len(html_style) < 2:
-							self._error_macro("html style is to short")
-							return False
-
-						if len(html_style) > 65535:
-							self._error_macro("html style  is to long")
-							return False
-
-						value.append("tag_html_style")
-						format.append("%s")
-						data.append(html_style)
-
-					query = "INSERT INTO crash_type (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
-					self.query(query, data)
-
-					self.refresh_crash_type();
-
-					self.log.out("Crash type (" + crash_type + ") added to the database.", v=1)
-
-					return True
-			else:
-				self._error_macro("Crash type can not be None.")
-				return False
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def register_exec(self, comment=None, time=None):
-		if self._common_checks(project=True, user_name=True):
-
-			value  = ["fk_project_id"]
-			format = ["%s"]
-			data = [self.project_id]
-
-			value.append("user_name")
-			format.append("%s")
-			data.append(self.report_user_name)
-
-			if comment is not None:
-				if len(comment) < 1:
-					self._error_macro("Comment is to short")
-					return False
-
-				if len(comment) > 65535:
-					self._error_macro("comment is to long")
-					return False
-
-				value.append("comment")
-				format.append("%s")
-				data.append(comment)
-
-			if time is None:
-				query = "INSERT INTO exec (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
-			else:
-				value.append("created")
-				format.append("%s")
-				data.append(time)
-
-				query = "INSERT INTO exec (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
-
-			self.query(query, data)
-
-			self.exec_id = self.cursor.lastrowid
-			self.log.out("Exec registered as (" + str(self.exec_id) + ").", v=0)
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def set_exec_id(self, exec_id):
-		if self._common_checks(project=True):
-			query = 'SELECT exec_id FROM exec WHERE fk_project_id=' + str(self.project_id) +  ' and exec_id=' + str(exec_id)
-			self.query(query)
-			rows = self.cursor.fetchall()
-
-			if len(rows) == 1:
-				self.exec_id = exec_id
-				self.refresh_suite_names()
-				self.refresh_test_dict()
-				return True
-			else:
-				self._error_macro("Execution ID: " + str(exec_id) + " could not be found for project: " + self.selected_project)
-				return False
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def register_src(self, source_type, url_path, unique_id, description=None):
-		allowed_source_types = ['build', 'cvs', 'svn', 'git', 'other', 'path']
-		if self._common_checks(project=True, exec_id=True):
-			if source_type in allowed_source_types:
-				value = []
-				format = []
-				data = []
-
-				value.append("fk_exec_id")
-				format.append("%s")
+				fields.append("fk_exec_id")
 				data.append(self.exec_id)
 
-				value.append("src_type")
-				format.append("%s")
-				data.append(source_type)
+				fields.append("fk_variant_root_id")
+				data.append(variant_root_id)
 
-				if len(url_path) < 5:
-					self._error_macro("url/path is to short")
-					return False
+				variant_exec_rows = self.select("variant_exec_id", "variant_exec", fields, data)
 
-				if len(url_path) > 65535:
-					self._error_macro("url/path is to long")
-					return False
-
-				value.append("url_path")
-				format.append("%s")
-				data.append(url_path)
-
-				if len(unique_id) < 5:
-					self._error_macro("unique id is to short")
-					return False
-
-				if len(unique_id) > 65535:
-					self._error_macro("unique id is to long")
-					return False
-
-				value.append("unique_id")
-				format.append("%s")
-				data.append(unique_id)
-
-				if description is not None:
-					if len(description) < 5:
-						self._error_macro("description is to short")
-						return False
-
-					if len(description) > 65535:
-						self._error_macro("description is to long")
-						return False
-
-					value.append("description")
-					format.append("%s")
-					data.append(description)
-
-				# check to see if it already exits
-				query = "SELECT src_id FROM src WHERE " + "=%s and ".join(value) + "=%s"
-				self.query(query, data)
-
-				rows = self.cursor.fetchall()
-				if len(rows) > 0:
-					self.log.out(source_type + "> " + url_path + ":" + unique_id + " is already in the database.", WARNING, v=1)
+				if self.size(variant_exec_rows) > 0:
+					return variant_exec_rows[0][0]
 				else:
-					query = "INSERT INTO src (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
-					self.query(query, data)
-					self.log.out(source_type + "> " + url_path + ":" + unique_id + " added to the database.")
-				return True
+					if display_error:
+						self._error_macro("Variant root not found.")
+					return -2
 			else:
-				self._error_macro(str(source_type) + " is not a valid source type")
-				return False
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_suite_names(self):
-		if self._common_checks(project=True, exec_id=True):
-			self.suite_dict = {}
-			query = "SELECT test_suite_id, suite_name from test_suite WHERE fk_exec_id=" + str(self.exec_id) + " ORDER BY suite_name"
-			self.query(query)
-			for row in self.cursor:
-				self.suite_dict[row[1]] = {"id":row[0]}
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_test_suite(self, suite_name, description=None, html_style=None):
-		if self._common_checks(project=True, exec_id=True):
-			if suite_name in self.suite_dict:
-				self.log.out('Suite name (' + suite_name + ") already in the database.", WARNING, v=1)
-				self.suite_id =  self.suite_dict[suite_name]["id"];
-				return self.suite_id
-			else:
-				value = []
-				format = []
-				data = []
-
-				value.append("fk_project_id")
-				format.append("%s")
-				data.append(self.project_id)
-
-				value.append("fk_exec_id")
-				format.append("%s")
-				data.append(self.exec_id)
-
-				if len(suite_name) < 3:
-					self._error_macro("suite name is to short")
-					return -1
-
-				if len(suite_name) > 45:
-					self._error_macro("suite name is to long")
-					return -1
-
-				value.append("suite_name")
-				format.append("%s")
-				data.append(suite_name)
-
-				if description is not None:
-					if len(description) < 5:
-						self._error_macro("description is to short")
-						return -1
-
-					if len(description) > 65535:
-						self._error_macro("description is to long")
-						return -1
-
-					value.append("description")
-					format.append("%s")
-					data.append(description)
-
-				if 	html_style is not None:
-					if len(html_style) < 2:
-						self._error_macro("html style is to short")
-						return -1
-
-					if len(html_style) > 65535:
-						self._error_macro("html style is to long")
-						return -1
-
-					value.append("tag_html_style")
-					format.append("%s")
-					data.append(html_style)
-
-				query = "INSERT INTO test_suite (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
-				self.query(query, data)
-
-				self.suite_id = self.cursor.lastrowid
-
-				self.refresh_suite_names()
-
-				self.log.out("Test Suite (" + suite_name + ") added to the database.", v=1)
-				return  self.suite_id
-
+				return variant_root_id
 		else:
 			return -1
 
-	'''
-	Desc:
 
-		-= Params =-
-		N/A
+	def add_variant_exec(self, target, arch, variant, comment=None):
+		variant_exec_id = self.get_variant_exec_id(target, arch, variant, display_error=False)
 
-		-= Returns =-
-		N/A
-	'''
-	def add_variant(self, target, arch, variant, time=None, abort_flag=None, hide=None):
-		if self._common_checks(project=True, exec_id=True, user_name=True):
-			if arch in self.arch_dict:
-				if target in self.target_dict:
-					root_variant_id = None
-
-					data = (self.arch_dict[arch]["id"], self.target_dict[target]["id"], variant)
-
-					# Check to see if we have a root variant of this combination exists
-					query = 'SELECT root_variant_id FROM root_variant WHERE fk_arch_id=%s and fk_target_id=%s and variant=%s'
-					self.query(query, data)
-
-					rows = self.cursor.fetchall()
-
-					if len(rows) > 0:
-						root_variant_id = rows[0][0];
-					else:
-						query = 'INSERT INTO root_variant (fk_arch_id, fk_target_id, variant, created) VALUES (%s, %s, %s, NOW())'
-						self.query(query, data)
-						root_variant_id = self.cursor.lastrowid
-						self.log.out("Root Variant (" +  str(target) + "-" + str(arch) + "-" +  str(variant) + ") added to the database.", v=0)
-
-					if root_variant_id:
-
-						value = []
-						format = []
-						data = []
-
-						value.append("fk_project_id")
-						format.append("%s")
-						data.append(self.project_id)
-
-						value.append("fk_exec_id")
-						format.append("%s")
-						data.append(self.exec_id)
-
-						value.append("fk_root_variant_id")
-						format.append("%s")
-						data.append(root_variant_id)
-
-						value.append("user_name")
-						format.append("%s")
-						data.append(self.report_user_name)
-
-						# check to see if the variant already exists
-						query = "SELECT variant_id FROM variant WHERE " + "=%s and ".join(value) + "=%s"
-
-						self.query(query, data)
-
-						rows = self.cursor.fetchall()
-
-						if len(rows) > 0:
-							self.log.out('Variant (' + str(target) + "-" + str(arch) + "-" +  str(variant)  + ") already exists for Execution: " + str(self.exec_id), WARNING, v=0)
-
-							self.variant_id = rows[0][0]
-
-							self.variant_dict[self.variant_id] = {"target": target, "arch": arch, "variant": variant}
-
-						else:
-							if time is not None:
-								value.append("time")
-								format.append("%s")
-								data.append(time)
-
-							if hide is not None:
-								value.append("hide")
-								format.append("%s")
-								data.append(hide)
-
-							if abort_flag is not None:
-								value.append("abort_flag")
-								format.append("%s")
-								data.append(abort_flag)
-
-
-							query = "INSERT INTO variant (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
-							self.query(query, data)
-
-							self.variant_id = self.cursor.lastrowid
-
-							self.log.out("Variant (" +  str(target) + "-" + str(arch) + "-" +  str(variant) + ") added to the database for Execution: " + str(self.exec_id))
-
-							self.variant_dict[self.variant_id] = {"target": target, "arch": arch, "variant": variant}
-
-							return True
-					else:
-						self._error_macro("Failed to resolve root variant")
-						return False
-
-				else:
-					self._error_macro("Target (" + str(target) + ") is not in the database. Please call add_target before this function.")
-					return False
-
-			else:
-				self._error_macro("Arch (" + str(arch) + ") is not in the database. Please call add_arch before this function.")
-				return False
+		if variant_exec_id != -2:
+			self.reset_variant_exec_id()
+			self.variant_exec_id = variant_exec_id
+			return variant_exec_id
 		else:
-			return False
+			variant_root_id = self.get_variant_root_id(target, arch, variant)
 
+			if variant_root_id > 0:
+				fields = []
+				data = []
 
-	'''
-	Desc:
+				fields.append("fk_exec_id")
+				data.append(self.exec_id)
 
-		-= Params =-
-		N/A
+				fields.append("fk_variant_root_id")
+				data.append(variant_root_id)
 
-		-= Returns =-
-		N/A
-	'''
-	def add_attachments(self, full_attachment_src_path, attachment_type="general", mime_type="application/octet-stream", test_result_id=None, comment=None, omit_exec_id=False, omit_variant_id=False, force_post_compress_tag=False):
-		if self._common_checks(project=True):
-			known_compressed_extensions = [".zip", ".gz"]
-			valid_attachment_types = ['primary', 'general', 'crash', 'symbol', 'profile', 'json', 'history', 'pre_json', 'post_json']
+				if comment:
+					if self.size(comment) > 0:
+						if self.size(comment) < 65535:
+							fields.append("comment")
+							data.append(comment)
+						else:
+							self._error_macro("The comment is too long")
+							return -1
+					else:
+						self._error_macro("The comment is too short")
+						return -1
 
-			if attachment_type not in valid_attachment_types:
-				self._error_macro(str(attachment_type) + " is an unknown attachment type.")
-				return -1
+				db_id = self.insert("variant_exec", fields, data, True)
 
-			# Confirm that the source file exists
-			if os.path.exists(full_attachment_src_path):
+				if db_id > 0:
+					self.reset_variant_exec_id()
+					self.variant_exec_id = db_id
+				return db_id
+			else:
+				return variant_root_id
 
-				ftp = my_ftp(self.project_dict[self.selected_project]["ftp_host"],
-							 self.project_dict[self.selected_project]["ftp_user_name"],
-							 self.project_dict[self.selected_project]["ftp_password"],
-							 log=self.get_log()
-							)
+	def get_bug_root_id(self, recorder_type, unique_ref, display_error=True):
+		valid_record_type = ["pr", "jira"]
 
-				if ftp.connect():
-					value = []
-					format = []
+		if recorder_type not in valid_record_type:
+			self._error_macro(str(recorder_type) + " is not a valid recorder type.")
+			return -1
+
+		if self.common_check():
+			if self.size(unique_ref) > 0:
+				if self.size(unique_ref) < 65535:
+					fields = []
 					data = []
 
-					if test_result_id is not None:
-						value.append("fk_result_id")
-						format.append("%s")
-						data.append(self.test_result_id)
+					fields.append("recorder_enum")
+					data.append(recorder_type)
 
-					value.append("fk_project_id")
-					format.append("%s")
-					data.append(self.project_id)
+					fields.append("unique_ref")
+					data.append(unique_ref)
 
-					dest_path = self.project_dict[self.selected_project]["attachment_path"]
+					bug_root_rows = self.select("bug_root_id", "bug_root", fields, data)
 
-					# Attempt to change to the project directory.
-					if ftp.chdir(dest_path) is not True:
-						return -1
-
-					project_name = self.selected_project.replace(" ", "_")
-
-					relative_dest_path = "";
-					#Create the project path if it does not exist:
-					if ftp.mkdir(project_name, True):
-						if ftp.chdir(project_name):
-							relative_dest_path = project_name
-						else:
-							return -1
+					if self.size(bug_root_rows) > 0:
+						return bug_root_rows[0][0]
 					else:
-						return -1
-
-					# Is exec_id set:
-					if self.exec_id is not None:
-						if omit_exec_id is False:
-							value.append("fk_exec_id")
-							format.append("%s")
-							data.append(self.exec_id)
-							exec_id_dir = "%06d" % int(self.exec_id);
-
-							if ftp.mkdir(str(exec_id_dir), True):
-								relative_dest_path = os.path.join(relative_dest_path, exec_id_dir)
-
-								if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
-									return -1
-							else:
-								return -1
-
-						if self.variant_id is not None:
-							if omit_variant_id is False:
-								value.append("fk_variant_id")
-								format.append("%s")
-								data.append(self.variant_id)
-
-								if ftp.mkdir(str(self.variant_dict[self.variant_id]["target"]), True):
-									relative_dest_path = os.path.join(relative_dest_path, str(self.variant_dict[self.variant_id]["target"]))
-
-									if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
-										return -1
-								else:
-									return -1
-
-								if ftp.mkdir(str(self.variant_dict[self.variant_id]["arch"]), True):
-									relative_dest_path = os.path.join(relative_dest_path, str(self.variant_dict[self.variant_id]["arch"]))
-
-									if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
-										return -1
-								else:
-									return -1
-
-								if ftp.mkdir(str(self.variant_dict[self.variant_id]["variant"]), True):
-									relative_dest_path = os.path.join(relative_dest_path, str(self.variant_dict[self.variant_id]["variant"]))
-
-									if ftp.chdir(os.path.join(dest_path, relative_dest_path)) is not True:
-										return -1
-								else:
-									return -1
-
-					local_dir_name = os.path.dirname(full_attachment_src_path)
-					base_name = os.path.basename(full_attachment_src_path)
-					root_file_name, extension = os.path.splitext(base_name)
-
-					# We want to store only compressed files on the server
-					# so see if this file is already compressed.
-					if extension not in known_compressed_extensions:
-
-						# If not then we will compress it before we copy it
-						new_file_name = "";
-						index = 0
-						output_path = ""
-
-						for index in range(-1, 1000):
-							if index == -1:
-								file_name = root_file_name + extension + ".gz"
-							else:
-								file_name = root_file_name + extension + "-%03d" % index + ".gz"
-
-							output_path = os.path.join(local_dir_name, file_name)
-
-							if os.path.exists(output_path) is False:
-								break
-
-						if index >= 1000:
-							self._error_macro(full_attachment_src_path + " Failed to find an acceptable name to generate a compressed file.")
-							return -1
-
-						dest_file_name = os.path.join(relative_dest_path, file_name)
-
-						value.append("path")
-						format.append("%s")
-						data.append(dest_file_name)
-
-						# Look to see if we already have this file int he database
-						query = "SELECT attachment_id FROM attachment WHERE " + "=%s and ".join(value) + "=%s"
-						self.query(query, data)
-
-						rows = self.cursor.fetchall()
-
-						if len(rows) > 0:
-							self.log.out("./" + dest_file_name + " already exists in the database.", WARNING, v=0)
-							return rows[0][0]
-
-						value.append("attach_type")
-						format.append("%s")
-						data.append(attachment_type)
-
-						value.append("mime_type")
-						format.append("%s")
-						data.append(mime_type)
-
-						value.append("compress_mode")
-						format.append("%s")
-						data.append("post_compressed_gz")
-
-						if comment is not None:
-							if len(comment) < 3:
-								self._error_macro("comment is to short")
-								return -1
-
-							if len(comment) > 65535:
-								self._error_macro("comment is to long")
-								return -1
-
-							value.append("comment")
-							format.append("%s")
-							data.append(comment)
-
-						# Compressed the file
-						with open(full_attachment_src_path, "rb") as fp_in:
-							with gzip.open(output_path, "wb") as fp_output:
-								shutil.copyfileobj(fp_in, fp_output)
-
-						if ftp.binary_file_transfer_2_file(output_path, os.path.join(dest_path, dest_file_name)):
-							query = "INSERT INTO attachment (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
-							self.query(query, data)
-
-							#Remove the file that we created
-							os.remove(output_path)
-							return self.cursor.lastrowid
-						else:
-							return -1
-					else:
-
-						dest_file_name = os.path.join(relative_dest_path, base_name)
-
-						value.append("path")
-						format.append("%s")
-						data.append(dest_file_name)
-
-						# Look to see if we already have this file int he database
-						query = "SELECT attachment_id FROM attachment WHERE " + "=%s and ".join(value) + "=%s"
-						self.query(query, data)
-
-						rows = self.cursor.fetchall()
-
-						if len(rows) > 0:
-							self.log.out("./" + dest_file_name + " already exists in the database.", WARNING, v=0)
-							return rows[0][0]
-
-						value.append("attach_type")
-						format.append("%s")
-						data.append(attachment_type)
-
-						value.append("mime_type")
-						format.append("%s")
-						data.append(mime_type)
-
-						if comment is not None:
-							if len(comment) < 3:
-								self._error_macro("comment is to short")
-								return -1
-
-							if len(comment) > 65535:
-								self._error_macro("comment is to long")
-								return -1
-							value.append("comment")
-							format.append("%s")
-							data.append(comment)
-
-						value.append("compress_mode")
-						format.append("%s")
-
-						if force_post_compress_tag:
-							data.append("post_compressed_gz")
-						else:
-							data.append("src_compressed")
-
-						if ftp.binary_file_transfer_2_file(full_attachment_src_path, os.path.join(dest_path, dest_file_name)):
-							query = "INSERT INTO attachment (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
-							self.query(query, data)
-
-							return self.cursor.lastrowid
-						else:
-							return -1
+						if display_error:
+							self._error_macro("project root not found.")
+						return -2
 				else:
+					self._error_macro("Unique reference is too long")
 					return -1
 			else:
-				self._error_macro(full_attachment_src_path + " was not found or is not accessible.")
-				return -1
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_test_root(self):
-		if self._common_checks():
-			self.test_root_dict = {}
-			query = "SELECT test_root_id, exec_path, name, params from test_root WHERE fk_project_id=" + str(self.project_id) + " ORDER BY name"
-			self.query(query)
-			for row in self.cursor:
-				test_key = os.path.join(row[1], row[2])
-				test_key = test_key.replace("\\", "/")
-
-				if len(row[3]) > 0:
-					test_key = test_key + " " + row[3]
-
-				self.test_root_dict[test_key] = {"id": row[0]}
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_test_root(self, exec_path, name, params=None, src_path=None):
-		if self._common_checks(project=True):
-			test_key = os.path.join(exec_path, name)
-			test_key = test_key.replace("\\", "/")
-			exec_path = exec_path.replace("\\", "/")
-
-			if params:
-				if len(params) > 0:
-					test_key = test_key + " " + params
-
-			if test_key in self.test_root_dict:
-				self.log.out('Test Root (' + test_key + ") already in the database.", WARNING, v=1)
-				return self.test_root_dict[test_key]["id"]
-			else:
-				value = []
-				format = []
-				data = []
-
-				value.append("fk_project_id")
-				format.append("%s")
-				data.append(self.project_id)
-
-				if len(exec_path) < 2:
-					self._error_macro("test name is to short")
-					return -1
-
-				if len(exec_path) > 65535:
-					self._error_macro("test name is to long")
-					return -1
-
-				value.append("exec_path")
-				format.append("%s")
-				data.append(exec_path)
-
-				if len(name) < 2:
-					self._error_macro("test name is to short")
-					return -1
-
-				if len(name) > 50:
-					self._error_macro("test name is to long")
-					return -1
-
-				value.append("name")
-				format.append("%s")
-				data.append(name)
-
-				if params is not None:
-					if len(params) > 100:
-						self._error_macro("test name is to long")
-						return -1
-
-					value.append("params")
-					format.append("%s")
-					data.append(params)
-
-				if 	src_path is not None:
-					if len(src_path) < 10:
-						self._error_macro("source path is to short")
-						return -1
-
-					if len(src_path) > 256:
-						self._error_macro("source path is to long")
-						return -1
-
-					value.append("src_path")
-					format.append("%s")
-					data.append(src_path)
-
-				query = "INSERT INTO test_root (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
-
-				self.query(query, data)
-
-				self.refresh_test_root();
-
-				self.log.out("Test Root (" + test_key + ") added to the database.")
-				return self.cursor.lastrowid
-		else:
-			return -1
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_test_revision(self):
-		if self._common_checks():
-			self.test_revision_dict = {}
-			query = "SELECT test_revision_id, fk_test_root_id, unique_rev_id from test_revision, test_root WHERE fk_test_root_id=test_root_id and fk_project_id=" + str(self.project_id)
-			self.query(query)
-			for row in self.cursor:
-				test_key = str(row[1]) +"_"+ str(row[2])
-				self.test_revision_dict[test_key] = {"id":row[0]}
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_test_revision(self, exec_path, name, params, unique_rev_id="base", arch="all", src_path=None, description=None, html_style=None):
-		test_root_id = self.add_test_root(exec_path, name, params, src_path)
-
-		if test_root_id > 0:
-			test_key = str(test_root_id) + "_" + str(unique_rev_id)
-
-			if test_key in self.test_revision_dict:
-				self.log.out('Test Revision (' + os.path.join(exec_path, name) + " " + str(params) + " rev_ud: " + str(unique_rev_id) + ") already in the database.", WARNING, v=1)
-				self.test_revision_id = self.test_revision_dict[test_key]["id"]
-				return self.test_revision_id
-			else:
-				value = []
-				format = []
-				data = []
-
-				value.append("fk_test_root_id")
-				format.append("%s")
-				data.append(test_key)
-
-				if len(unique_rev_id) < 1:
-					self._error_macro("unique revision id is to short")
-					return -1
-
-				if len(unique_rev_id) > 80:
-					self._error_macro("unique revision id is to long")
-					return -1
-
-				value.append("unique_rev_id")
-				format.append("%s")
-				data.append(unique_rev_id)
-
-				arch_value = ""
-				if arch != "all":
-					for arch_part in arch.split(","):
-						arch_part = arch_part.strip()
-						if arch_part in self.arch_dict:
-							if len(arch_value) == 0:
-								arch_value = str(self.arch_dict[arch_part]["id"])
-							else:
-								arch_value = arch_value + ", " + str(self.arch_dict[arch_part]["id"])
-						else:
-							self._error_macro(arch_part + " is not recognize as a valid architecture.")
-							return False
-
-				else:
-					arch_value = arch
-
-				if len(arch_value) < 2:
-					self._error_macro("support arch is to short")
-					return -1
-
-				if len(arch_value) > 100:
-					self._error_macro("support arch is to long")
-					return -1
-
-				value.append("arch_list")
-				format.append("%s")
-				data.append(arch_value)
-
-				if description is not None:
-					if len(description) > 2:
-						self._error_macro("description is to short")
-						return -1
-
-					if len(description) > 65535:
-						self._error_macro("description is to long")
-						return -1
-
-					value.append("description")
-					format.append("%s")
-					data.append(description)
-
-				if html_style is not None:
-					if len(html_style) < 3:
-						self._error_macro("html style is to short")
-						return -1
-
-					if len(html_style) > 65535:
-						self._error_macro("html style is to long")
-						return -1
-
-					value.append("test_rev_html_style")
-					format.append("%s")
-					data.append(html_style)
-
-				query = "INSERT INTO test_revision (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
-				self.query(query, data)
-
-				# Get the last row value before the queries in refresh the test list blow it away.
-				self.test_revision_id = self.cursor.lastrowid
-
-				self.refresh_test_revision()
-
-				return self.test_revision_id
-		else:
-			return -1
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_test_dict(self):
-		if self._common_checks():
-			self.test_dict = {}
-			query = "SELECT test_id, fk_test_suite_id, fk_test_revision_id from test, test_suite WHERE fk_test_suite_id=test_suite_id and fk_exec_id=" + str(self.exec_id)
-			self.query(query)
-			for row in self.cursor:
-				test_key = str(row[1]) + "_" + str(row[2])
-				self.test_dict[test_key] = {"id":row[0]}
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_test(self, test_suite_id=None, test_rev_id=None):
-		if self._common_checks(project=True, exec_id=True):
-
-			if test_suite_id is None:
-				if self.suite_id is not None:
-					test_suite_id = self.suite_id
-				else:
-					self._error_macro("Test suite id was not previously set")
-					return -1
-
-			if test_rev_id is None:
-				if self.test_revision_id is not None:
-					test_rev_id = self.test_revision_id
-				else:
-					self._error_macro("test revision id was not previously set")
-					return -1
-
-			test_key = str(test_suite_id) + "_" + str(test_rev_id)
-			if test_key in self.test_dict:
-				self.log.out('Test already in the database.', WARNING, v=1)
-				self.test_id = self.test_dict[test_key]["id"]
-				return self.test_id
-			else:
-				value = []
-				format = []
-				data = []
-
-				value.append("fk_test_suite_id")
-				format.append("%s")
-				data.append(test_suite_id)
-
-				value.append("fk_test_revision_id")
-				format.append("%s")
-				data.append(test_rev_id)
-
-				query = "INSERT INTO test (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
-				self.query(query, data)
-
-				# Get the last row value before the queries in refresh the test list blow it away.
-				self.test_id = self.cursor.lastrowid
-
-				self.refresh_test_dict()
-
-				return self.test_id
-		else:
-			return -1
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_test_result(self, result, start_line=-1, end_line=-1, exec_time=-1, other_time=-1, crash_counter=0, custom_json=None, pre_check=True):
-		if self._common_checks(project=True, exec_id=True, variant_id=True):
-			if self.test_id is not None:
-				tag_id = None
-
-				# Get result map value
-				if result in self.tag_dict:
-					tag_id = self.tag_dict[result]["id"]
-				else:
-					self._error_macro(str(result) + " result not found, please call add_tag and add this result type.")
-					return False
-
-				value = []
-				format = []
-				data = []
-
-				value.append("fk_project_id")
-				format.append("%s")
-				data.append(self.project_id)
-
-				value.append("fk_exec_id")
-				format.append("%s")
-				data.append(self.exec_id)
-
-				value.append("fk_variant_id")
-				format.append("%s")
-				data.append(self.variant_id)
-
-				value.append("fk_tag_id")
-				format.append("%s")
-				data.append(tag_id)
-
-				value.append("fk_test_id")
-				format.append("%s")
-				data.append(self.test_id)
-
-				value.append("start_line")
-				format.append("%s")
-				data.append(start_line)
-
-				value.append("end_line")
-				format.append("%s")
-				data.append(end_line)
-
-				value.append("exec_time")
-				format.append("%s")
-				data.append(exec_time)
-
-				value.append("crash_counter")
-				format.append("%s")
-				data.append(crash_counter)
-
-				if pre_check:
-					query = "SELECT result_id FROM test_result WHERE " + "=%s and ".join(value) + "=%s"
-					self.query(query, data)
-
-					rows = self.cursor.fetchall()
-
-					if len(rows) > 0:
-						self.log.out('Test result is already in the database.', WARNING, v=0)
-						return rows[0][0]
-
-				if custom_json:
-					value.append("crash_counter")
-					format.append("%s")
-					data.append(crash_counter)
-
-				query = "INSERT INTO test_result (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
-
-				self.query(query, data)
-
-				return self.cursor.lastrowid
-			else:
-				self._error_macro("Please call add_test before calling this function.")
+				self._error_macro("Unique refernce is too short")
 				return -1
 		else:
 			return -1
 
-	'''
-	Desc:
+	def add_bug_root(self, recorder_type, unique_ref, summary=None, comment=None):
+		bug_root_id = self.get_bug_root_id(recorder_type, unique_ref, display_error=False)
 
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_bug_root(self):
-		if self._common_checks():
-			self.bug_root_dict = {}
-
-			query = "SELECT bug_root_id, recorder, reference from bug_root";
-			self.query(query)
-			for row in self.cursor:
-				bug_root_key = str(row[1]) + "_" + str(row[2])
-				self.bug_root_dict[bug_root_key] = {"id":row[0], "recorder":row[1], "reference":row[2]}
-			return True
-		else:
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_bug_root(self, record_type, reference_id, summary=None, html_style=None):
-		if self._common_checks():
-			valid_report_type = ['pr', 'jira']
-
-			if record_type in valid_report_type:
-				bug_root_key = str(record_type) + "_" + str(reference_id)
-
-				if bug_root_key in self.bug_root_dict:
-
-					self.root_bug_id = self.bug_root_dict[bug_root_key]["id"]
-					return self.root_bug_id
-				else:
-					value = []
-					format = []
-					data = []
-
-					value.append("recorder")
-					format.append("%s")
-					data.append(record_type)
-
-					value.append("reference")
-					format.append("%s")
-					data.append(reference_id)
-
-					if summary is not None:
-						value.append("summary")
-						format.append("%s")
-						data.append(summary)
-
-					if html_style is not None:
-						value.append("html_style")
-						format.append("%s")
-						data.append(html_style)
-
-					query = "INSERT INTO bug_root (" + ",".join(value) + ",created) VALUES (" + ",".join(format) + ", NOW())"
-					self.query(query, data)
-					self.root_bug_id  = self.cursor.lastrowid
-
-					self.refresh_bug_root()
-
-					return self.root_bug_id
-			else:
-				self._error_macro(record_type + " is not a valid record type")
-				return -1
-		else:
-			return -1
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def refresh_project_bugs(self):
-		if self._common_checks(project=True):
-			self.project_bug_dict = {}
-			query = "SELECT bug_id, fk_bug_root_id from project_bug WHERE fk_project_id=" + str(self.project_id);
-			self.query(query)
-			for row in self.cursor:
-				self.project_bug_dict[row[1]] = {"id":row[0]}
-			return True
-		else:
-
-
-			return False
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_project_bug(self, record_type, reference_id, summary=None, entered="test_reference"):
-		if self._common_checks(project=True):
-			valid_entered_values = ['test_reference', 'website', 'other']
-
-			if entered in valid_entered_values:
-				bug_root_id = self.add_bug_root(record_type,reference_id, summary)
-
-				if bug_root_id > 0:
-					if bug_root_id in self.project_bug_dict:
-						self.project_bug_id = self.project_bug_dict[bug_root_id]["id"];
-						return self.project_bug_id
-					else:
-						print "Project Bug: ", record_type, reference_id, "Adding to the database!!"
-
-						value = []
-						format = []
-						data = []
-
-						value.append("fk_project_id")
-						format.append("%s")
-						data.append(self.project_id)
-
-						value.append("fk_bug_root_id")
-						format.append("%s")
-						data.append(bug_root_id)
-
-						value.append("tracked")
-						format.append("%s")
-						data.append(entered)
-
-						query = "INSERT INTO project_bug (" + ",".join(value) + ", created) VALUES (" + ",".join(format) + ", NOW())"
-						self.query(query, data)
-
-						self.project_bug_dict[bug_root_id] = {"id": self.cursor.lastrowid}
-
-						return self.project_bug_dict[bug_root_id]["id"]
-				else:
-					return bug_root_id
-			else:
-				self._error_macro(entered + " is not a bug entry type.")
-				return -1
-		else:
-			return -1
-
-
-	def add_exec_bug(self, result_id, record_type, reference_id, summary=None, attachment_id=None, line_number=None, pre_check=True):
-		if self._common_checks(project=True, exec_id=True):
-			project_bug_id = self.add_project_bug(record_type, reference_id, summary)
-			if project_bug_id > 0:
-
-				value = []
-				format = []
-				data = []
-
-				value.append("fk_project_bug_id")
-				format.append("%s")
-				data.append(project_bug_id)
-
-				value.append("fk_result_id")
-				format.append("%s")
-				data.append(result_id)
-
-				if attachment_id is not None:
-					value.append("fk_attachment_id")
-					format.append("%s")
-					data.append(attachment_id)
-
-				if line_number is not None:
-					if attachment_id is not None:
-						value.append("line_number")
-						format.append("%s")
-						data.append(line_number)
-
-				if pre_check:
-					query = "SELECT bug_exec_id FROM bug_exec WHERE " + "=%s and ".join(value) + "=%s"
-					self.query(query, data)
-					rows = self.cursor.fetchall()
-					if len(rows) > 0:
-						self.log.out('bug exec result is already in the database.', WARNING, v=0)
-						return rows[0][0]
-
-				query = "INSERT INTO bug_exec (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
-				self.query(query, data)
-
-				return self.cursor.lastrowid;
-			else:
-				return project_bug_id;
-		else:
-			return -1
-
-
-	'''
-	Desc:
-
-		-= Params =-
-		N/A
-
-		-= Returns =-
-		N/A
-	'''
-	def add_crash(self, test_result_id, crash_type, line_number, known_crash_id=None):
-		if crash_type in self.crash_type_dict:
-			value = []
-			format = []
+		if bug_root_id == -2:
+			fields = []
 			data = []
 
-			value.append("fk_crash_type_id")
-			format.append("%s")
-			data.append(self.crash_type_dict[crash_type])
+			fields.append("recorder_enum")
+			data.append(recorder_type)
 
-			value.append("fk_result_id")
-			format.append("%s")
-			data.append(test_result_id)
+			fields.append("unique_ref")
+			data.append(unique_ref)
 
-			value.append("line_number")
-			format.append("%s")
-			data.append(line_number)
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
 
-			#check to see if this one is already in the database
-			query = "SELECT crash_id FROM crash WHERE " + "=%s and ".join(value) + "=%s"
-			self.query(query, data)
+			if summary:
+				if self.size(summary) > 0:
+					if self.size(summary) < 65535:
+						fields.append("summary")
+						data.append(summary)
+					else:
+						self._error_macro("The summary is too long")
+						return -1
+				else:
+					self._error_macro("The summary is too short")
+					return -1
 
-			rows = self.cursor.fetchall()
+			db_id = self.insert("bug_root", fields, data, True)
 
-			if len(rows) > 0:
-				self.log.out('Crash information is already in the database.', WARNING, v=0)
-				return rows[0][0]
-
-			if known_crash_id is not None:
-				value.append("fk_known_crash_id")
-				format.append("%s")
-				data.append(known_crash_id)
-
-			query = "INSERT INTO crash (" + ",".join(value) + ") VALUES (" + ",".join(format) + ")"
-			self.query(query, data)
-
-			return self.cursor.lastrowid
+			if db_id > 0:
+				return db_id
+			else:
+				return -1
 		else:
-			self._error_macro(crash_type + " is not a registed crash type. Please call add_crash_type function first or use an already added crash type.")
+			return bug_root_id
+
+	def get_project_bug_id(self, recorder_type, unique_ref, display_error=True):
+		if self.common_check(project_root=True, project_child=True):
+			bug_root_id = self.get_bug_root_id(recorder_type, unique_ref, display_error=display_error)
+			if bug_root_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_bug_root_id")
+				data.append(bug_root_id)
+
+				fields.append("fk_project_child_id")
+				data.append(self.project_child_id)
+
+				project_bug_rows = self.select("project_bug_id", "project_bug", fields, data)
+
+				if self.size(project_bug_rows) > 0:
+					return project_bug_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("project bug not found.")
+					return -2
+
+			else:
+				return bug_root_id
+		else:
 			return -1
 
+	def add_project_bug(self, recorder_type, unique_ref, summary=None, comment=None):
+		if self.common_check(project_root=True, project_child=True):
+			bug_root_id = self.add_bug_root(recorder_type, unique_ref, summary, comment)
+
+			if bug_root_id > 0:
+				project_bug_id = self.get_project_bug_id(recorder_type, unique_ref, display_error=False)
+
+				if project_bug_id > 0:
+					return project_bug_id
+				else:
+					fields = []
+					data = []
+
+					fields.append("fk_bug_root_id")
+					data.append(bug_root_id)
+
+					fields.append("fk_project_child_id")
+					data.append(self.project_child_id)
+
+					fields.append("triaged_enum")
+					data.append("no")
+
+					fields.append("resolved_enum")
+					data.append("no")
+
+					fields.append("added_enum")
+					data.append("test_ref")
+
+					if comment:
+						if self.size(comment) > 0:
+							if self.size(comment) < 65535:
+								fields.append("comment")
+								data.append(comment)
+							else:
+								self._error_macro("The comment is too long")
+								return -1
+						else:
+							self._error_macro("The comment is too short")
+							return -1
+
+					db_id = self.insert("project_bug", fields, data, True)
+
+					if db_id > 0:
+						return db_id
+					else:
+						return -1
+
+			else:
+				return bug_root_id
+		else:
+			return -1
+
+	def get_bug_exec_id(self, line_marker_id, recorder_type, unique_ref, display_error=True):
+		if self.common_check():
+			project_bug_id = self.get_project_bug_id(recorder_type, unique_ref)
+
+			if project_bug_id:
+				fields = []
+				data = []
+
+				fields.append("fk_project_bug_id")
+				data.append(project_bug_id)
+
+				fields.append("fk_line_marker_id")
+				data.append(line_marker_id)
+
+				bug_exec_rows = self.select("bug_exec_id", "bug_exec", fields, data)
+
+				if self.size(bug_exec_rows) > 0:
+					return bug_exec_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("Crash exec not found.")
+					return -2
+			else:
+				return project_bug_id
+		else:
+			return -1
+
+	def add_bug_exec(self, line_marker_id, recorder_type, unique_ref, comment=None):
+		bug_exec_id = self.get_bug_exec_id(line_marker_id, recorder_type, unique_ref, display_error=False)
+
+		if bug_exec_id == -2:
+			project_bug_id = self.get_project_bug_id(recorder_type, unique_ref)
+
+			if project_bug_id:
+				fields = []
+				data = []
+
+				fields.append("fk_project_bug_id")
+				data.append(project_bug_id)
+
+				fields.append("fk_line_marker_id")
+				data.append(line_marker_id)
+
+				db_id = self.insert("bug_exec", fields, data, False)
+
+				return db_id
+			else:
+				return project_bug_id
+		else:
+			return bug_exec_id
+
+	def load_crash_types(self):
+		if self.common_check(project_root=True, project_child=True):
+			get_fields = []
+			where_fields = []
+			where_data = []
+
+			get_fields.append("crash_type_id")
+			get_fields.append("name")
+
+			where_fields.append("fk_project_child_id")
+			where_data.append(self.project_child_id)
+
+			crash_type_rows = self.select(get_fields, "crash_type", where_fields, where_data)
+
+			if self.size(crash_type_rows) > 0:
+				self.crash_type_dict = {}
+				for row in crash_type_rows:
+					self.crash_type_dict[row[1]] = row[0]
+			return True
+		else:
+			return False
+
+	def get_crash_type_id(self, name, display_error=True):
+		if name in self.crash_type_dict:
+			return self.crash_type_dict[name]
+		else:
+			if display_error:
+				self._error_macro(str(name) + " crash type not found. Try calling add first.")
+			return -1
+
+	def add_crash_type(self, name, comment=None):
+		if self.common_check(project_root=True, project_child=True):
+			if self.size(name) > 0:
+				if self.size(name) < 46:
+
+					crash_type_id = self.get_crash_type_id(name, display_error=False)
+
+					if crash_type_id  > 0:
+						return crash_type_id
+					else:
+						fields = []
+						data = []
+
+						fields.append("name")
+						data.append(name)
+
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
+							else:
+								self._error_macro("The comment is too short")
+								return -1
+
+						fields.append("fk_project_child_id")
+						data.append(self.project_child_id)
+
+						db_id = self.insert("crash_type", fields, data, True)
+
+						if db_id > 0:
+							self.history("name tag: " + str(name) + " added.", "crash_type", "auto")
+							self.crash_type_dict[name] = db_id
+							return db_id
+					return -1
+				else:
+					self._error_macro("Line marker type is too long")
+					return -1
+			else:
+				self._error_macro("Line marker type is too short")
+				return -1
+		else:
+			return -1
+
+	def get_test_suite_id(self, suite_name, display_error=True):
+		if self.common_check(project_root=True, project_child=True):
+			if self.size(suite_name) > 0:
+				if self.size(suite_name) < 61:
+					fields = []
+					data = []
+
+					fields.append("fk_project_child_id")
+					data.append(self.project_child_id)
+
+					fields.append("name")
+					data.append(suite_name)
+
+					suite_name_rows = self.select("test_suite_root_id", "test_suite_root", fields, data)
+
+					if self.size(suite_name_rows) > 0:
+						return suite_name_rows[0][0]
+					else:
+						if display_error:
+							self._error_macro("test suite name not found.")
+						return -2
+				else:
+					self._error_macro("Suite name is too long")
+					return -1
+			else:
+				self._error_macro("Suite name is too short")
+				return -1
+		else:
+			return -1
+
+	def add_test_suite(self, suite_name, comment=None):
+		test_suite_id = self.get_test_suite_id(suite_name, display_error=False)
+
+		if test_suite_id == -2:
+			fields = []
+			data = []
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("name")
+			data.append(suite_name)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("test_suite_root", fields, data, True)
+			if db_id > 0:
+				self.history("Test Suite: " + str(suite_name) + " added.", "suite", "auto")
+				return db_id
+		else:
+			return test_suite_id
+
+	def get_exec_abort_id(self, abort_name, display_error=True):
+		if self.common_check(project_root=True, project_child=True):
+			if self.size(abort_name) > 0:
+				if self.size(abort_name) < 46:
+					fields = []
+					data = []
+
+					fields.append("fk_project_child_id")
+					data.append(self.project_child_id)
+
+					fields.append("name")
+					data.append(abort_name)
+
+					exec_abort = self.select("exec_abort_id", "exec_abort", fields, data)
+
+					if self.size(exec_abort) > 0:
+						return exec_abort[0][0]
+					else:
+						if display_error:
+							self._error_macro("exec abort name not found.")
+						return -2
+				else:
+					self._error_macro("Abort name is too long")
+					return -1
+			else:
+				self._error_macro("Abort name is too short")
+				return -1
+		else:
+			return -1
+
+	def add_exec_abort(self, abort_name, comment=None):
+		exec_abort_id = self.get_exec_abort_id(abort_name, display_error=False)
+
+		if exec_abort_id == -2:
+			fields = []
+			data = []
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("name")
+			data.append(abort_name)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("exec_abort", fields, data, True)
+			if db_id > 0:
+				self.history("Abort Type: " + str(abort_name) + " added.", "exec", "auto")
+				return db_id
+		else:
+			return exec_abort_id
+
+	def get_test_root_id(self, exec_path, name, params=None, display_error=True):
+		if self.common_check(project_root=True, project_child=True):
+			if self.size(exec_path) > 0:
+				if self.size(exec_path) < 65535:
+					if self.size(name) > 0:
+						if self.size(name) < 50:
+							fields = []
+							data = []
+
+							fields.append("fk_project_child_id")
+							data.append(self.project_child_id)
+
+							fields.append("name")
+							data.append(name)
+
+							fields.append("exec_path")
+							data.append(exec_path)
+
+							if params:
+								if self.size(params) > 0:
+									if self.size(params) < 65535:
+										fields.append("params")
+										data.append(params)
+									else:
+										self._error_macro("Parameter stringis too long")
+										return -1
+								else:
+									self._error_macro("Parameter string is too short")
+									return -1
+
+							test_root_rows = self.select("test_root_id", "test_root", fields, data)
+
+							if self.size(test_root_rows) > 0:
+								return test_root_rows[0][0]
+							else:
+								if display_error:
+									self._error_macro("Test root not found.")
+								return -2
+
+						else:
+							self._error_macro("Test name is too long")
+							return -1
+					else:
+						self._error_macro("Test name is too short")
+						return -1
+				else:
+					self._error_macro("exec path is too long")
+					return -1
+			else:
+				self._error_macro("exec_path is too short")
+				return -1
+		else:
+			return -1
+
+	def add_test_root(self, exec_path, name, params=None, comment=None):
+		test_root_id = self.get_test_root_id(exec_path, name, params, display_error=False)
+
+		if test_root_id == -2:
+			fields = []
+			data = []
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("name")
+			data.append(name)
+
+			fields.append("exec_path")
+			data.append(exec_path)
+
+			fields.append("params")
+			data.append(params)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("test_root", fields, data, True)
+			if db_id > 0:
+				self.history("Test root: " + str(exec_path) + "/" + str(name) + " " + str(params) + " added.", "test", "auto")
+				return db_id
+		else:
+			return test_root_id
+
+	def get_test_revision_id(self, exec_path, name, params, revision_string=None, display_error=True):
+		test_root_id = self.get_test_root_id(exec_path, name, params, display_error=display_error)
+
+		if test_root_id > 0:
+			fields = []
+			data = []
+
+			fields.append("fk_test_root_id")
+			data.append(test_root_id)
+
+			if self.size(revision_string) > 0:
+				if self.size(revision_string) < 65535:
+					fields.append("unique_ref")
+					data.append(revision_string)
+				else:
+					self._error_macro("The revision string is too long")
+					return -1
+			else:
+				revision_string = "base"
+				fields.append("unique_ref")
+				data.append("base")
+
+			test_rev_rows = self.select("test_revision_id", "test_revision", fields, data)
+
+			if self.size(test_rev_rows) > 0:
+				return test_rev_rows[0][0]
+			else:
+				if display_error:
+					self._error_macro("Test revision was not found!")
+				return -2
+		else:
+			return test_root_id
+
+	def add_test_revision(self, exec_path, name, params, revision_string=None, comment=None):
+		test_revisison_id = self.get_test_revision_id(exec_path, name, params, revision_string, display_error=False)
+		if test_revisison_id > 0:
+			return test_revisison_id
+		else:
+			test_root_id = self.add_test_root(exec_path, name, params, comment)
+
+			if test_root_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_test_root_id")
+				data.append(test_root_id)
+
+				if self.size(revision_string) > 0:
+					if self.size(revision_string) < 65535:
+						fields.append("unique_ref")
+						data.append(revision_string)
+					else:
+						self._error_macro("The revision string is too long")
+						return -1
+				else:
+					revision_string = "base"
+					fields.append("unique_ref")
+					data.append("base")
+
+				if comment:
+					if self.size(comment) > 0:
+						if self.size(comment) < 65535:
+							fields.append("comment")
+							data.append(comment)
+						else:
+							self._error_macro("The comment is too long")
+							return -1
+					else:
+						self._error_macro("The comment is too short")
+						return -1
+
+				db_id = self.insert("test_revision", fields, data, True)
+
+				if db_id > 0:
+					self.history("Test revision: " + str(exec_path) + "/" + str(name) + " " + str(params) + "Rev: (" + revision_string + ") added.", "test", "auto")
+					return db_id
+				else:
+					return db_id
+			else:
+				return -1
+
+	def set_exec_id(self, exec_id):
+		if self.common_check(project_root=True, project_child=True):
+			if isinstance( exec_id, int ):
+				if exec_id > 0:
+					fields = []
+					data = []
+					fields.append("fk_project_child_id")
+					data.append(self.project_child_id)
+
+					fields.append("exec_id")
+					data.append(exec_id)
+
+					exec_rows = self.select("exec_id", "exec", fields, data)
+
+					if self.size(exec_rows) > 0:
+						self.reset_exec_id()
+						self.exec_id = exec_rows[0][0]
+						return exec_rows[0][0]
+					else:
+						self._error_macro("The provided exec id ("+ str(exec_id) +") was not found for the current specified child project.")
+						return -2
+				else:
+					self._error_macro("Exec id must be an positive integer greater then 0.")
+					return -1
+			else:
+				self._error_macro("Exec id must be an integer.")
+				return -1
+		else:
+			return -1
+
+	def register_exec(self, comment=None):
+		if self.common_check(project_root=True, project_child=True):
+			fields = []
+			data = []
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("user_name")
+			data.append(self.reporter_user_name)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("exec", fields, data, True)
+
+			if db_id > 0:
+				self.reset_exec_id()
+				self.exec_id = db_id
+				return db_id
+			else:
+				return db_id
+		else:
+			return -1
+
+	def add_src(self, src_type, url_path, unique_id, src_description, comment=None):
+		if self.common_check(project_root=True, project_child=True, exec_id=True):
+			valid_src_types  = ['build', 'cvs', 'svn', 'git', 'other', 'path']
+
+			if src_type in valid_src_types:
+				fields = []
+				data = []
+
+				fields.append("fk_exec_id")
+				data.append(self.exec_id)
+
+				if self.size(url_path) > 0:
+					if self.size(url_path) < 65535:
+						fields.append("url_path")
+						data.append(url_path)
+					else:
+						self._error_macro("URL/Path is too long")
+						return -1
+				else:
+					self._error_macro("URL/Path is too short")
+					return -1
+
+				if self.size(unique_id) > 0:
+					if self.size(unique_id) < 65535:
+						fields.append("unique_id")
+						data.append(unique_id)
+					else:
+						self._error_macro("Unique identifier is too long")
+						return -1
+				else:
+					self._error_macro("Unique identifier is too short")
+					return -1
+
+				# Check to see if this entry already exists.
+				src_rows = self.select("src_id", "src", fields, data)
+
+				if self.size(src_rows) > 0:
+					return src_rows[0][0]
+				else:
+					if self.size(src_description) > 0:
+						if self.size(src_description) < 65535:
+							fields.append("description")
+							data.append(src_description)
+						else:
+							self._error_macro("Unique identifier is too long")
+							return -1
+					else:
+						self._error_macro("Unique identifier is too short")
+						return -1
+
+					db_id = self.insert("src", fields, data, True)
+					return db_id
+			else:
+				self._error_macro(str(src_type) + " is not a valid source type.")
+				return -1
+		else:
+			return -1
+
+	def get_test_exec_id(self, result, test_suite_name, test_exec_path, test_name, test_params, test_unique_ref=None, display_error=True):
+		if self.common_check(project_root=True, project_child=True, exec_id=True, variant_exec_id=True):
+			result_tag_id = self.get_tag_result_id(result, display_error=display_error)
+
+			if result_tag_id > 0:
+				test_suite_id = self.get_test_suite_id(test_suite_name, display_error=display_error)
+
+				if test_suite_id > 0:
+					test_rev_id = self.get_test_revision_id(test_exec_path, test_name, test_params, test_unique_ref, display_error=display_error)
+
+					if test_rev_id > 0:
+						fields = []
+						data = []
+
+						fields.append("fk_variant_exec_id")
+						data.append(self.variant_exec_id)
+
+						fields.append("fk_test_suite_root_id")
+						data.append(test_suite_id)
+
+						fields.append("fk_test_revision_id")
+						data.append(test_rev_id)
+
+						fields.append("fk_result_tag_id")
+						data.append(result_tag_id)
+
+						# Check to see if this entry already exists.
+						test_exec_rows = self.select("test_exec_id", "test_exec", fields, data)
+
+						if self.size(test_exec_rows) > 0:
+							return test_exec_rows[0][0]
+						else:
+							if display_error:
+								self._error_macro("Test execution not found.")
+							return -2
+					else:
+						return test_rev_id
+				else:
+					return test_suite_id
+			else:
+				return result_tag_id
+		else:
+			return -1
+
+	def get_attachment_type_id(self, name, display_error=True):
+		if self.common_check():
+			fields = []
+			data = []
+
+			if self.size(name) > 0:
+				if self.size(name) < 65535:
+					fields.append("name")
+					data.append(name)
+				else:
+					self._error_macro("Attachment type is too long")
+					return -1
+			else:
+				self._error_macro("Attachment type is too short")
+				return -1
+
+			attachment_type_rows = self.select("attachment_type_id", "attachment_type", fields, data)
+
+			if self.size(attachment_type_rows) > 0:
+				return attachment_type_rows[0][0]
+			else:
+				if display_error:
+					self._error_macro("Attachment type (" + str(name) + ") not found.")
+				return -2
+		else:
+			return -1
+
+	def add_attachment_type(self, name, mime_type, comment=None):
+		attachment_type_id = self.get_attachment_type_id(name, display_error=False)
+
+		if attachment_type_id == -2:
+			fields = []
+			data = []
+
+			if self.size(name) > 0:
+				if self.size(name) < 65535:
+					fields.append("name")
+					data.append(name)
+				else:
+					self._error_macro("Attachment type is too long")
+					return -1
+			else:
+				self._error_macro("Attachment type is too short")
+				return -1
+
+			if self.size(mime_type) > 0:
+				if self.size(mime_type) < 65535:
+					fields.append("mime_type")
+					data.append(mime_type)
+				else:
+					self._error_macro("The mime type is too long")
+					return -1
+			else:
+				self._error_macro("The mime type is too short")
+				return -1
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("attachment_type", fields, data, True)
+
+			return db_id
+
+		else:
+			return attachment_type_id
+
+
+	def get_attachment_id(self, full_attachment_src_path, display_error=True):
+		if self.common_check(project_root=True, project_child=True):
+			fields = []
+			data = []
+
+			local_dir_name = os.path.dirname(full_attachment_src_path)
+			base_name = os.path.basename(full_attachment_src_path)
+			root_file_name, extension = os.path.splitext(base_name)
+
+			if self.size(local_dir_name) == 0:
+				local_dir_name = "."
+
+			fields.append("fk_project_child_id")
+			data.append(self.project_child_id)
+
+			fields.append("src_path")
+			data.append(local_dir_name)
+
+			fields.append("base_file_name")
+			data.append(root_file_name)
+
+			fields.append("src_ext")
+			data.append(extension)
+
+			attachment_rows = self.select("attachment_id", "attachment", fields, data)
+
+			if self.size(attachment_rows) > 0:
+				return attachment_rows[0][0]
+			else:
+				if display_error:
+					self._error_macro("Attachment (" + str(full_attachment_src_path) + ") not found.")
+				return -2
+		else:
+			return -1
+
+	def add_attachment(self, attachment_type, full_attachment_src_path, comment=None, supress_exec_id=False, supress_variant_exec_id=False):
+
+		known_compressed_extensions = [".zip", ".gz"]
+
+		if os.path.exists(full_attachment_src_path):
+			if self.common_check(project_root=True, project_child=True):
+				attachment_id = self.get_attachment_id(full_attachment_src_path, display_error=False)
+
+				if attachment_id == -2:
+					attachment_type_id = self.get_attachment_type_id(attachment_type)
+
+					if attachment_type_id > 0:
+						local_dir_name = os.path.dirname(full_attachment_src_path)
+						base_name = os.path.basename(full_attachment_src_path)
+						root_file_name, extension = os.path.splitext(base_name)
+						storage_extension  = extension
+
+						if self.size(local_dir_name) == 0:
+							local_dir_name = "."
+
+						fields = []
+						data = []
+
+						fields.append("fk_project_child_id")
+						data.append(self.project_child_id)
+
+						fields.append("fk_attachment_type_id")
+						data.append(attachment_type_id)
+
+						fields.append("src_path")
+						data.append(local_dir_name)
+
+						fields.append("base_file_name")
+						data.append(root_file_name)
+
+						fields.append("src_ext")
+						data.append(extension)
+
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
+							else:
+								self._error_macro("The comment is too short")
+								return -1
+
+
+						ftp = my_ftp(self.ftp_host,
+									 self.ftp_user_name,
+									 self.ftp_password,
+									 log=self.get_log()
+									)
+						if ftp:
+							if ftp.connect():
+
+								# Attempt to change to the attachment directory.
+								if ftp.chdir(str(self.attachment_path)) is not True:
+									return -1
+
+								dest_path = self.attachment_path
+								relative_dest_path = "";
+
+								if ftp.mkdir(self.project_root_name, True):
+									if ftp.chdir(self.project_root_name):
+										relative_dest_path = os.path.join(relative_dest_path, self.project_root_name)
+									else:
+										return -1
+								else:
+									return -1
+
+								# Now create or move into the project child direcotry
+								if ftp.mkdir(self.project_child_name, True):
+									if ftp.chdir(self.project_child_name):
+										relative_dest_path = os.path.join(relative_dest_path, self.project_child_name)
+
+									else:
+										return -1
+								else:
+									return -1
+
+								if self.exec_id is not None:
+									if supress_exec_id is False:
+										fields.append("fk_exec_id")
+										data.append(self.exec_id)
+
+										exec_id_dir = "%06d" % int(self.exec_id);
+
+										if ftp.mkdir(str(exec_id_dir), True):
+											relative_dest_path = os.path.join(relative_dest_path, exec_id_dir)
+
+											if ftp.chdir(os.path.join(dest_path, relative_dest_path)):
+
+												if self.variant_exec_id is not None:
+													if supress_variant_exec_id is False:
+														variant_data = report.get_variant_exec_info(self.variant_exec_id)
+
+														if variant_data:
+															fields.append("fk_variant_exec_id")
+															data.append(self.variant_exec_id)
+
+															if ftp.mkdir(variant_data["target"], True):
+																if ftp.chdir(variant_data["target"]):
+																	relative_dest_path = os.path.join(relative_dest_path, variant_data["target"])
+																else:
+																	return -1
+															else:
+																return -1
+
+															if ftp.mkdir(variant_data["arch"], True):
+																if ftp.chdir(variant_data["arch"]):
+																	relative_dest_path = os.path.join(relative_dest_path, variant_data["arch"])
+																else:
+																	return -1
+															else:
+																return -1
+
+															if ftp.mkdir(variant_data["variant"], True):
+																if ftp.chdir(variant_data["variant"]):
+																	relative_dest_path = os.path.join(relative_dest_path, variant_data["variant"])
+																else:
+																	return -1
+															else:
+																return -1
+														else:
+															return -1
+											else:
+												return -1
+										else:
+											return -1
+
+
+								fields.append("storage_rel_path")
+								data.append(relative_dest_path)
+
+								remote_path = os.path.join(dest_path, relative_dest_path)
+
+								# We want to store only compressed files on the server
+								# so see if this file is already compressed.
+								if extension not in known_compressed_extensions:
+									fields.append("compressed_state_enum")
+									data.append("post_compressed_gz")
+
+									# If not then we will compress it before we copy it
+									new_file_name = "";
+									index = 0
+									output_path = ""
+
+									for index in range(-1, 1000):
+										if index == -1:
+												storage_extension = ".gz"
+												file_name = root_file_name + extension + storage_extension
+										else:
+												storage_extension = "-%03d" % index + ".gz"
+												file_name = root_file_name + extension + storage_extension
+
+										output_path = os.path.join(local_dir_name, file_name)
+
+										if os.path.exists(output_path) is False:
+											break
+
+									if index >= 1000:
+										self._error_macro(full_attachment_src_path + " Failed to find an acceptable name to generate a compressed file.")
+										return -1
+
+									fields.append("storage_ext")
+									data.append(storage_extension)
+
+									full_remote_path = os.path.join(remote_path, file_name)
+
+									# Compressed the file
+									with open(full_attachment_src_path, "rb") as fp_in:
+										with gzip.open(output_path, "wb") as fp_output:
+											shutil.copyfileobj(fp_in, fp_output)
+
+									if ftp.binary_file_transfer_2_file(output_path, full_remote_path):
+										# Now that the file has been stored. Remove the compressed file that we created from the local host.
+										os.remove(output_path)
+
+										db_id = self.insert("attachment", fields, data, True)
+
+										return db_id
+									else:
+										return -1
+								else:
+									fields.append("compressed_state_enum")
+									data.append("src_compressed")
+
+									fields.append("storage_ext")
+									data.append(storage_extension)
+
+									full_remote_path = os.path.join(remote_path, base_name)
+
+									if ftp.binary_file_transfer_2_file(full_attachment_src_path, full_remote_path):
+										db_id = self.insert("attachment", fields, data, True)
+										return db_id
+									else:
+										return -1
+							else:
+								return -1
+						else:
+							self._error_macro("Failed to create ftp object.")
+							return -1
+					else:
+						return attachment_type_id
+				else:
+					return attachment_id
+			else:
+				return -1
+		else:
+			self._error_macro(full_attachment_src_path + " does not exist or is not accessable")
+			return -1
+
+	def get_line_marker_id(self, attachment_id, marker_type, start_line, end_line=None, display_error=True):
+		if self.common_check():
+			marker_type_id = self.get_line_marker_type_id(marker_type,  display_error=display_error)
+
+			if marker_type_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_attachment_id")
+				data.append(attachment_id)
+
+				fields.append("fk_line_marker_type_id")
+				data.append(marker_type_id)
+
+				fields.append("start")
+				data.append(start_line)
+
+				query = 'SELECT line_marker_id FROM line_marker'
+
+				query = query + " WHERE " + "=%s and ".join(fields) + "=%s"
+
+				if end_line:
+					query = query + " and end=%s"
+					data.append(end_line)
+				else:
+					query = query + " and end IS NULL"
+
+				self.query(query, data)
+
+				line_markers_rows = self.cursor.fetchall()
+
+				if self.size(line_markers_rows) > 0:
+					return line_markers_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("Matching line marker not found.")
+					return -2
+			else:
+				return marker_type_id
+		else:
+			return -1
+
+
+	def add_line_marker(self, attachment_id, marker_type, start_line, end_line=None, test_exec_id=None, comment=None):
+		if self.common_check():
+			line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
+
+			if line_marker_id == -2:
+				marker_type_id = self.get_line_marker_type_id(marker_type)
+
+				if marker_type_id > 0:
+					fields = []
+					data = []
+
+					fields.append("fk_attachment_id")
+					data.append(attachment_id)
+
+					fields.append("fk_line_marker_type_id")
+					data.append(marker_type_id)
+
+					fields.append("start")
+					data.append(start_line)
+
+					if end_line:
+						fields.append("end")
+						data.append(end_line)
+
+					if test_exec_id:
+						fields.append("fk_test_exec_id")
+						data.append(test_exec_id)
+
+					if comment:
+						if self.size(comment) > 0:
+							if self.size(comment) < 65535:
+								fields.append("comment")
+								data.append(comment)
+							else:
+								self._error_macro("The comment is too long")
+								return -1
+						else:
+							self._error_macro("The comment is too short")
+							return -1
+
+
+					db_id = self.insert("line_marker", fields, data, True)
+
+					return db_id
+
+				else:
+					return marker_type_id
+			else:
+				return line_marker_id
+		else:
+			return -1
+
+	def get_test_exec_id(self, result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id=None, display_error=True):
+		if self.common_check(project_root=True, project_child=True, exec_id=True, variant_exec_id=True):
+			result_id = self.get_tag_result_id(result)
+			if result_id > 0:
+				suite_name_id = self.get_test_suite_id(test_suite_name)
+
+				if suite_name_id > 0:
+					test_revision_id = self.get_test_revision_id(test_exec_path, test_name, test_params, unique_test_rev_id)
+
+					if test_revision_id:
+						fields = []
+						data = []
+
+						fields.append("fk_variant_exec_id")
+						data.append(self.variant_exec_id)
+
+						fields.append("fk_test_suite_root_id")
+						data.append(suite_name_id)
+
+						fields.append("fk_test_revision_id")
+						data.append(test_revision_id)
+
+						fields.append("fk_result_tag_id")
+						data.append(result_id)
+
+						test_exec_rows = self.select("test_exec_id", "test_exec", fields, data)
+
+						if self.size(test_exec_rows) > 0:
+							return test_exec_rows[0][0]
+						else:
+							if display_error:
+								self._error_macro("Test Exec: [" + str(test_suite_name) + "] " + str(test_exec_path) + "/"+ test_name + " " + test_params + " {" + result + "} not found.")
+							return -2
+					else:
+						return test_revision_id
+				else:
+					return suite_name_id
+			else:
+				return result_id
+		else:
+			return -1
+
+	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id=None, comment=None):
+		test_exec_id = self.get_test_exec_id(result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id, display_error=None)
+
+		if test_exec_id == -2:
+			result_id = self.get_tag_result_id(result)
+			if result_id > 0:
+				suite_name_id = self.get_test_suite_id(test_suite_name)
+
+				if suite_name_id > 0:
+					test_revision_id = self.get_test_revision_id(test_exec_path, test_name, test_params, unique_test_rev_id)
+
+					if test_revision_id:
+						fields = []
+						data = []
+
+						fields.append("fk_variant_exec_id")
+						data.append(self.variant_exec_id)
+
+						fields.append("fk_test_suite_root_id")
+						data.append(suite_name_id)
+
+						fields.append("fk_test_revision_id")
+						data.append(test_revision_id)
+
+						fields.append("fk_result_tag_id")
+						data.append(result_id)
+
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
+							else:
+								self._error_macro("The comment is too short")
+								return -1
+
+						db_id = self.insert("test_exec", fields, data, False)
+
+						return db_id
+
+					else:
+						return test_revision_id
+				else:
+					return suite_name_id
+			else:
+				return result_id
+		else:
+			return test_exec_id
+
+	def get_test_metric_id(self, line_marker_id, value, unit, display_error=True):
+		if self.common_check():
+			fields = []
+			data = []
+
+			value = value + 1.0
+
+			fields.append("fk_line_marker_id")
+			data.append(line_marker_id)
+
+			if self.size(unit) > 0:
+				if self.size(unit) < 11:
+					fields.append("unit")
+					data.append(unit)
+				else:
+					self._error_macro("The unit is too long")
+					return -1
+			else:
+				self._error_macro("The unit is too short")
+				return -1
+
+
+			query = 'SELECT test_metric_id FROM test_metric'
+
+			query = query + " WHERE " + "=%s and ".join(fields) + "=%s"
+
+			query = query + " and metric BETWEEN "  + str(value - 0.00000000001) + " and "  + str(value + 0.00000000001)
+
+			self.query(query, data)
+
+			line_markers_rows = self.cursor.fetchall()
+
+			test_metric_rows = self.select("test_metric_id", "test_metric", fields, data)
+
+			if self.size(test_metric_rows) > 0:
+				return test_metric_rows[0][0]
+			else:
+				if display_error:
+					self._error_macro("Test Metric not found.")
+				return -2
+
+		else:
+			return -1
+
+	def add_test_metric(self, line_marker_id, value, unit, comment=None):
+		test_metric_id = self.get_test_metric_id(line_marker_id, value, unit, display_error=False)
+
+		if test_metric_id == -2:
+			fields = []
+			data = []
+
+			fields.append("fk_line_marker_id")
+			data.append(line_marker_id)
+
+			fields.append("metric")
+			data.append(value * 1.0)
+
+			fields.append("unit")
+			data.append(unit)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("test_metric", fields, data, False)
+
+			return db_id
+		else:
+			return test_metric_id
+
+	def get_crash_exec_id(self, line_marker_id, crash_type, display_error=True):
+		if self.common_check():
+			crash_type_id = self.get_crash_type_id(crash_type)
+
+			if crash_type_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_line_marker_id")
+				data.append(line_marker_id)
+
+				fields.append("fk_crash_type_id")
+				data.append(crash_type_id)
+
+				crash_exec_rows = self.select("crash_exec_id", "crash_exec", fields, data)
+
+				if self.size(crash_exec_rows) > 0:
+					return crash_exec_rows[0][0]
+				else:
+					if display_error:
+						self._error_macro("Crash exec not found.")
+					return -2
+			else:
+				return crash_type_id
+		else:
+			return -1
+
+	def add_crash_exec(self, line_marker_id, crash_type):
+		crash_exec_id = self.get_crash_exec_id(line_marker_id, crash_type)
+
+		if crash_exec_id == -2:
+			crash_type_id = self.get_crash_type_id(crash_type)
+
+			if crash_type_id > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_line_marker_id")
+				data.append(line_marker_id)
+
+				fields.append("fk_crash_type_id")
+				data.append(crash_type_id)
+
+				db_id = self.insert("crash_exec", fields, data, False)
+
+				return db_id
+			else:
+				return crash_type_id
+		else:
+			return crash_exec_id
+
+def test():
+	report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project_db")
+
+	if report.connect():
+		print "Project Root:", report.add_project_root("Mainline")
+		print "Select Project Root:", report.select_project_root("Mainline")
+		print "Project Child:", report.add_project_child("Kernel", "/media/BackUp/regression_data/logs", user.ftp_host, user.ftp_usr_name, user.ftp_password)
+		print "Select Child:", report.select_project_child("Kernel")
+
+		print "Get Attachment Type:", report.get_attachment_type_id("primary_log")
+		print "Add Attachment Type:", report.add_attachment_type("primary_log", "plain/text", "Primary log file")
+		print "Add Attachment Type:", report.add_attachment_type("build", "plain/text", "BSP Build file")
+		print "Add Attachment Type:", report.add_attachment_type("site", "plain/text", "Site EXP File")
+		print "Add Attachment Type:", report.add_attachment_type("symbol", "binary", "Symbol File")
+		print "Add Attachment Type:", report.add_attachment_type("image", "plain/text", "Image text file")
+		print "Add Attachment Type:", report.add_attachment_type("sum", "plain/text", "Yoyo Sum File")
+		print "Add Attachment Type:", report.add_attachment_type("kdump_index", "plain/text", "Kdump index file")
+		print "Add Attachment Type:", report.add_attachment_type("kdump", "plain/text", "Kdump File")
+		print "Get Attachment Type:", report.get_attachment_type_id("primary_log")
+
+		print "Add Arch:", report.add_arch("x86")
+		print "Add Arch:", report.add_arch("x86_64")
+		print "Add Arch:", report.add_arch("arm")
+		print "Add Arch:", report.add_arch("aarch64")
+		print "Add Arch:", report.add_arch("ppc")
+		print "Add Arch:", report.add_arch("mips")
+		print "Add Arch:", report.add_arch("x86")
+		print "Line Marker:", report.add_line_marker_type("test download")
+		print "Line Marker:", report.add_line_marker_type("bad_transfer")
+		print "Line Marker:", report.add_line_marker_type("test")
+		print "Line Marker:", report.add_line_marker_type("bug reference")
+		print "Line Marker:", report.add_line_marker_type("crash")
+		print "Line Marker:", report.add_line_marker_type("memory fault")
+		print "Line Marker:", report.add_line_marker_type("test download")
+		print "Result tag:", report.add_result_tag("pass")
+		print "Result tag:", report.add_result_tag("xpass")
+		print "Result tag:", report.add_result_tag("fail")
+		print "Result tag:", report.add_result_tag("xfail")
+		print "Result tag:", report.add_result_tag("unresolved")
+		print "Result tag:", report.add_result_tag("untested")
+		print "Result tag:", report.add_result_tag("pass")
+
+		print "Add Target:", report.add_target("adsom-7222")
+		print "Add Target:", report.add_target("advantech-7226")
+		print "Add Target:", report.add_target("aimb272-12185")
+		print "Add Target:", report.add_target("amd64-dual-2")
+		print "Add Target:", report.add_target("amdk6ii-1")
+		print "Add Target:", report.add_target("amdk6iii-1")
+		print "Add Target:", report.add_target("amdk7-1")
+		print "Add Target:", report.add_target("atom-6354")
+		print "Add Target:", report.add_target("beagleblack")
+		print "Add Target:", report.add_target("beaglexm-1")
+		print "Add Target:", report.add_target("beaglexm-2")
+		print "Add Target:", report.add_target("bigbertha-8455")
+		print "Add Target:", report.add_target("bigintel-7990")
+		print "Add Target:", report.add_target("bigmac")
+		print "Add Target:", report.add_target("ct11eb")
+		print "Add Target:", report.add_target("ds81-shuttle-001")
+		print "Add Target:", report.add_target("hasswell-bc5ff4e8872e")
+		print "Add Target:", report.add_target("imb-151")
+		print "Add Target:", report.add_target("imb-151-6336")
+		print "Add Target:", report.add_target("imb-151-6342")
+		print "Add Target:", report.add_target("imb-151-6352")
+		print "Add Target:", report.add_target("imx600044-20015160")
+		print "Add Target:", report.add_target("imx6q-sabresmart-00049f02e082")
+		print "Add Target:", report.add_target("imx6q-sabresmart-6115")
+		print "Add Target:", report.add_target("ivybridge-2554")
+		print "Add Target:", report.add_target("jasper-8092")
+		print "Add Target:", report.add_target("kontron-flex-7229")
+		print "Add Target:", report.add_target("kontron-flex-7230")
+		print "Add Target:", report.add_target("ktron-uepc-7234")
+		print "Add Target:", report.add_target("mvdove-7213")
+		print "Add Target:", report.add_target("mvdove-7791")
+		print "Add Target:", report.add_target("mx6q-sabrelite-12252")
+		print "Add Target:", report.add_target("nvidia-7903")
+		print "Add Target:", report.add_target("nvidia-erista-8091")
+		print "Add Target:", report.add_target("nvidia-erista-8093")
+		print "Add Target:", report.add_target("nvidia-loki-6769")
+		print "Add Target:", report.add_target("nvidia-loki-6790")
+		print "Add Target:", report.add_target("nvidia-loki-6961")
+		print "Add Target:", report.add_target("omap3530-6363")
+		print "Add Target:", report.add_target("omap3530-7098")
+		print "Add Target:", report.add_target("omap3530-7099")
+		print "Add Target:", report.add_target("omap3530-7567")
+		print "Add Target:", report.add_target("omap4430-9095")
+		print "Add Target:", report.add_target("omap4430-9221")
+		print "Add Target:", report.add_target("omap5432-es2-2206")
+		print "Add Target:", report.add_target("omap5432-es2-2716")
+		print "Add Target:", report.add_target("panda-12659")
+		print "Add Target:", report.add_target("panda-12660")
+		print "Add Target:", report.add_target("panda-12676")
+		print "Add Target:", report.add_target("panda-12677")
+		print "Add Target:", report.add_target("pcm9562-8166")
+		print "Add Target:", report.add_target("qnet02")
+		print "Add Target:", report.add_target("qnet04")
+		print "Add Target:", report.add_target("qnet05")
+		print "Add Target:", report.add_target("sandybridge-001")
+		print "Add Target:", report.add_target("smpmpxpii")
+		print "Add Target:", report.add_target("tolapai-6109")
+		print "Add Target:", report.add_target("adsom-7222")
+
+		print "Add Bug Root:", report.add_bug_root("jira", "123456789", "This is a stupid summary")
+		print "Add Bug Root:", report.add_bug_root("jira", "123456789", "This is a stupid summary")
+
+		print "Get Project Bug:", report.get_project_bug_id("jira", "123456789")
+		print "Get Project Bug:", report.get_project_bug_id("jira", "123456790")
+		print "Add Project Bug:", report.add_project_bug("jira", "123456789")
+		print "Add Project Bug:", report.add_project_bug("jira", "123456789")
+		print "Add Project Bug:", report.add_project_bug("jira", "123456790")
+		print "Add Project Bug:", report.add_project_bug("jira", "123456790")
+		print "Get Project Bug:", report.get_project_bug_id("jira", "123456789")
+		print "Get Project Bug:", report.get_project_bug_id("jira", "123456790")
+
+
+		print "Add Crash Type: ", report.add_crash_type("sigsegv")
+		print "Add Crash Type: ", report.add_crash_type("sigill")
+		print "Add Crash Type: ", report.add_crash_type("sigbus")
+		print "Add Crash Type: ", report.add_crash_type("shutdown")
+		print "Add Crash Type: ", report.add_crash_type("kdump")
+		print "Add Crash Type: ", report.add_crash_type("sigsegv")
+		print "Get Test Suite: ", report.get_test_suite_id("Testware_bob")
+		print "Add Test Suite: ", report.add_test_suite("Testware_bob")
+		print "Add Test Suite: ", report.add_test_suite("Testware_Fred")
+		print "Add Test Suite: ", report.add_test_suite("Testware_Juan")
+		print "Add Test Suite: ", report.add_test_suite("Testware_bob")
+		print "Get Test Suite: ", report.get_test_suite_id("Testware_bob")
+		print "Get Exec Abort: ", report.get_exec_abort_id("user_abort")
+		print "Get Exec Abort: ", report.add_exec_abort("user_abort")
+		print "Get Exec Abort: ", report.add_exec_abort("timeout")
+		print "Get Exec Abort: ", report.add_exec_abort("user_abort")
+		print "Get Exec Abort: ", report.get_exec_abort_id("user_abort")
+
+		print "Get Test Root:", report.get_test_root_id("./", "Ian", "-is -the best")
+		print "Get Test Root:", report.add_test_root("./", "Ian", "-is -the best")
+		print "Get Test Root:", report.add_test_root("./", "Norman", "-is -odd")
+		print "Get Test Root:", report.add_test_root("./", "Ian", "-is -the best")
+		print "Get Test Root:", report.get_test_root_id("./", "Ian", "-is -the best")
+
+		print "Get Test Rev:", report.get_test_revision_id("./", "Ian", "-is -the best", "2123411")
+		print "Add Test Rev:", report.add_test_revision("./", "Ian", "-is -the best", "2123411")
+		print "Add Test Rev:", report.add_test_revision("./", "Ian", "-is -the best", "2123411")
+		print "Get Test Rev:", report.get_test_revision_id("./", "Ian", "-is -the best", "2123411")
+		print "Add Test Rev:", report.add_test_revision("./", "Rebecca", "-awesome", "1")
+		print "Get Test Rev:", report.get_test_revision_id("./", "Rebecca", "-awesome", "1")
+
+		print "Get Test Rev:", report.get_test_revision_id("./", "None", "-awesome")
+		print "Add Test Rev:", report.add_test_revision("./", "None", "-awesome")
+		print "Get Test Rev:", report.get_test_revision_id("./", "None", "-awesome")
+
+		print "Set Exec:", report.set_exec_id(100000)
+
+		print "Set Exec:",
+
+
+		rc = report.set_exec_id(1)
+		print  rc
+
+		if rc < 0:
+			print "Register Exec:", report.register_exec()
+
+		print "Set Exec:", report.set_exec_id(1)
+		print "Add Src:", report.add_src("svn", "http://svn.shim.sham/man", "12345", "toolchain")
+		print "Add Src:", report.add_src("svn", "http://svn.shim.sham/man", "12345", "toolchain")
+
+		print "Get Test Rev:", report.get_test_revision_id("./", "None", "-awesome")
+
+		print "Get Root Variant:", report.get_variant_root_id("qnet04", "x86_64", "o.smp")
+		print "Add Root Variant:", report.add_variant_root("qnet04", "x86_64", "o.smp")
+		print "Get Root Variant:", report.get_variant_root_id("qnet04", "x86_64", "o.smp")
+
+		print "Get Variant Exec:", report.get_variant_exec_id("qnet04", "x86_64", "o.smp")
+		print "Add Variant Exec:", report.add_variant_exec("qnet04", "x86_64", "o.smp")
+		print "Add Variant Exec:", report.add_variant_exec("qnet20", "x86_64", "o.smp")
+		print "Get Variant Exec:", report.get_variant_exec_id("qnet04", "x86_64", "o.smp")
+
+		print "Get file id", report.get_attachment_id("./blob.txt")
+		print "Add file", report.add_attachment("primary_log", "./blob.txt")
+
+		print "Add file", report.add_attachment("primary_log", "TestReporter.py")
+		print "Add file", report.add_attachment("primary_log", "TestReporter_2.py.zip")
+
+		print "Get Test Exec:", report.get_test_exec_id("pass", "Testware_Juan", "./" ,"Ian",  "-is -the best", "2123411")
+		print "Add Test Exec:", report.add_test_exec("pass", "Testware_Juan", "./" ,"Ian",  "-is -the best", "2123411")
+		print "Get Test Exec:", report.get_test_exec_id("pass", "Testware_Juan", "./" ,"Ian",  "-is -the best", "2123411")
+
+		print "Get Line Marker", report.get_line_marker_id(1,"test", 0, 100)
+		print "Add Line Marker", report.add_line_marker(1,"test", 0, 100, test_exec_id=1)
+		print "Get Line Marker", report.get_line_marker_id(1,"test", 0, 100)
+		print "Add Line Marker", report.add_line_marker(1,"test", 0, None, test_exec_id=1)
+		print "Get Line Marker", report.get_line_marker_id(1,"test", 0, None)
+
+
+		print "Get Test Metric ID", report.get_test_metric_id(2, 0.234, "secs")
+		print "Add Test Metric", report.add_test_metric(1, 0.234, "secs")
+		print "Get Test Metric ID", report.get_test_metric_id(1, 0.234, "secs")
+
+		print "Get Crash Exec ID", report.get_crash_exec_id(1, "sigsegv")
+		print "Add Crash Exec", report.add_crash_exec(1, "sigsegv")
+		print "Get Crash Exec ID", report.get_crash_exec_id(1, "sigsegv")
+
+		print "Get Bug EXEC ID ", report.get_bug_exec_id(1, "jira", "123456789")
+		print "Add Bug EXEC ", report.add_bug_exec(1, "jira", "123456789")
+		print "Get Bug EXEC ID ", report.get_bug_exec_id(1, "jira", "123456789")
+
+
+		print "Done"
+
+		report.commit()

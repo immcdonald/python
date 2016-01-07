@@ -272,3 +272,36 @@ class My_SQL(object):
 		else:
 			return len(value)
 
+	def fix_auto_inc(self):
+		query = 'show tables'
+		data = None
+
+		self.query(query, data)
+
+		table_rows = self.cursor.fetchall()
+
+		for table_row in table_rows:
+			query = 'LOCK TABLES ' + str(table_row[0]) + " WRITE"
+			self.query(query)
+
+			query = 'SELECT ' + str(table_row[0])+'_id FROM '+ str(table_row[0]) + ' ORDER BY ' + str(table_row[0])+'_id DESC LIMIT 1';
+			self.query(query, data)
+			table_rows = self.cursor.fetchall()
+
+			last_table_index = 1
+
+			if len(table_rows) > 0:
+				# inc by one because that is what the next insert should be
+				last_table_index = table_rows[0][0] + 1
+
+			query = 'SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_NAME ="' + str(table_row[0]) + '"'
+			self.query(query, data)
+
+			table_rows = self.cursor.fetchall()
+
+			if len(table_rows) == 1:
+				if last_table_index < table_rows[0][0]:
+					query = 'ALTER TABLE ' + str(table_row[0]) + ' AUTO_INCREMENT = ' + str(last_table_index)
+					self.query(query, data)
+
+			self.query('UNLOCK TABLES')
