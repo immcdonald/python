@@ -4,7 +4,6 @@ import user
 from TestReporter import TestReporter
 from pprint import pformat
 
-
 def add_project(args):
 	arches = ["aarch64", "arm", "mips", "ppc", "sh", "x86", "x86_64"]
 
@@ -89,14 +88,20 @@ def add_project(args):
 	line_markers = [
 		"download",
 		"test",
+		"exec"
 		"stop",
 		"final",
-		"crash",
 		"memory fault",
 		"ldd fault",
 		"timeout",
 		"never_started",
 		"bad transfer",
+		"bug_ref",
+		"sigsegv",
+		"sigill",
+		"sigbus",
+		"shutdown",
+		"kdump"
 	]
 
 	if args["reporter"].check_ftp_path(args["ftp_host"], args["ftp_user_name"], args["ftp_password"], args["set_storage_path"]):

@@ -602,6 +602,9 @@ class TestReporter(My_SQL):
 					fields = []
 					data = []
 
+					fields.append("fk_project_child_id")
+					data.append(self.project_child_id)
+
 					fields.append("name")
 					data.append(name)
 
