@@ -1,5 +1,5 @@
 import argparse
-import sys, os, shutil
+import sys, os, shutil, time
 import re
 import user
 from TestReporter import TestReporter, DEBUG, ERROR, WARNING
@@ -38,7 +38,9 @@ arch_type_file_path_breaks = ["$PROCTYPE",
 							  "ppc"
 							]
 
-
+def dmdty2time(input_string):
+	# convert this format (Fri May 29 22:18:39 2015) to python time
+	return time.strptime(input_string, "%a %b %d %H:%M:%S %Y")
 
 def generate_regex_prefix():
 	start = []
@@ -430,62 +432,69 @@ def cleanup_log_files(args, log, fp, recovery_data):
 
 
 def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
-	# Use a list and index so that items stay in the order they are found.
-	data = []
+
+	report = {}
+
+	# Use a list and index so that items stay in the order they are found
+	report["time_stamp_indexes"] = []
+	report["test_point_indexes"] = []
+	report["parsed_lines"] = []
 
 	with open(os.path.join(yoyo_sum_path, "yoyo.sum"), "Ur") as fp_in:
 		# Read in striping new lines this time.
 		sum_file_data = fp_in.read().splitlines()
-
-		for line in sum_file_data:
-			if len(line) == 0:
+		index = 0
+		size = len(sum_file_data)
+		while index < size:
+			if len(sum_file_data[index]) == 0:
+				index = index + 1
 				continue
 
-			log.out(line, DEBUG, v=20)
+			log.out(sum_file_data[index], DEBUG, v=20)
 
 			no_match= True
 
-			result = line_regex["general_tst_pnt"].search(line)
+			result = line_regex["general_tst_pnt"].search(sum_file_data[index])
 			if result:
 				matches = result.groupdict()
 				if matches["testpnt"][:-2] in test_point_prefix:
-					data.append({"type": "TestPoint", "matches": matches})
+					report["test_point_indexes"].append(len(report["parsed_lines"]))
+					report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 					no_match = False
 
 			if no_match:
-				result = line_regex["user_time_stamp"].search(line)
+				result = line_regex["user_time_stamp"].search(sum_file_data[index])
 				if result:
-					data.append({"type": "user_time_stamp", "matches": result.groupdict()})
+					matches = result.groupdict()
+					report["time_stamp_indexes"].append(len(report["parsed_lines"]))
+					report["parsed_lines"].append({"type": "user_time_stamp", "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
 					no_match = False
 
 			if no_match:
-				result = line_regex["test_suite"].search(line)
+				result = line_regex["test_suite"].search(sum_file_data[index])
 				if result:
-					data.append({"type": "test_suite", "matches": result.groupdict()})
+					report["parsed_lines"].append({"type": "test_suite", "matches": result.groupdict(), "start":  index, "end": index})
 					no_match = False
 
-
 			if no_match:
-				result = line_regex["host"].search(line)
+				result = line_regex["host"].search(sum_file_data[index])
 				if result:
-					data.append({"type": "host", "matches": result.groupdict()})
+					report["parsed_lines"].append({"type": "host", "matches": result.groupdict(), "start":  index, "end": index})
 					no_match = False
 
 			if no_match:
-				log.out("Ignored SUM line: " + line, DEBUG, v=19)
+				log.out("Ignored SUM line: " + sum_file_data[index], DEBUG, v=19)
 
-	return data
+			index = index + 1
+	return report
 
-def process_yoyo_sum(args, log, yoyo_sum_path, line_regex, sum_result):
+def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 	# Use a list and index so that items stay in the order they are found.
 	data = []
 
 
 
 	return data
-
-
-
 
 
 def process_variants(args, log, fp, recovery_data):
@@ -522,6 +531,11 @@ def process_variants(args, log, fp, recovery_data):
 
 	# Different kinds of user abort
 	line_regex[""] = re.compile('')
+
+
+
+
+
 
 	input_lenght = len(args["input"])
 
