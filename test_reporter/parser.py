@@ -433,9 +433,6 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 	# Use a list and index so that items stay in the order they are found.
 	data = []
 
-	# regular expresssion to look for any test point prefix that
-	# does't start the line.
-
 	with open(os.path.join(yoyo_sum_path, "yoyo.sum"), "Ur") as fp_in:
 		# Read in striping new lines this time.
 		sum_file_data = fp_in.read().splitlines()
@@ -479,6 +476,17 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 
 	return data
 
+def process_yoyo_sum(args, log, yoyo_sum_path, line_regex, sum_result):
+	# Use a list and index so that items stay in the order they are found.
+	data = []
+
+
+
+	return data
+
+
+
+
 
 def process_variants(args, log, fp, recovery_data):
 
@@ -496,6 +504,24 @@ def process_variants(args, log, fp, recovery_data):
 
 	# Look for host system information in the form of host system: Linux titan 3.8.0-44-generic #66~precise1-Ubuntu SMP Tue Jul 15 04:04:23 UTC 2014 i686 i686 i386 GNU/Linux
 	line_regex["host"] = re.compile('^host\ssystem\:\s(?P<host>.*)$')
+
+	# Look for the basic Process SIG<Something> format
+	line_regex["process_seg"] = re.compile('Process\s(?P<pid>\d+)\s\((?P<name>.+)\)\sterminated\s(?P<type>.+)\scode=(?P<the_rest>.*)')
+
+	# Look for basic Shutdown message
+	line_regex["shutdown"] = re.compile('Shutdown\[')
+
+	# Look for ldd flault
+	line_regex["ldd_fault"] = re.compile('')
+
+	# Look for Memory fault
+	line_regex["memory_fault"] = re.compile('')
+
+	# Look for SEND-class
+	line_regex[""] = re.compile('')
+
+	# Different kinds of user abort
+	line_regex[""] = re.compile('')
 
 	input_lenght = len(args["input"])
 
