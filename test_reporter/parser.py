@@ -2,7 +2,7 @@ import argparse
 import sys, os, shutil
 import re
 import user
-from TestReporter import TestReporter, DEBUG, ERROR
+from TestReporter import TestReporter, DEBUG, ERROR, WARNING
 
 from pprint import pformat
 
@@ -16,11 +16,15 @@ test_point_prefix = ["METRIC",
 					 "FAILX",
 					 "FAIL",
 					 "UNRES",
+					 "UNRESOLVED",
 					 "UNSUP",
+					 "UNSUPPORTED",
+					 "UNTESTED",
 					 "BOOT",
 					 "boot",
 					 "WARN",
 					 "ERR",
+					 "ERROR",
 					 "NOTE",
 					 "ABORT"]
 
@@ -154,11 +158,18 @@ def add_project(args, log):
 
 
 	line_markers = [
+		"host_system",
+		"log_start_time_stamp",
+		"boot",
+		"boot_failure"
+		"reboot"
 		"download",
+		"test_suite",
 		"test",
 		"exec"
 		"stop",
 		"final",
+		"error",
 		"memory fault",
 		"ldd fault",
 		"timeout",
@@ -169,7 +180,8 @@ def add_project(args, log):
 		"sigill",
 		"sigbus",
 		"shutdown",
-		"kdump"
+		"kdump",
+		"log_end_time_stamp"
 	]
 
 	if args["reporter"].check_ftp_path(args["ftp_host"], args["ftp_user_name"], args["ftp_password"], args["set_storage_path"]):
@@ -417,40 +429,77 @@ def cleanup_log_files(args, log, fp, recovery_data):
 	return True
 
 
-def process_yoyo_sum(args, log, yoyo_sum_path):
-	data = {}
+def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
+	# Use a list and index so that items stay in the order they are found.
+	data = []
 
 	# regular expresssion to look for any test point prefix that
 	# does't start the line.
-	regex_pattern = "(?P<testpnt>" + generate_regex_prefix() + ")(?P<the_rest>.*)"
 
-	print regex_pattern
-
-
-	tstpnt_regex = re.compile(regex_pattern)
 	with open(os.path.join(yoyo_sum_path, "yoyo.sum"), "Ur") as fp_in:
 		# Read in striping new lines this time.
 		sum_file_data = fp_in.read().splitlines()
 
 		for line in sum_file_data:
-			print line
 			if len(line) == 0:
 				continue
 
-			result = tstpnt_regex.search(line)
+			log.out(line, DEBUG, v=20)
 
+			no_match= True
+
+			result = line_regex["general_tst_pnt"].search(line)
 			if result:
 				matches = result.groupdict()
+				if matches["testpnt"][:-2] in test_point_prefix:
+					data.append({"type": "TestPoint", "matches": matches})
+					no_match = False
 
-				if "testpnt" in matches:
-					print "->", matches["testpnt"], "-->", matches["the_rest"]
+			if no_match:
+				result = line_regex["user_time_stamp"].search(line)
+				if result:
+					data.append({"type": "user_time_stamp", "matches": result.groupdict()})
+					no_match = False
+
+			if no_match:
+				result = line_regex["test_suite"].search(line)
+				if result:
+					data.append({"type": "test_suite", "matches": result.groupdict()})
+					no_match = False
+
+
+			if no_match:
+				result = line_regex["host"].search(line)
+				if result:
+					data.append({"type": "host", "matches": result.groupdict()})
+					no_match = False
+
+			if no_match:
+				log.out("Ignored SUM line: " + line, DEBUG, v=19)
+
 	return data
 
 
 def process_variants(args, log, fp, recovery_data):
-	data = {}
+
+	line_regex = {}
+
+	# regular expresssion to look for any test point prefix that
+	# does't start the line.
+	line_regex["general_tst_pnt"] = re.compile("(?P<testpnt>" + generate_regex_prefix() + ")(?P<the_rest>.*)")
+
+	# Look for time stamp lines in the form of Test Run By iamcdonald on Fri May 29 22:18:39 2015
+	line_regex["user_time_stamp"] = re.compile('^Test\sRun\sBy\s(?P<user_name>[a-zA-Z0-9\_\-\s]+)\son\s(?P<date>.*)$')
+
+	# Look for test suite start lines in the form of Running ../../../../../yoyo.suite/testware_aps.exp ...
+	line_regex["test_suite"] = re.compile('^Running\s(?P<test_suite>[\./\/a-zA-Z0-9\-\_]+)\s\.{3}$')
+
+	# Look for host system information in the form of host system: Linux titan 3.8.0-44-generic #66~precise1-Ubuntu SMP Tue Jul 15 04:04:23 UTC 2014 i686 i686 i386 GNU/Linux
+	line_regex["host"] = re.compile('^host\ssystem\:\s(?P<host>.*)$')
 
 	input_lenght = len(args["input"])
+
+	data = {}
 
 	for root, dirs, files in os.walk(args["input"]):
 
@@ -461,11 +510,14 @@ def process_variants(args, log, fp, recovery_data):
 				relative_root = relative_root[1:]
 
 		if "yoyo.sum" in files:
+			log.out(root + "yoyo.sum", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.sum import completed"
 			if completed_string not in recovery_data:
-				data[relative_root] = process_yoyo_sum(args, log, root)
+				data[relative_root] = {}
+				data[relative_root]["SUM"] = process_yoyo_sum(args, log, root, line_regex)
 
-				if len(data) > 0:
+				if len(data[relative_root]["SUM"]) > 0:
+					print pformat(data[relative_root]["SUM"])
 
 					pass
 
@@ -473,6 +525,7 @@ def process_variants(args, log, fp, recovery_data):
 					return False
 
 		if "yoyo.log" in files:
+			log.out(root + "yoyo.log", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.log import completed"
 			if completed_string not in recovery_data:
 				pass
