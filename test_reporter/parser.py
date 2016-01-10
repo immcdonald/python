@@ -6,6 +6,11 @@ from TestReporter import TestReporter, DEBUG, ERROR, WARNING
 
 from pprint import pformat
 
+# Debug Levels
+# 8 - Show all output lines for sum file
+# 7 - Show lines that were not processed by the parser for the sum file
+# 6 - Show all output lines for log file
+# 5 - Show lines that were not processed by the parser for the log file
 
 test_point_prefix = ["METRIC",
 					 "START",
@@ -183,6 +188,8 @@ def add_project(args, log):
 		"sigbus",
 		"shutdown",
 		"kdump",
+		"stack_smashing",
+		"failed_library_load",
 		"log_end_time_stamp"
 	]
 
@@ -450,8 +457,6 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 				index = index + 1
 				continue
 
-			log.out(sum_file_data[index], DEBUG, v=20)
-
 			no_match= True
 
 			result = line_regex["general_tst_pnt"].search(sum_file_data[index])
@@ -483,7 +488,10 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 					no_match = False
 
 			if no_match:
-				log.out("Ignored SUM line: " + sum_file_data[index], DEBUG, v=19)
+				log.out("Ignored SUM line: " + sum_file_data[index], DEBUG, v=7)
+			else:
+				log.out(sum_file_data[index], DEBUG, v=8)
+
 
 			index = index + 1
 	return report
@@ -492,7 +500,75 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 	# Use a list and index so that items stay in the order they are found.
 	data = []
 
+	report = {}
 
+	# Use a list and index so that items stay in the order they are found
+	report["time_stamp_indexes"] = []
+	report["test_point_indexes"] = []
+	report["parsed_lines"] = []
+
+
+
+	with open(os.path.join(yoyo_sum_path, "yoyo.log"), "Ur") as fp_in:
+		# Read in striping new lines this time.
+		yoyo_file_data = fp_in.read().splitlines()
+
+		last_matched_index = -1
+
+		index = 0
+
+		size = len(yoyo_file_data)
+		while index < size:
+			if len(yoyo_file_data[index]) == 0 or yoyo_file_data[index]== "\n":
+				index = index + 1
+				continue
+
+			no_match = True
+
+			# Cycle threw the define regexs for each line.
+			for key, regex in line_regex.iteritems():
+				# Search each line for multiple matches.
+				# BECARE ABOUT WHICH LINES YOU MATCH AND EXECUTE A BREAK FROM. REMEMBER MULTIPLE PATTERNS CAN EXIST ON A LINE.
+
+				result = regex.search(yoyo_file_data[index])
+				if result:
+					matches = result.groupdict()
+					if key == "user_time_stamp":
+						report["time_stamp_indexes"].append(len(report["parsed_lines"]))
+						report["parsed_lines"].append({"type": "user_time_stamp", "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
+						no_match = False
+
+					elif key == "download":
+						report["parsed_lines"].append({"type": "download", "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
+						no_match = False
+
+					elif key == "execute":
+						report["parsed_lines"].append({"type": "download", "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
+						no_match = False
+
+					elif key == "general_tst_pnt":
+						if matches["testpnt"][:-2] in test_point_prefix:
+							report["test_point_indexes"].append(len(report["parsed_lines"]))
+							report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
+							no_match = False
+					elif key == "mem_proc":
+						report["parsed_lines"].append({"type": "mem_proc", "matches": matches ,"start":  index, "end": index })
+						no_match = False
+					elif key == "process_seg":
+						report["parsed_lines"].append({"type": "mem_proc", "matches": matches ,"start":  index, "end": index })
+						no_match = False
+					else:
+						log.out("Regex match for unhandled key " + key, ERROR)
+						return None
+
+			if no_match:
+				log.out("Ignored SUM line: " + yoyo_file_data[index], DEBUG, v=5)
+			else:
+				log.out(yoyo_file_data[index], DEBUG, v=6)
+
+
+			index = index + 1
+	return report
 
 	return data
 
@@ -500,6 +576,10 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 def process_variants(args, log, fp, recovery_data):
 
 	line_regex = {}
+
+	line_regex["download"] = re.compile('<QADEBUG>Generic\s+Download\s+(?P<mode>Start|Stop)\s+on\s+<TS>\s*(?P<date>.+)\s*</TS\>\s*<BS>(?P<test_path>.+)\s*</BS></QADEBUG>')
+
+	line_regex["execute"] = re.compile('<QADEBUG>Generic\s+Execute\s+(?P<mode>Start|Stop)\s+on\s+<TS>\s*(?P<date>.+)\s*</TS\>\s*<BS>(?P<test_path>.+)\s*</BS></QADEBUG>')
 
 	# regular expresssion to look for any test point prefix that
 	# does't start the line.
@@ -521,20 +601,22 @@ def process_variants(args, log, fp, recovery_data):
 	line_regex["shutdown"] = re.compile('Shutdown\[')
 
 	# Look for ldd flault
-	line_regex["ldd_fault"] = re.compile('')
+	line_regex["ldd_fault"] = re.compile('ldd:FATAL:')
 
 	# Look for Memory fault
-	line_regex["memory_fault"] = re.compile('')
+	line_regex["memory_fault"] = re.compile('Memory\sfault')
 
 	# Look for SEND-class
-	line_regex[""] = re.compile('')
+	line_regex["send-class"] = re.compile('SEND-class command failed.')
+
+	line_regex["to_man_retries"] = re.compile('Fatal\s+Kermit\s+Protocol\s+Error:\s+Too\s+many\s+retries')
+
+	line_regex["mem_proc"] = re.compile('^\s*(?P<proc_memory>\d+)\s+\/proc$')
+
+	line_regex["stack_smashing"] = re.compile('\*\*\*\s+stack\s+smashing\s+detected\s\*\*\*')
 
 	# Different kinds of user abort
-	line_regex[""] = re.compile('')
-
-
-
-
+	line_regex["keyboard_interrupt"] = re.compile('KeyboardInterrupt')
 
 
 	input_lenght = len(args["input"])
@@ -557,7 +639,7 @@ def process_variants(args, log, fp, recovery_data):
 				data[relative_root]["SUM"] = process_yoyo_sum(args, log, root, line_regex)
 
 				if len(data[relative_root]["SUM"]) > 0:
-					print pformat(data[relative_root]["SUM"])
+					#print pformat(data[relative_root]["SUM"])
 
 					pass
 
@@ -568,7 +650,12 @@ def process_variants(args, log, fp, recovery_data):
 			log.out(root + "yoyo.log", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.log import completed"
 			if completed_string not in recovery_data:
-				pass
+				data[relative_root]["LOG"] = process_yoyo_log(args, log, root, line_regex, data[relative_root]["SUM"])
+
+				if data[relative_root]["LOG"]:
+					pass
+				else:
+					return False
 
 	if args["project"] is None:
 		log.out("No project was specified.", ERROR)
@@ -696,14 +783,16 @@ def main(argv=None):
 	args = vars(parser.parse_args())
 
 
-	print pformat(args)
-
 
 	args["reporter"] = TestReporter(args["mysql_host"],  args["mysql_user_name"], args["mysql_password"], args["schema"])
 
 	log = args["reporter"].get_log()
 
 	log.set_verbosity(DEBUG, args["verbosity"])
+
+	str_buffer = "Input Parameters\n"
+
+	log.out(str_buffer + ("=" * (len(str_buffer)-1)) + "\n" + pformat(args), DEBUG, v=1)
 
 	if args["reporter"]:
 		if args["add_project"]:
