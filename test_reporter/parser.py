@@ -518,13 +518,15 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 		index = 0
 
 		size = len(yoyo_file_data)
+
+		boot_complete = False
+
 		while index < size:
 			if len(yoyo_file_data[index]) == 0 or yoyo_file_data[index]== "\n":
 				index = index + 1
 				continue
 
 			no_match = True
-
 			# Cycle threw the define regexs for each line.
 			for key, regex in line_regex.iteritems():
 				# Search each line for multiple matches.
@@ -535,15 +537,15 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 					matches = result.groupdict()
 					if key == "user_time_stamp":
 						report["time_stamp_indexes"].append(len(report["parsed_lines"]))
-						report["parsed_lines"].append({"type": "user_time_stamp", "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
+						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
 						no_match = False
 
 					elif key == "download":
-						report["parsed_lines"].append({"type": "download", "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
+						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
 						no_match = False
 
 					elif key == "execute":
-						report["parsed_lines"].append({"type": "download", "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
+						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
 						no_match = False
 
 					elif key == "general_tst_pnt":
@@ -552,19 +554,23 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 							report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 							no_match = False
 					elif key == "mem_proc":
-						report["parsed_lines"].append({"type": "mem_proc", "matches": matches ,"start":  index, "end": index })
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 					elif key == "process_seg":
-						report["parsed_lines"].append({"type": "mem_proc", "matches": matches ,"start":  index, "end": index })
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+					elif key == "stack_smashing":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 					else:
 						log.out("Regex match for unhandled key " + key, ERROR)
 						return None
 
-			if no_match:
-				log.out("Ignored SUM line: " + yoyo_file_data[index], DEBUG, v=5)
-			else:
-				log.out(yoyo_file_data[index], DEBUG, v=6)
+				if no_match:
+					log.out("Ignored SUM line: " + yoyo_file_data[index], DEBUG, v=5)
+				else:
+					report["parsed_lines"].append({"type": "boot", "start":  1, "end": index -1 })
+					log.out(yoyo_file_data[index], DEBUG, v=6)
 
 
 			index = index + 1
