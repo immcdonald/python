@@ -190,7 +190,8 @@ def add_project(args, log):
 		"kdump",
 		"stack_smashing",
 		"failed_library_load",
-		"log_end_time_stamp"
+		"log_end_time_stamp",
+		"assertion_failure"
 	]
 
 	if args["reporter"].check_ftp_path(args["ftp_host"], args["ftp_user_name"], args["ftp_password"], args["set_storage_path"]):
@@ -279,8 +280,8 @@ def add_project(args, log):
 		return False
 
 def fix_test_point_over_writes(args, log, src_path):
+	log.out("Scanning for testpoint fixs ups", DEBUG, v=1)
 	regex_test_point_prefix = generate_regex_prefix()
-
 	# regular expresssion to look for any test point prefix that
 	# does't start the line.
 	regex_pattern = "(?P<testpnt>" + generate_regex_prefix() + ")(?P<the_rest>.*\n)"
@@ -315,25 +316,41 @@ def fix_test_point_over_writes(args, log, src_path):
 						if "the_rest" in matches:
 							tst_pnt_str = tst_pnt_str + matches["the_rest"]
 
+						#Check to see if the testpoint line is at the start of the line.
+
 						if file_data[index].find(tst_pnt_str) > 0:
-							# Calculate the size of the string + 1 to account for the \n
+
+							# Calculate the size of the test point string + 1 to account for the \n
 							size = len(tst_pnt_str) + 1
 
-							# Now strip off the test point line from the end of the string
 							if (index + 1) < num_of_lines:
-								# Add add the end from the next line
-								file_data[index] = file_data[index][0: ((size-1) * -1)] + file_data[index+1]
+								if file_data[index+1].find("<QADEBUG>") == 0:
+									if (index+2) < num_of_lines:
+										# move 2 lines away into the buffer
+										str_buffer = file_data[index+2]
+										file_data[index+2] = file_data[index+1]
+										file_data[index+1] = tst_pnt_str
+										file_data[index] = file_data[index][0: ((size-1) * -1)] + str_buffer
+									else:
+										file_data[index+2] = file_data[index+1]
+										file_data[index+1] = tst_pnt_str
+								else:
+									# Add add the end from the next line
+									file_data[index] = file_data[index][0: ((size-1) * -1)] + file_data[index+1]
+									# Add the found test point line to the next index.
+									file_data[index+1] = tst_pnt_str
 							else:
 								# Just strip off the test point part.
 								file_data[index] = file_data[index][0: ((size-1) * -1)]
+								# Add the found test point line to the next index.
+								file_data[index+1] = tst_pnt_str
 
-							# Add the found test point line to the next index.
-							file_data[index+1] = tst_pnt_str
 							changed = True
 							index = index + 1
 			index = index + 1
 
 		if changed and args["no_mod"] == False:
+			log.out("Writing out updated:" + src_path, DEBUG, v=1)
 			with open(src_path, "w") as fp_out:
 				for line in file_data:
 					fp_out.write(line)
@@ -463,7 +480,7 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 			if result:
 				matches = result.groupdict()
 				if matches["testpnt"][:-2] in test_point_prefix:
-					report["test_point_indexes"].append(len(report["parsed_lines"]))
+					report["test_point_indexes"].append({"sum": len(report["parsed_lines"]), "log":None})
 					report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 					no_match = False
 
@@ -508,6 +525,49 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 	report["parsed_lines"] = []
 
 
+	ignore_lines = ["----------------------------------------------------",
+					"send -s mkqaphys",
+					"mkqaphys",
+					"cd /tmp",
+					" gkermit -iwqr -e 4096",
+					"Type ? or HELP for help.",
+					"C-Kermit>c",
+					"Escape character: Ctrl-\ (ASCII 28, FS): enabled",
+					"Type the escape character followed by C to get back,",
+					"or followed by ? to see other options.",
+					"?OpenSSL libraries do not match required version:",
+					". C-Kermit built with OpenSSL 1.0.0e 6 Sep 2011",
+					". Version found  OpenSSL 1.0.1 14 Mar 2012",
+					"OpenSSL versions prior to 1.0.0 must be the same.",
+					"Set LD_LIBRARY_PATH for OpenSSL 1.0.0e 6 Sep 2011.",
+					"Or rebuild C-Kermit from source on this computer to make versions agree.",
+					"C-Kermit makefile target: linux+krb5+openssl",
+					"Or if that is what you did then try to find out why",
+					"the program loader (image activator) is choosing a",
+					"different OpenSSL library than the one specified in the build.",
+					"All SSL/TLS features disabled.",
+					"C-Kermit 9.0.302 OPEN SOURCE:, 20 Aug 2011, for Linux+SSL+KRB5",
+					"Copyright (C) 1985, 2011,",
+					"Trustees of Columbia University in the City of New York.",
+					"echo",
+					'No such file or directory',
+					"=== yoyo tests ===",
+					"=== yoyo Summary ===",
+					"---------------------------------",
+					"----------------------------",
+					"-------------------------------------"
+				   ]
+
+	ignore_starts_with = ["Connecting to host",
+						  "chmod a+rx",
+						  "(Back at",
+						  "gzip -fd <",
+						  "rm -fv",
+						  "rm: Removing file",
+						  "cd $OLDPWD",
+						  "ls -sd /proc"
+						 ]
+
 
 	with open(os.path.join(yoyo_sum_path, "yoyo.log"), "Ur") as fp_in:
 		# Read in striping new lines this time.
@@ -522,7 +582,34 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 		boot_complete = False
 
 		while index < size:
+
 			if len(yoyo_file_data[index]) == 0 or yoyo_file_data[index]== "\n":
+				index = index + 1
+				continue
+
+			if yoyo_file_data[index][0] == '#':
+				yoyo_file_data[index]= yoyo_file_data[index][0][1:]
+
+			#Remove white space from the start and the end of the string.
+			yoyo_file_data[index] = yoyo_file_data[index].strip()
+
+			# We checked it above, but maybe the string has changed size.
+			if len(yoyo_file_data[index]) == 0 or yoyo_file_data[index]== "\n":
+				index = index + 1
+				continue
+
+			for ignore_start in ignore_starts_with:
+				pos = yoyo_file_data[index].find(ignore_start)
+
+				if pos >= 0 and pos < 10:
+					index = index + 1
+					continue
+
+			if len(yoyo_file_data[index]) == 0 or yoyo_file_data[index]== "\n":
+				index = index + 1
+				continue
+
+			if yoyo_file_data[index] in ignore_lines:
 				index = index + 1
 				continue
 
@@ -535,48 +622,106 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 				result = regex.search(yoyo_file_data[index])
 				if result:
 					matches = result.groupdict()
-					if key == "user_time_stamp":
-						report["time_stamp_indexes"].append(len(report["parsed_lines"]))
+					if key == "download":
 						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
 						no_match = False
-
-					elif key == "download":
-						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
-						no_match = False
+						break
 
 					elif key == "execute":
 						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
 						no_match = False
+						break
 
+					elif key == "exec":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "mem_proc":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "user_time_stamp":
+						report["time_stamp_indexes"].append(len(report["parsed_lines"]))
+						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "kermit_send":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "test_suite":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "test_suite_2":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "metric":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "host":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "stack_smashing":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "buffer_overflow":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "send-class":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "malloc_check_fail":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "exec_format_error":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "to_man_retries":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
 					elif key == "general_tst_pnt":
 						if matches["testpnt"][:-2] in test_point_prefix:
 							report["test_point_indexes"].append(len(report["parsed_lines"]))
 							report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 							no_match = False
-					elif key == "mem_proc":
+					elif key == "bug_ref":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 					elif key == "process_seg":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
-					elif key == "stack_smashing":
+					elif key == "assertion_failure":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
+					#elif key == "shutdown":
+					#	report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+					#	no_match = False
 					else:
 						log.out("Regex match for unhandled key " + key, ERROR)
 						return None
 
-				if no_match:
-					log.out("Ignored SUM line: " + yoyo_file_data[index], DEBUG, v=5)
-				else:
+			if no_match:
+				log.out("Ignored SUM line["+ str(index) +"]: (" + yoyo_file_data[index]+")", DEBUG, v=5)
+			else:
+				if boot_complete is False:
 					report["parsed_lines"].append({"type": "boot", "start":  1, "end": index -1 })
-					log.out(yoyo_file_data[index], DEBUG, v=6)
+					boot_complete = True
+
+				log.out(yoyo_file_data[index], DEBUG, v=8)
 
 
 			index = index + 1
 	return report
-
-	return data
 
 
 def process_variants(args, log, fp, recovery_data):
@@ -592,10 +737,12 @@ def process_variants(args, log, fp, recovery_data):
 	line_regex["general_tst_pnt"] = re.compile("(?P<testpnt>" + generate_regex_prefix() + ")(?P<the_rest>.*)")
 
 	# Look for time stamp lines in the form of Test Run By iamcdonald on Fri May 29 22:18:39 2015
-	line_regex["user_time_stamp"] = re.compile('^Test\sRun\sBy\s(?P<user_name>[a-zA-Z0-9\_\-\s]+)\son\s(?P<date>.*)$')
+	line_regex["user_time_stamp"] = re.compile('^Test\s+Run\s+By\s+(?P<user_name>[a-zA-Z0-9\_\-\s]+)\son\s(?P<date>.*)$')
 
 	# Look for test suite start lines in the form of Running ../../../../../yoyo.suite/testware_aps.exp ...
-	line_regex["test_suite"] = re.compile('^Running\s(?P<test_suite>[\./\/a-zA-Z0-9\-\_]+)\s\.{3}$')
+	line_regex["test_suite"] = re.compile('Running\s+(?P<test_suite>[\./\/a-zA-Z0-9\-\_]+)\.(?P<ext>.{3,5})\s\.{3}$')
+
+	line_regex["test_suite_2"] = re.compile('Using\s+list\s+(?P<test_suite>[\./\/a-zA-Z0-9\-\_]+)\.(?P<ext>.{3,5})')
 
 	# Look for host system information in the form of host system: Linux titan 3.8.0-44-generic #66~precise1-Ubuntu SMP Tue Jul 15 04:04:23 UTC 2014 i686 i686 i386 GNU/Linux
 	line_regex["host"] = re.compile('^host\ssystem\:\s(?P<host>.*)$')
@@ -604,25 +751,46 @@ def process_variants(args, log, fp, recovery_data):
 	line_regex["process_seg"] = re.compile('Process\s(?P<pid>\d+)\s\((?P<name>.+)\)\sterminated\s(?P<type>.+)\scode=(?P<the_rest>.*)')
 
 	# Look for basic Shutdown message
-	line_regex["shutdown"] = re.compile('Shutdown\[')
+	line_regex["shutdown"] = re.compile('(?P<shutdown>Shutdown\[)')
 
 	# Look for ldd flault
-	line_regex["ldd_fault"] = re.compile('ldd:FATAL:')
+	line_regex["ldd_fault"] = re.compile('(?P<ldd_fault>ldd:FATAL:)')
 
 	# Look for Memory fault
-	line_regex["memory_fault"] = re.compile('Memory\sfault')
+	line_regex["memory_fault"] = re.compile('(?P<memory_fault>Memory\sfault)')
 
 	# Look for SEND-class
-	line_regex["send-class"] = re.compile('SEND-class command failed.')
+	line_regex["send-class"] = re.compile('(?P<send_class>SEND-class command failed.)')
 
 	line_regex["to_man_retries"] = re.compile('Fatal\s+Kermit\s+Protocol\s+Error:\s+Too\s+many\s+retries')
 
 	line_regex["mem_proc"] = re.compile('^\s*(?P<proc_memory>\d+)\s+\/proc$')
 
-	line_regex["stack_smashing"] = re.compile('\*\*\*\s+stack\s+smashing\s+detected\s\*\*\*')
+	line_regex["stack_smashing"] = re.compile('(?P<stack_smashing>\*\*\*\s+stack\s+smashing\s+detected\s\*\*\*)')
+
+	line_regex["buffer_overflow"] = re.compile('(?P<buffer_overflow>\*\*\*\s+buffer\s+overflow detected\s\*\*\*)')
+
+	line_regex["kermit_send"] = re.compile('C-Kermit>send\s+(?P<path>.+)/(?P<test_name>.+)')
+
+	line_regex["metric"] = re.compile('^(?P<desc>.+)\sVALUE:\s(?P<value>.+)\sUNITS:\s(?P<units>.+)$')
+
+	line_regex["bug_ref"] = re.compile('(?P<bug_type>JI|PR|ji|pr)[_|:]*\s*(?P<value>\d{5,10})')
+
+	line_regex["kernel_start"] = re.compile('(?P<kernel_dump_start>KERNEL\s+DUMP\s+START)')
+
+	line_regex["kdump"] = re.compile("<QADEBUG>\s*kdumper\s+file\s+kdump\.(?P<index>\d+)\s*<BS>\s*(?P<path>.*)\s*</BS></QADEBUG>")
+
+	line_regex["exec"] = re.compile("^\s*/tmp/(?P<exec>.+)$")
+
+	line_regex["exec_format_error"] = re.compile('(?P<exec_format_error>Exec\s+format\s+error)')
+
+	line_regex["assertion_failure"] = re.compile('Assertion\s+failed:(?P<assertion>.+)')
+
+	line_regex["malloc_check_fail"] = re.compile('Malloc\s+Check\s+Failed:\s+(?P<malloc_check_fail>.+)')
 
 	# Different kinds of user abort
-	line_regex["keyboard_interrupt"] = re.compile('KeyboardInterrupt')
+	line_regex["keyboard_interrupt"] = re.compile('(?P<keyboard_intterupt>KeyboardInterrupt)')
+	line_regex["user_interrupted"] = re.compile("(?P<user_interrupted>Got\s+a\s+INT\s+signal,\s+interrupted\s+by\s+user)")
 
 
 	input_lenght = len(args["input"])
@@ -638,7 +806,7 @@ def process_variants(args, log, fp, recovery_data):
 				relative_root = relative_root[1:]
 
 		if "yoyo.sum" in files:
-			log.out(root + "yoyo.sum", DEBUG, v=3)
+			log.out(root + " yoyo.sum", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.sum import completed"
 			if completed_string not in recovery_data:
 				data[relative_root] = {}
@@ -653,13 +821,13 @@ def process_variants(args, log, fp, recovery_data):
 					return False
 
 		if "yoyo.log" in files:
-			log.out(root + "yoyo.log", DEBUG, v=3)
+			log.out(root + " yoyo.log", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.log import completed"
 			if completed_string not in recovery_data:
 				data[relative_root]["LOG"] = process_yoyo_log(args, log, root, line_regex, data[relative_root]["SUM"])
 
 				if data[relative_root]["LOG"]:
-					pass
+					print pformat(data[relative_root]["LOG"])
 				else:
 					return False
 
