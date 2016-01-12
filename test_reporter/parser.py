@@ -33,14 +33,8 @@ test_point_prefix = ["METRIC",
 					 "NOTE",
 					 "ABORT"]
 
-arch_type_file_path_breaks = ["$PROCTYPE",
-							  "aarch64",
-							  "arm",
-							  "x86",
-							  "x86_64",
-							  "ssh",
-							  "mips",
-							  "ppc"
+arch_type_file_path_breaks = ["tests",
+							  "$PROCTYPE",
 							]
 
 def dmdty2time(input_string):
@@ -374,7 +368,9 @@ def scan_for_repeated_lines(args, log, src_path):
 
 		index = 0
 
-		while index < len(file_data):
+		max_lines = len(file_data)
+
+		while index < max_lines:
 			next_line = index + 1
 
 			if len(file_data[index]) == 0 or file_data[index]=="\n":
@@ -382,14 +378,15 @@ def scan_for_repeated_lines(args, log, src_path):
 				continue
 
 			empty_line_counter = 0
-			while next_line < len(file_data):
+			while next_line < max_lines:
+
 				if len(file_data[next_line]) == 0 or file_data[next_line]=="\n":
 					next_line = next_line + 1
 					empty_line_counter = empty_line_counter + 1
 					continue
 
 				if file_data[index] != file_data[next_line]:
-					dup_line_count = (next_line - index)
+					dup_line_count = (next_line - index - empty_line_counter)
 					if dup_line_count > 2:
 						changed = True
 						file_data[index+1] = "Post Parsing Edit: Previous line repeated " +  str(dup_line_count - 1 - empty_line_counter) + " additional times. \n"
@@ -454,6 +451,15 @@ def cleanup_log_files(args, log, fp, recovery_data):
 					return False
 	return True
 
+def truncate_test_line(args, log, test_line):
+	test_line = test_line.replace("\\", "/")
+	for word in arch_type_file_path_breaks:
+		pos = test_line.rfind("/"+word+"/")
+		if pos >= 0:
+			test_line = test_line[(pos+len("/"+word+"/")):]
+	if test_line[0] == "/":
+		test_line = test_line[1:]
+	return test_line
 
 def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 
@@ -480,6 +486,9 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 			if result:
 				matches = result.groupdict()
 				if matches["testpnt"][:-2] in test_point_prefix:
+
+					matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
+
 					report["test_point_indexes"].append({"sum": len(report["parsed_lines"]), "log":None})
 					report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 					no_match = False
@@ -509,11 +518,10 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 			else:
 				log.out(sum_file_data[index], DEBUG, v=8)
 
-
 			index = index + 1
 	return report
 
-def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
+def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 	# Use a list and index so that items stay in the order they are found.
 	data = []
 
@@ -577,11 +585,17 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 
 		index = 0
 
-		size = len(yoyo_file_data)
+		max_lines = len(yoyo_file_data)
 
-		boot_complete = False
+		b_extra_debug = False
 
-		while index < size:
+		while index < max_lines:
+			if yoyo_file_data[index] == "FAIL: /home/iamcdonald/svn/sunday/stage/armle-v7/tests/lib/pps/bin/ppst scale: premature exit":
+				print "FOUND THE LINE  :) ", yoyo_file_data[index],"\n\n\n\n\n\n"
+				b_extra_debug = True
+			else:
+				b_extra_debug = False
+
 
 			if len(yoyo_file_data[index]) == 0 or yoyo_file_data[index]== "\n":
 				index = index + 1
@@ -614,6 +628,10 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 				continue
 
 			no_match = True
+
+			if b_extra_debug:
+				print yoyo_file_data[index]
+
 			# Cycle threw the define regexs for each line.
 			for key, regex in line_regex.iteritems():
 				# Search each line for multiple matches.
@@ -631,7 +649,6 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
 						no_match = False
 						break
-
 					elif key == "exec":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
@@ -654,6 +671,10 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 						no_match = False
 						break
 					elif key == "test_suite_2":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "reboot":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 						break
@@ -691,6 +712,12 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 						break
 					elif key == "general_tst_pnt":
 						if matches["testpnt"][:-2] in test_point_prefix:
+							matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
+
+							if b_extra_debug:
+								print pformat(matches)
+								print len(report["parsed_lines"])
+
 							report["test_point_indexes"].append(len(report["parsed_lines"]))
 							report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 							no_match = False
@@ -703,25 +730,85 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_result):
 					elif key == "assertion_failure":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
-					#elif key == "shutdown":
-					#	report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
-					#	no_match = False
+					elif key == "shutdown":
+
+						end_index = index
+
+						for scan in range(index+1, max_lines):
+							result = line_regex["reboot"].search(yoyo_file_data[scan])
+							if result:
+								break
+							elif len(yoyo_file_data[scan]) == 0 or yoyo_file_data[scan][0] == "\n":
+								break
+							else:
+								end_index = scan
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": end_index })
+						no_match = False
 					else:
 						log.out("Regex match for unhandled key " + key, ERROR)
 						return None
 
 			if no_match:
-				log.out("Ignored SUM line["+ str(index) +"]: (" + yoyo_file_data[index]+")", DEBUG, v=5)
+				log.out("Ignored LOG line["+ str(index) +"]: (" + yoyo_file_data[index]+")", DEBUG, v=5)
 			else:
-				if boot_complete is False:
-					report["parsed_lines"].append({"type": "boot", "start":  1, "end": index -1 })
-					boot_complete = True
-
 				log.out(yoyo_file_data[index], DEBUG, v=8)
-
-
 			index = index + 1
 	return report
+
+def print_list(log, the_list, pre_fix=""):
+	for data in the_list["parsed_lines"]:
+		if data["type"] == "TestPoint":
+			log.out(str(pre_fix) + str(data["start"]) + ", " + str(data["end"]) + " " + data["matches"]["testpnt"] + data["matches"]["the_rest"])
+
+def link_sum_and_log_results(args, log, sum_results, log_results):
+
+	print_list(log, sum_results, "SUM> ")
+	print "=============================================================================="
+	print_list(log, log_results, "LOG> ")
+
+	last_match_index = -1
+
+
+	for test_point_index in sum_results["test_point_indexes"]:
+		sum_index = test_point_index["sum"]
+
+		sum_test_pnt = sum_results["parsed_lines"][sum_index]["matches"]
+
+		if sum_test_pnt["testpnt"] == "NOTE: ":
+			continue
+
+		index = last_match_index+1
+
+		match = False
+		while index < len(log_results["test_point_indexes"]):
+			log_tp_pos = log_results["test_point_indexes"][index]
+
+			log_test_pnt = log_results["parsed_lines"][log_tp_pos]["matches"]
+
+			if sum_test_pnt["testpnt"] == log_test_pnt["testpnt"]:
+				if sum_test_pnt["the_rest"] == log_test_pnt["the_rest"]:
+					test_point_index["log"] = log_tp_pos
+					match = True
+					last_match_index = index
+					break
+
+			index = index + 1
+
+		if match is False:
+			log.out("No match found for: " + sum_test_pnt["testpnt"] + sum_test_pnt["the_rest"] + "\n", ERROR)
+		else:
+			log.out("Match\n", DEBUG, v=100)
+
+	log.out("===================")
+
+
+	#for matched in sum_results["test_point_indexes"]:
+	#	if matched["log"] and matched["sum"]:
+	#		print matched["log"], matched["sum"], log_results["parsed_lines"][matched["log"]]["matches"], sum_results["parsed_lines"][matched["sum"]]["matches"]
+	#	elif matched["log"] is None and matched["sum"]:
+	#		print matched["log"], matched["sum"], 	"None" , sum_results["parsed_lines"][matched["sum"]]["matches"]
+	#	elif matched["log"] and matched["sum"] is None:
+	#		print matched["log"], matched["sum"], log_results["parsed_lines"][matched["log"]]["matches"]["the_rest"], None
 
 
 def process_variants(args, log, fp, recovery_data):
@@ -731,6 +818,8 @@ def process_variants(args, log, fp, recovery_data):
 	line_regex["download"] = re.compile('<QADEBUG>Generic\s+Download\s+(?P<mode>Start|Stop)\s+on\s+<TS>\s*(?P<date>.+)\s*</TS\>\s*<BS>(?P<test_path>.+)\s*</BS></QADEBUG>')
 
 	line_regex["execute"] = re.compile('<QADEBUG>Generic\s+Execute\s+(?P<mode>Start|Stop)\s+on\s+<TS>\s*(?P<date>.+)\s*</TS\>\s*<BS>(?P<test_path>.+)\s*</BS></QADEBUG>')
+
+	line_regex["reboot"] = re.compile('Verbose\s+(?P<time>\d+:\d+:\d+)\s+\{\s+rebooting\s+target:\s+(?P<try>\d+)/(?P<of_tries>\d+)\s+\}')
 
 	# regular expresssion to look for any test point prefix that
 	# does't start the line.
@@ -792,7 +881,6 @@ def process_variants(args, log, fp, recovery_data):
 	line_regex["keyboard_interrupt"] = re.compile('(?P<keyboard_intterupt>KeyboardInterrupt)')
 	line_regex["user_interrupted"] = re.compile("(?P<user_interrupted>Got\s+a\s+INT\s+signal,\s+interrupted\s+by\s+user)")
 
-
 	input_lenght = len(args["input"])
 
 	data = {}
@@ -812,23 +900,21 @@ def process_variants(args, log, fp, recovery_data):
 				data[relative_root] = {}
 				data[relative_root]["SUM"] = process_yoyo_sum(args, log, root, line_regex)
 
-				if len(data[relative_root]["SUM"]) > 0:
-					#print pformat(data[relative_root]["SUM"])
-
-					pass
-
-				else:
+				if len(data[relative_root]["SUM"]) <= 0:
+					log.out("yoyo.sum file did not return any results.", ERROR)
 					return False
 
 		if "yoyo.log" in files:
 			log.out(root + " yoyo.log", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.log import completed"
 			if completed_string not in recovery_data:
-				data[relative_root]["LOG"] = process_yoyo_log(args, log, root, line_regex, data[relative_root]["SUM"])
-
+				data[relative_root]["LOG"] = process_yoyo_log(args, log, root, line_regex)
 				if data[relative_root]["LOG"]:
-					print pformat(data[relative_root]["LOG"])
+					if "SUM" in data[relative_root]:
+						link_sum_and_log_results(args, log, data[relative_root]["SUM"], data[relative_root]["LOG"])
+						pass
 				else:
+					log.out("yoyo.log file did not return any results.", ERROR)
 					return False
 
 	if args["project"] is None:
