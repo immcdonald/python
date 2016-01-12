@@ -274,12 +274,16 @@ def add_project(args, log):
 		return False
 
 def fix_test_point_over_writes(args, log, src_path):
-	log.out("Scanning for testpoint fixs ups", DEBUG, v=1)
+
+	do_not_fix = ["boot"]
+
+	log.out("Scanning for testpoint fixs ups in " + src_path, DEBUG, v=1)
 	regex_test_point_prefix = generate_regex_prefix()
 	# regular expresssion to look for any test point prefix that
 	# does't start the line.
 	regex_pattern = "(?P<testpnt>" + generate_regex_prefix() + ")(?P<the_rest>.*\n)"
 
+	print regex_pattern
 	tstpnt_regex = re.compile(regex_pattern)
 
 	if os.path.exists(src_path):
@@ -294,60 +298,114 @@ def fix_test_point_over_writes(args, log, src_path):
 		num_of_lines = len(file_data)
 
 		while index < num_of_lines:
-			result = tstpnt_regex.search(file_data[index])
+			line = file_data[index].lstrip()
 
-			if result:
-				matches = result.groupdict()
+			if len(line) == 0:
+				index = index + 1
+				continue
 
-				if "testpnt" in matches:
+			if line[0] == "#":
+				line = line[1:]
 
-					# Check to see if the prefix we foudn (minus ': ')
-					# is in the list of known test point prefixes
-					if matches["testpnt"][0:-2] in test_point_prefix:
+			remaining = line.lstrip()
 
-						tst_pnt_str = matches["testpnt"]
+			while remaining:
+				result = tstpnt_regex.search(remaining)
 
-						if "the_rest" in matches:
-							tst_pnt_str = tst_pnt_str + matches["the_rest"]
+				remaining = None
 
-						#Check to see if the testpoint line is at the start of the line.
+				if result:
+					matches = result.groupdict()
 
-						if file_data[index].find(tst_pnt_str) > 0:
+					if "testpnt" in matches:
 
-							# Calculate the size of the test point string + 1 to account for the \n
-							size = len(tst_pnt_str) + 1
+						# Check to see if the prefix we found (minus ': ')
+						# is in the list of known test point prefixes
+						if matches["testpnt"][0:-2] in test_point_prefix:
 
-							if (index + 1) < num_of_lines:
-								if file_data[index+1].find("<QADEBUG>") == 0:
-									if (index+2) < num_of_lines:
-										# move 2 lines away into the buffer
-										str_buffer = file_data[index+2]
-										file_data[index+2] = file_data[index+1]
-										file_data[index+1] = tst_pnt_str
-										file_data[index] = file_data[index][0: ((size-1) * -1)] + str_buffer
+							tst_pnt_str = matches["testpnt"]
+
+							if "the_rest" in matches:
+								tst_pnt_str = tst_pnt_str + matches["the_rest"]
+								remaining = matches["the_rest"]
+
+							# ones not to fix
+							if matches["testpnt"][:-2] in do_not_fix:
+								index = index + 1
+								continue
+
+							# Occassionaly a line will have unexpected ord()=0 characters in it, so lets remove them.
+							temp = []
+							for char in line:
+								if ord(char) > 0:
+									temp.append(char)
+
+							line = ''.join(temp)
+
+							#Check to see if the testpoint line is at the start of the line.
+							if line.find(tst_pnt_str) > 2:
+
+								log.out("\n\nBad Testpoint line to be repaired [" + str(index) + "]: " + file_data[index])
+
+								# Calculate the size of the test point string + 1 to account for the \n
+								size = len(tst_pnt_str) + 1
+
+								if (index + 1) < num_of_lines:
+									print "BEFORE"
+									for offset in range(index-1, index + 3):
+										print offset, file_data[offset].rstrip()
+
+									if file_data[index+1].find("<QADEBUG>") == 0:
+										print "QA DEBUG DETECTED"
+										if (index+2) < num_of_lines:
+											print "Plan1"
+											# move 2 lines away into the buffer
+											str_buffer = file_data[index+2]
+											file_data[index+2] = file_data[index+1]
+											file_data[index+1] = tst_pnt_str
+											file_data[index] = file_data[index][0: ((size-1) * -1)] + str_buffer
+										else:
+											print "Plan2"
+											file_data[index+2] = file_data[index+1]
+											file_data[index+1] = tst_pnt_str
+
+										print "AFTER"
+
+										for offset in range(index-1, index + 3):
+											print offset, file_data[offset].rstrip()
+
 									else:
-										file_data[index+2] = file_data[index+1]
+										print "plan 3"
+										print line.find(tst_pnt_str)
+
+										# Add add the end from the next line
+										file_data[index] = file_data[index][0: ((size-1) * -1)] + file_data[index+1]
+										# Add the found test point line to the next index.
 										file_data[index+1] = tst_pnt_str
+
+										print "AFTER"
+
+										for offset in range(index-1, index + 3):
+											print offset, file_data[offset].rstrip()
 								else:
-									# Add add the end from the next line
-									file_data[index] = file_data[index][0: ((size-1) * -1)] + file_data[index+1]
+									print "plan 4"
+									# Just strip off the test point part.
+									file_data[index] = file_data[index][0: ((size-1) * -1)]
 									# Add the found test point line to the next index.
 									file_data[index+1] = tst_pnt_str
-							else:
-								# Just strip off the test point part.
-								file_data[index] = file_data[index][0: ((size-1) * -1)]
-								# Add the found test point line to the next index.
-								file_data[index+1] = tst_pnt_str
 
-							changed = True
-							index = index + 1
+								changed = True
+								index = index + 1
+				else:
+					remaining = None
 			index = index + 1
 
 		if changed and args["no_mod"] == False:
-			log.out("Writing out updated:" + src_path, DEBUG, v=1)
-			with open(src_path, "w") as fp_out:
-				for line in file_data:
-					fp_out.write(line)
+			log.out("Writing out test point fix updates: " + src_path, DEBUG, v=1)
+		#	with open(src_path, "w") as fp_out:
+
+		#		for line in file_data:
+		#			fp_out.write(line)
 		return True
 	else:
 		return False
@@ -400,11 +458,15 @@ def scan_for_repeated_lines(args, log, src_path):
 
 		# If the file content changed then rewrite the file.
 		if changed and args["no_mod"] == False:
+
+
 			for del_index in reversed(del_lines):
 				del file_data[del_index]
 
 			# Remove the extra line we added above.
 			del file_data[-1]
+
+			log.out("Writing out dup line changes to " + src_path)
 
 			with open(src_path, "w") as fp_out:
 				for line in file_data:
@@ -590,12 +652,9 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 		b_extra_debug = False
 
 		while index < max_lines:
-			if yoyo_file_data[index] == "FAIL: /home/iamcdonald/svn/sunday/stage/armle-v7/tests/lib/pps/bin/ppst scale: premature exit":
-				print "FOUND THE LINE  :) ", yoyo_file_data[index],"\n\n\n\n\n\n"
-				b_extra_debug = True
-			else:
-				b_extra_debug = False
 
+			if index > 31158 and index < 31172:
+				b_extra_debug = True
 
 			if len(yoyo_file_data[index]) == 0 or yoyo_file_data[index]== "\n":
 				index = index + 1
@@ -615,7 +674,7 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 			for ignore_start in ignore_starts_with:
 				pos = yoyo_file_data[index].find(ignore_start)
 
-				if pos >= 0 and pos < 10:
+				if pos >= 0 and pos < 1:
 					index = index + 1
 					continue
 
@@ -629,8 +688,6 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 
 			no_match = True
 
-			if b_extra_debug:
-				print yoyo_file_data[index]
 
 			# Cycle threw the define regexs for each line.
 			for key, regex in line_regex.iteritems():
@@ -714,10 +771,6 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						if matches["testpnt"][:-2] in test_point_prefix:
 							matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
 
-							if b_extra_debug:
-								print pformat(matches)
-								print len(report["parsed_lines"])
-
 							report["test_point_indexes"].append(len(report["parsed_lines"]))
 							report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 							no_match = False
@@ -762,13 +815,7 @@ def print_list(log, the_list, pre_fix=""):
 
 def link_sum_and_log_results(args, log, sum_results, log_results):
 
-	print_list(log, sum_results, "SUM> ")
-	print "=============================================================================="
-	print_list(log, log_results, "LOG> ")
-
 	last_match_index = -1
-
-
 	for test_point_index in sum_results["test_point_indexes"]:
 		sum_index = test_point_index["sum"]
 
@@ -908,9 +955,11 @@ def process_variants(args, log, fp, recovery_data):
 			log.out(root + " yoyo.log", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.log import completed"
 			if completed_string not in recovery_data:
+				pass
 				data[relative_root]["LOG"] = process_yoyo_log(args, log, root, line_regex)
 				if data[relative_root]["LOG"]:
 					if "SUM" in data[relative_root]:
+						print_list(log, data[relative_root]["LOG"], "LOG> ")
 						link_sum_and_log_results(args, log, data[relative_root]["SUM"], data[relative_root]["LOG"])
 						pass
 				else:
@@ -946,13 +995,12 @@ def parse(args, log):
 				fp.write(str(args["input"]) + "\n")
 
 			if cleanup_log_files(args, log, fp,  recovery_data):
-
-				if process_variants(args, log, fp, recovery_data):
+				pass
+				#if process_variants(args, log, fp, recovery_data):
 					# Do not return from here, so that the recovery
 					# file gets deleted if we are still on a success path.
-					pass
-				else:
-					return False
+				#else:
+				#	return False
 
 		# If we get here and there are no errors. Then delete the recovery file.
 		os.remove("recovery.txt")
