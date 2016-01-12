@@ -371,17 +371,9 @@ def fix_test_point_over_writes(args, log, src_path):
 								log.out("\n\nBad Testpoint line to be repaired [" + str(index) + "]: " + file_data[index])
 
 								if (index + 1) < num_of_lines:
-
-									print "BEFORE"
-									for offset in range(index-1, index + 3):
-										print offset, file_data[offset].rstrip()
-
 									if line_2_regex.search(line_2):
-										print "TODO: next line is TEST POINT"
 
 										file_data[index] = file_data[index][0: ((size-1) * -1)]
-
-										print "----"
 
 										upper_part = file_data[(index+1):]
 
@@ -391,48 +383,31 @@ def fix_test_point_over_writes(args, log, src_path):
 
 										file_data = file_data + upper_part
 
-										print "AFTER"
-										for offset in range(index-1, index + 4):
-											print offset, file_data[offset].rstrip()
-
 										# go back and go over it again.
 										index =  index - 1
 
 										changed = True
 									elif file_data[index+1].find("<QADEBUG>") == 0:
-										print "QA DEBUG DETECTED"
 										if (index+2) < num_of_lines:
-											print "Plan1"
 											# move 2 lines away into the buffer
 											str_buffer = file_data[index+2]
 											file_data[index+2] = file_data[index+1]
 											file_data[index+1] = tst_pnt_str
 											file_data[index] = file_data[index][0: ((size-1) * -1)] + str_buffer
 										else:
-											print "Plan2"
+
 											file_data[index+2] = file_data[index+1]
 											file_data[index+1] = tst_pnt_str
-
-										print "AFTER"
-
-										for offset in range(index-1, index + 5):
-											print offset, file_data[offset].rstrip()
-
 									else:
-										print "plan 3"
-										print line.find(tst_pnt_str)
 
 										# Add add the end from the next line
 										file_data[index] = file_data[index][0: ((size-1) * -1)] + file_data[index+1]
 										# Add the found test point line to the next index.
 										file_data[index+1] = tst_pnt_str
 
-										print "AFTER"
-
 										for offset in range(index-1, index + 3):
 											print offset, file_data[offset].rstrip()
 								else:
-									print "plan 4"
 									# Just strip off the test point part.
 									file_data[index] = file_data[index][0: ((size-1) * -1)]
 									# Add the found test point line to the next index.
