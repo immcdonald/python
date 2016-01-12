@@ -273,22 +273,37 @@ def add_project(args, log):
 	else:
 		return False
 
+
+def clean_line(line):
+	# Strip extra white space from the left side
+	line = line.lstrip()
+
+	if len(line) > 0:
+		if line[0] == "#":
+			line = line[1:].lstrip()
+
+	return line
+
+
+
 def fix_test_point_over_writes(args, log, src_path):
 
 	do_not_fix = ["boot"]
 
 	log.out("Scanning for testpoint fixs ups in " + src_path, DEBUG, v=1)
 	regex_test_point_prefix = generate_regex_prefix()
+
 	# regular expresssion to look for any test point prefix that
 	# does't start the line.
 	regex_pattern = "(?P<testpnt>" + generate_regex_prefix() + ")(?P<the_rest>.*\n)"
+	line_2_pattern = "^(?P<testpnt>" + generate_regex_prefix() + ")(?P<the_rest>.*\n)"
 
-	print regex_pattern
 	tstpnt_regex = re.compile(regex_pattern)
-
+	line_2_regex = re.compile(line_2_pattern)
 	if os.path.exists(src_path):
 		file_data = []
 		changed = False
+
 		with open(src_path, "Ur") as fp_in:
 			# use this one so the lines have "\n" at the end.
 			file_data = fp_in.readlines()
@@ -298,21 +313,27 @@ def fix_test_point_over_writes(args, log, src_path):
 		num_of_lines = len(file_data)
 
 		while index < num_of_lines:
-			line = file_data[index].lstrip()
+			line = clean_line(file_data[index])
 
-			if len(line) == 0:
+			# Set to something that is not going to match the line 2 regex, but can not be None
+			line_2 = ""
+
+			if index + 1 < num_of_lines:
+				line_2 = clean_line(file_data[index+1])
+
+			if len(line) <= 0:
 				index = index + 1
 				continue
 
-			if line[0] == "#":
-				line = line[1:]
+			if line[0] == "\n":
+				index = index + 1
+				continue
 
-			remaining = line.lstrip()
+			still_to_process = line
 
-			while remaining:
-				result = tstpnt_regex.search(remaining)
-
-				remaining = None
+			while still_to_process:
+				result = tstpnt_regex.search(still_to_process)
+				still_to_process = None
 
 				if result:
 					matches = result.groupdict()
@@ -327,7 +348,7 @@ def fix_test_point_over_writes(args, log, src_path):
 
 							if "the_rest" in matches:
 								tst_pnt_str = tst_pnt_str + matches["the_rest"]
-								remaining = matches["the_rest"]
+								still_to_process = matches["the_rest"]
 
 							# ones not to fix
 							if matches["testpnt"][:-2] in do_not_fix:
@@ -344,18 +365,41 @@ def fix_test_point_over_writes(args, log, src_path):
 
 							#Check to see if the testpoint line is at the start of the line.
 							if line.find(tst_pnt_str) > 2:
-
-								log.out("\n\nBad Testpoint line to be repaired [" + str(index) + "]: " + file_data[index])
-
 								# Calculate the size of the test point string + 1 to account for the \n
 								size = len(tst_pnt_str) + 1
 
+								log.out("\n\nBad Testpoint line to be repaired [" + str(index) + "]: " + file_data[index])
+
 								if (index + 1) < num_of_lines:
+
 									print "BEFORE"
 									for offset in range(index-1, index + 3):
 										print offset, file_data[offset].rstrip()
 
-									if file_data[index+1].find("<QADEBUG>") == 0:
+									if line_2_regex.search(line_2):
+										print "TODO: next line is TEST POINT"
+
+										file_data[index] = file_data[index][0: ((size-1) * -1)]
+
+										print "----"
+
+										upper_part = file_data[(index+1):]
+
+										file_data = file_data[0:index+1]
+
+										file_data.append(tst_pnt_str)
+
+										file_data = file_data + upper_part
+
+										print "AFTER"
+										for offset in range(index-1, index + 4):
+											print offset, file_data[offset].rstrip()
+
+										# go back and go over it again.
+										index =  index - 1
+
+										changed = True
+									elif file_data[index+1].find("<QADEBUG>") == 0:
 										print "QA DEBUG DETECTED"
 										if (index+2) < num_of_lines:
 											print "Plan1"
@@ -371,7 +415,7 @@ def fix_test_point_over_writes(args, log, src_path):
 
 										print "AFTER"
 
-										for offset in range(index-1, index + 3):
+										for offset in range(index-1, index + 5):
 											print offset, file_data[offset].rstrip()
 
 									else:
@@ -395,18 +439,15 @@ def fix_test_point_over_writes(args, log, src_path):
 									file_data[index+1] = tst_pnt_str
 
 								changed = True
-								index = index + 1
-				else:
-					remaining = None
-			index = index + 1
 
+			index = index + 1
 		if changed and args["no_mod"] == False:
 			log.out("Writing out test point fix updates: " + src_path, DEBUG, v=1)
-		#	with open(src_path, "w") as fp_out:
-
-		#		for line in file_data:
-		#			fp_out.write(line)
+			with open(src_path, "w") as fp_out:
+				for line in file_data:
+					fp_out.write(line)
 		return True
+
 	else:
 		return False
 
