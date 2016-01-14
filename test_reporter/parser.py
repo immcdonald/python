@@ -171,13 +171,10 @@ def add_project(args, log):
 		"test",
 		"exec"
 		"stop",
-		"final",
 		"error",
 		"memory fault",
-		"ldd fault",
-		"timeout",
-		"never_started",
-		"bad transfer",
+		"ldd_fault",
+		"bad_transfer",
 		"bug_ref",
 		"sigsegv",
 		"sigill",
@@ -189,6 +186,8 @@ def add_project(args, log):
 		"log_end_time_stamp",
 		"assertion_failure"
 	]
+
+
 
 	if args["reporter"].check_ftp_path(args["ftp_host"], args["ftp_user_name"], args["ftp_password"], args["set_storage_path"]):
 
@@ -777,6 +776,14 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 						break
+					elif key == "ldd_fault":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "memory_fault":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
 					elif key == "send-class":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
@@ -793,12 +800,31 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 						break
+					elif key == "keyboard_interrupt":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "user_interrupted":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "kernel_start":
+						# Determine the line scope of the shutdown later.
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+					elif key == "kdump":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
 					elif key == "general_tst_pnt":
 						if matches["testpnt"][:-2] in test_point_prefix:
-							matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
+							sub_type = "general"
 
+							matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
+							pos = matches["the_rest"].rfind(":")
+							if pos > 0:
+								sub_type = matches["the_rest"][pos+1:]
 							report["test_point_indexes"].append(len(report["parsed_lines"]))
-							report["parsed_lines"] .append({"type": "TestPoint", "test_suite_name":	last_test_suite, "matches": matches, "start":  index, "end": index})
+							report["parsed_lines"] .append({"type": "TestPoint", "sub_type":sub_type,  "test_suite_name":	last_test_suite, "matches": matches, "start":  index, "end": index})
 							no_match = False
 					elif key == "bug_ref":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
@@ -810,18 +836,8 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 					elif key == "shutdown":
-
-						end_index = index
-
-						for scan in range(index+1, max_lines):
-							result = line_regex["reboot"].search(yoyo_file_data[scan])
-							if result:
-								break
-							elif len(yoyo_file_data[scan]) == 0 or yoyo_file_data[scan][0] == "\n":
-								break
-							else:
-								end_index = scan
-						report["parsed_lines"].append({"type": key, "matches": matches,   "start":  index, "end": end_index })
+						# Determine the line scope of the shutdown later.
+						report["parsed_lines"].append({"type": key, "matches": matches,   "start":  index, "end": max_lines })
 						no_match = False
 					else:
 						log.out("Regex match for unhandled key " + key, ERROR)
