@@ -48,6 +48,7 @@ class TestReporter(My_SQL):
 		super(TestReporter, self).init()
 		self.reset_project_root()
 		self.line_marker_dict = {}
+		self.line_marker_sub_type_dict={}
 		self.set_user_name(getpass.getuser())
 
 
@@ -82,6 +83,10 @@ class TestReporter(My_SQL):
 		rc = super(TestReporter, self).connect()
 		if rc:
 			rc = self.load_line_marker_types()
+
+		if rc:
+			rc = load_line_marker_sub_types()
+
 		return rc
 
 	def check_ftp_path(self, host, user_name, password, path):
@@ -445,7 +450,6 @@ class TestReporter(My_SQL):
 		else:
 			return arch_id
 
-
 	def load_line_marker_types(self):
 		if self.common_check():
 			fields = []
@@ -462,12 +466,37 @@ class TestReporter(My_SQL):
 		else:
 			return False
 
+	def load_line_marker_sub_types(self):
+		if self.common_check():
+			fields = []
+			fields.append("line_marker_sub_type_id")
+			fields.append("name")
+
+			line_marker_type_rows = self.select(fields, "line_marker_sub_type", None, None)
+
+			if self.size(line_marker_type_rows) > 0:
+				self.line_marker_dict = {}
+				for row in line_marker_type_rows:
+					self.line_marker_sub_type_dict[row[1]] = row[0]
+			return True
+		else:
+			return False
+
 	def get_line_marker_type_id(self, line_marker_type, display_error=True):
 		if line_marker_type in self.line_marker_dict:
 			return self.line_marker_dict[line_marker_type]
 		else:
 			if display_error:
 				self._error_macro(str(line_marker_type) + " line marker type not found. Try calling add first.")
+			return -1
+
+
+	def get_line_marker_sub_type(self, sub_type, display_error=True):
+		if sub_type in self.line_marker_sub_type_dict:
+			return self.line_marker_sub_type_dict[sub_type]
+		else:
+			if display_error:
+				self._error_macro(str(sub_type) + " line marker sub type not found. Try calling add first.")
 			return -1
 
 	def add_line_marker_type(self, line_marker_type, comment=None):
@@ -509,6 +538,49 @@ class TestReporter(My_SQL):
 					return -1
 			else:
 				self._error_macro("Line marker type is too short")
+				return -1
+		else:
+			return -1
+
+	def add_line_marker_sub_type(self, sub_type, comment=None):
+		if self.common_check():
+			if self.size(sub_type) > 0:
+				if self.size(sub_type) < 46:
+
+					line_marker_sub_type_id = self.get_line_marker_sub_type_id(sub_type, display_error=False)
+
+					if line_marker_id > 0:
+						return line_marker_sub_type_id
+					else:
+						fields = []
+						data = []
+
+						fields.append("name")
+						data.append(sub_type)
+
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
+							else:
+								self._error_macro("The comment is too short")
+								return -1
+
+						db_id = self.insert("line_marker_sub_type", fields, data, True)
+
+						if db_id > 0:
+							self.line_marker_sub_type_dict[sub_type] = db_id
+							return db_id
+					return -1
+				else:
+					self._error_macro("Line marker sub type is too long")
+					return -1
+			else:
+				self._error_macro("Line marker sub type is too short")
 				return -1
 		else:
 			return -1
@@ -1899,57 +1971,15 @@ class TestReporter(My_SQL):
 			self._error_macro(full_attachment_src_path + " does not exist or is not accessable")
 			return -1
 
-	def get_line_marker_id(self, attachment_id, marker_type, start_line, end_line=None, display_error=True):
+	def get_line_marker_id(self, attachment_id, marker_type, start_line, end_line=None, sub_type="general", display_error=True):
 		if self.common_check():
 			marker_type_id = self.get_line_marker_type_id(marker_type,  display_error=display_error)
 
 			if marker_type_id > 0:
-				fields = []
-				data = []
+				marker_sub_type_id = self.get_line_marker_sub_type_id(sub_type)
 
-				fields.append("fk_attachment_id")
-				data.append(attachment_id)
+				if marker_sub_type_id > 0:
 
-				fields.append("fk_line_marker_type_id")
-				data.append(marker_type_id)
-
-				fields.append("start")
-				data.append(start_line)
-
-				query = 'SELECT line_marker_id FROM line_marker'
-
-				query = query + " WHERE " + "=%s and ".join(fields) + "=%s"
-
-				if end_line:
-					query = query + " and end=%s"
-					data.append(end_line)
-				else:
-					query = query + " and end IS NULL"
-
-				self.query(query, data)
-
-				line_markers_rows = self.cursor.fetchall()
-
-				if self.size(line_markers_rows) > 0:
-					return line_markers_rows[0][0]
-				else:
-					if display_error:
-						self._error_macro("Matching line marker not found.")
-					return -2
-			else:
-				return marker_type_id
-		else:
-			return -1
-
-
-	def add_line_marker(self, attachment_id, marker_type, start_line, end_line=None, test_exec_id=None, comment=None):
-		if self.common_check():
-			line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
-
-			if line_marker_id == -2:
-				marker_type_id = self.get_line_marker_type_id(marker_type)
-
-				if marker_type_id > 0:
 					fields = []
 					data = []
 
@@ -1959,34 +1989,91 @@ class TestReporter(My_SQL):
 					fields.append("fk_line_marker_type_id")
 					data.append(marker_type_id)
 
+					fields.append("marker_sub_type_id")
+					data.append(marker_sub_type_id)
+
 					fields.append("start")
 					data.append(start_line)
 
+					query = 'SELECT line_marker_id FROM line_marker'
+
+					query = query + " WHERE " + "=%s and ".join(fields) + "=%s"
+
 					if end_line:
-						fields.append("end")
+						query = query + " and end=%s"
 						data.append(end_line)
+					else:
+						query = query + " and end IS NULL"
 
-					if test_exec_id:
-						fields.append("fk_test_exec_id")
-						data.append(test_exec_id)
+					self.query(query, data)
 
-					if comment:
-						if self.size(comment) > 0:
-							if self.size(comment) < 65535:
-								fields.append("comment")
-								data.append(comment)
+					line_markers_rows = self.cursor.fetchall()
+
+					if self.size(line_markers_rows) > 0:
+						return line_markers_rows[0][0]
+					else:
+						if display_error:
+							self._error_macro("Matching line marker not found.")
+						return -2
+				else:
+					return marker_sub_type_id
+			else:
+				return marker_type_id
+		else:
+			return -1
+
+	def add_line_marker(self, attachment_id, marker_type, start_line, end_line=None, test_exec_id=None, sub_type="general", comment=None):
+		if self.common_check():
+			line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
+
+			if line_marker_id == -2:
+				marker_type_id = self.get_line_marker_type_id(marker_type)
+
+				if marker_type_id > 0:
+					marker_sub_type_id = self.get_line_marker_sub_type_id(sub_type)
+
+					if marker_sub_type_id > 0:
+
+						fields = []
+						data = []
+
+						fields.append("fk_attachment_id")
+						data.append(attachment_id)
+
+						fields.append("fk_line_marker_type_id")
+						data.append(marker_type_id)
+
+						fields.append("fk_line_marker_type_id")
+						data.append(marker_type_id)
+
+						fields.append("fk_line_marker_sub_type_id")
+						data.append(marker_sub_type_id)
+
+						if end_line:
+							fields.append("end")
+							data.append(end_line)
+
+						if test_exec_id:
+							fields.append("fk_test_exec_id")
+							data.append(test_exec_id)
+
+						if comment:
+							if self.size(comment) > 0:
+								if self.size(comment) < 65535:
+									fields.append("comment")
+									data.append(comment)
+								else:
+									self._error_macro("The comment is too long")
+									return -1
 							else:
-								self._error_macro("The comment is too long")
+								self._error_macro("The comment is too short")
 								return -1
-						else:
-							self._error_macro("The comment is too short")
-							return -1
 
+						db_id = self.insert("line_marker", fields, data, True)
 
-					db_id = self.insert("line_marker", fields, data, True)
-
-					return db_id
-
+						return db_id
+					else:
+						return marker_sub_type_id
 				else:
 					return marker_type_id
 			else:
