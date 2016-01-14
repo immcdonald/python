@@ -283,10 +283,19 @@ def clean_line(line):
 		if line[0] == "#":
 			# Remove the # and strip from the left again
 			line = line[1:].lstrip()
-
 	return line
 
+def strip_ending_bin_from_path(path):
+	path = path.replace("\\", "/")
 
+	if path.endswith("bin"):
+		pos = path.rfind("bin")
+
+		# Remove the bin from the end.
+		path = path[0:pos]
+		if path[-1] == "/":
+			path = path[:-1]
+	return path
 
 def fix_test_point_over_writes(args, log, src_path):
 
@@ -529,7 +538,7 @@ def truncate_test_line(args, log, test_line):
 			test_line = test_line[(pos+len("/"+word+"/")):]
 	if test_line[0] == "/":
 		test_line = test_line[1:]
-	return test_line
+	return test_line.strip()
 
 def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 
@@ -735,7 +744,7 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						pos = test_suite_name.rfind("/")
 
 						if pos > 0:
-							test_suite_name = test_suite_name[(pos+1):]
+							test_suite_name = test_suite_name[(pos+1):].strip()
 						last_test_suite = test_suite_name
 
 						report["parsed_lines"].append({"type": key, "test_suite": test_suite_name, "matches": matches ,"start":  index, "end": index })
@@ -749,7 +758,7 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						pos = test_suite_name.rfind("/")
 
 						if pos > 0:
-							test_suite_name = test_suite_name[(pos+1):]
+							test_suite_name = test_suite_name[(pos+1):].strip()
 
 						last_test_suite = test_suite_name
 
@@ -822,7 +831,8 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 							matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
 							pos = matches["the_rest"].rfind(":")
 							if pos > 0:
-								sub_type = matches["the_rest"][pos+1:]
+								sub_type = matches["the_rest"][pos+1:].strip()
+
 							report["test_point_indexes"].append(len(report["parsed_lines"]))
 							report["parsed_lines"] .append({"type": "TestPoint", "sub_type":sub_type,  "test_suite_name":	last_test_suite, "matches": matches, "start":  index, "end": index})
 							no_match = False
@@ -978,8 +988,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 	else:
 		submit_dict["exec_time"] =-1
 
-	print pformat(submit_dict)
-
 	index = 0
 	max_index = len(log_results["parsed_lines"])
 
@@ -987,23 +995,61 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 	while index < max_index:
 		regex_data = log_results["parsed_lines"][index]
-		print regex_data["type"]
+		#print regex_data["type"]
 
 		if regex_data["type"] == "test_suite" or regex_data["type"] == "test_suite_2":
 			last_test_suite = regex_data["matches"]["test_suite"]
 
 		elif regex_data["type"] == "TestPoint":
 			if regex_data["matches"]["testpnt"] != "boot" or regex_data["matches"]["testpnt"] != "BOOT":
-
-				print pformat(regex_data)
+				pass
+				#print pformat(regex_data)
 		elif regex_data["type"] == "kermit_send":
-				print pformat(regex_data)
+				pass
+				#print pformat(regex_data)
 
 		elif regex_data["type"] == "download":
-			print pformat(submit_dict["tests"][test_index])
-			print pformat(regex_data)
+			test_path, test_name = os.path.split(regex_data["matches"]["test_path"])
+			test_name = test_name.strip()
+
+			test_params = None
+
+			pos = test_name.find(" ")
+
+			if pos > 0:
+				test_params = test_name[pos:].strip()
+				test_name = test_name[1:pos]
+
+			test_path = strip_ending_bin_from_path(test_path)
+
+			if regex_data["matches"]["mode"] == 'Start':
+
+				print test_path, test_name, test_params
+
+				# Most likely to be the very first thing that would signal the start of a new test is download start.
+				# You could not count on this being the first thing in the log tho. Sometimes the serial interface will miss it on
+				# a reconnect..
+
+				# Check to see if the teest is the same as the one that is already being processed.
+				if submit_dict["tests"][test_index]["test_name"] != test_name or submit_dict["tests"][test_index]["test_path"] != test_path or submit_dict["tests"][test_index]["test_params"] != test_params:
+					print "New tests"
+					# if not then assume this is a new test and move the test index.
+					test_index = test_index + 1
+					submit_dict["tests"].append(init_test_structure())
+
+
+			if submit_dict["tests"][test_index]["test_name"] is None:
+				submit_dict["tests"][test_index]["test_name"] = test_name
+
+			if submit_dict["tests"][test_index]["test_path"] is None:
+				submit_dict["tests"][test_index]["test_path"] = test_path
+
+			if submit_dict["tests"][test_index]["test_params"] is None and test_params is not None:
+				submit_dict["tests"][test_index]["test_params"] = test_params
 
 		index = index + 1
+	print pformat(submit_dict)
+	print len(submit_dict["tests"])
 
 
 def process_variants(args, log, fp, recovery_data):
