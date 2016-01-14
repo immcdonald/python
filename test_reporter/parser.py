@@ -734,6 +734,7 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						no_match = False
 						break
 					elif key == "kermit_send":
+						matches["path"] = strip_ending_bin_from_path(truncate_test_line(args, log, matches["path"]))
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 						break
@@ -995,18 +996,18 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 	while index < max_index:
 		regex_data = log_results["parsed_lines"][index]
-		#print regex_data["type"]
+		print regex_data["type"]
 
 		if regex_data["type"] == "test_suite" or regex_data["type"] == "test_suite_2":
 			last_test_suite = regex_data["matches"]["test_suite"]
 
 		elif regex_data["type"] == "TestPoint":
 			if regex_data["matches"]["testpnt"] != "boot" or regex_data["matches"]["testpnt"] != "BOOT":
-				pass
-				#print pformat(regex_data)
+				print pformat(regex_data)
 		elif regex_data["type"] == "kermit_send":
-				pass
-				#print pformat(regex_data)
+
+
+			print pformat(regex_data)
 
 		elif regex_data["type"] == "download":
 			test_path, test_name = os.path.split(regex_data["matches"]["test_path"])
@@ -1023,16 +1024,12 @@ def process_tests(args, log, sum_results, log_results, variant):
 			test_path = strip_ending_bin_from_path(test_path)
 
 			if regex_data["matches"]["mode"] == 'Start':
-
-				print test_path, test_name, test_params
-
 				# Most likely to be the very first thing that would signal the start of a new test is download start.
 				# You could not count on this being the first thing in the log tho. Sometimes the serial interface will miss it on
 				# a reconnect..
 
 				# Check to see if the teest is the same as the one that is already being processed.
 				if submit_dict["tests"][test_index]["test_name"] != test_name or submit_dict["tests"][test_index]["test_path"] != test_path or submit_dict["tests"][test_index]["test_params"] != test_params:
-					print "New tests"
 					# if not then assume this is a new test and move the test index.
 					test_index = test_index + 1
 					submit_dict["tests"].append(init_test_structure())
