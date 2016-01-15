@@ -1255,7 +1255,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 			else:
 				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["EXEC_STOP"]
 
-				if "e_start_time" not in submit_dict["tests"][log_test_index]:
+				if "e_start_time" in submit_dict["tests"][log_test_index]:
 					submit_dict["tests"][log_test_index]["exec_time"] = (regex_data["date"] - submit_dict["tests"][log_test_index]["e_start_time"]).total_seconds()
 					del submit_dict["tests"][log_test_index]["e_start_time"]
 
