@@ -3,9 +3,20 @@ import sys, os, shutil
 from datetime import datetime
 import re
 import user
-from TestReporter import TestReporter, DEBUG, ERROR, WARNING
+from TestReporter import TestReporter, DEBUG, ERROR, WARNING, EXCEPTION
 
 from pprint import pformat
+
+
+scan_enum = {"NOTHING": 0,
+			 "DOWNLOAD_START": 1,
+		     "SEND_TEST": 2,
+			 "DOWNLOAD_STOP": 3,
+			 "EXEC_START": 4,
+			 "FREE_FOR_ALL": 5,
+			 "EXEC_STOP": 6,
+			 "FINAL": 7
+			}
 
 # Debug Levels
 # 8 - Show all output lines for sum file
@@ -38,6 +49,14 @@ test_point_prefix = ["METRIC",
 arch_type_file_path_breaks = ["tests",
 							  "$PROCTYPE",
 							]
+
+expected_sub_strings = ["(timeout) where is the STOP message?",
+					    "Assertion failed",
+					    "program crashed",
+					    "premature exit",
+					    "no pass",
+					    "no point",
+					    "kernel crash"]
 
 def dmdty2time(input_string):
 	# convert this format (Fri May 29 22:18:39 2015) to python time
@@ -828,15 +847,9 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						no_match = False
 					elif key == "general_tst_pnt":
 						if matches["testpnt"][:-2] in test_point_prefix:
-							sub_type = "general"
-
 							matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
-							pos = matches["the_rest"].rfind(":")
-							if pos > 0:
-								sub_type = matches["the_rest"][pos+1:].strip()
-
 							report["test_point_indexes"].append(len(report["parsed_lines"]))
-							report["parsed_lines"] .append({"type": "TestPoint", "sub_type":sub_type,  "test_suite_name":	last_test_suite, "matches": matches, "start":  index, "end": index})
+							report["parsed_lines"] .append({"type": "TestPoint",  "test_suite_name":	last_test_suite, "matches": matches, "start":  index, "end": index})
 							no_match = False
 					elif key == "bug_ref":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
@@ -899,8 +912,113 @@ def link_sum_and_log_results(args, log, sum_results, log_results):
 		else:
 			log.out("Match\n", DEBUG, v=100)
 
+def get_subtype(args, log, search_string):
+	# Lets not look for : with in quotes on the command line.
+	double_qoute_pos = search_string.rfind('"')
+	single_qoute_pos = search_string.rfind("'")
+
+	max_quote = max(double_qoute_pos, single_qoute_pos)
+
+	if max_quote > 0:
+		temp = search_string[(max_quote +1):]
+	else:
+		temp = search_string
+		max_quote = 0
+
+	pos = temp.rfind(":")
+
+	if pos > 0:
+		sub_string = temp[pos+1:].strip()
+
+		if sub_string in expected_sub_strings:
+			if sub_string == "(timeout) where is the STOP message?":
+				return "timeout", search_string[:max_quote+pos]
+			else:
+				return sub_string, search_string[:max_quote+pos]
+		else:
+			log.out("(" + sub_string + " found after ':', but is not a recognised sub type value)", ERROR)
+			return None, search_string
+	else:
+		return None, search_string
+
+
 def init_test_structure():
-	return {"test_path": None, "test_name": None, "test_params": None, "test_suite": None, "indexes":[]}
+	return {"test_path": None, "test_name": None, "test_params": None, "test_suite": None, "indexes":[], "last_log_match" : scan_enum["NOTHING"]}
+
+def is_new_test(args, logs, last_match, current_match):
+	if last_match == scan_enum["DOWNLOAD_START"]:
+		if current_match == scan_enum["DOWNLOAD_START"]:
+			return True
+		else:
+			return False
+
+
+	if last_match == scan_enum["SEND_TEST"]:
+		if current_match == scan_enum["DOWNLOAD_START"]:
+			return True
+		else:
+			return False
+
+	if last_match == scan_enum["DOWNLOAD_STOP"]:
+		if current_match == scan_enum["DOWNLOAD_START"]:
+			return True
+		elif current_match == scan_enum["SEND_TEST"]:
+			return True
+		else:
+			return False
+
+
+	if last_match == scan_enum["EXEC_START"]:
+		if current_match == scan_enum["DOWNLOAD_START"]:
+			return True
+		elif current_match == scan_enum["SEND_TEST"]:
+			return True
+		elif current_match == scan_enum["DOWNLOAD_STOP"]:
+			return True
+		else:
+			return False
+
+	if last_match == scan_enum["FREE_FOR_ALL"]:
+		if current_match == scan_enum["DOWNLOAD_START"]:
+			return True
+		elif current_match == scan_enum["SEND_TEST"]:
+			return True
+		elif current_match == scan_enum["DOWNLOAD_STOP"]:
+			return True
+		elif current_match == scan_enum["EXEC_START"]:
+			return True
+		else:
+			return False
+
+	if last_match == scan_enum["EXEC_STOP"]:
+		if current_match == scan_enum["DOWNLOAD_START"]:
+			return True
+		elif current_match == scan_enum["SEND_TEST"]:
+			return True
+		elif current_match == scan_enum["DOWNLOAD_STOP"]:
+			return True
+		elif current_match == scan_enum["EXEC_START"]:
+			return True
+		else:
+			return False
+
+	if last_match == scan_enum["FINAL"]:
+		if current_match == scan_enum["DOWNLOAD_START"]:
+			return True
+		elif current_match == scan_enum["SEND_TEST"]:
+			return True
+		elif current_match == scan_enum["DOWNLOAD_STOP"]:
+			return True
+		elif current_match == scan_enum["EXEC_START"]:
+			return True
+		elif current_match == scan_enum["EXEC_STOP"]:
+			return True
+		elif current_match == scan_enum["FREE_FOR_ALL"]:
+			return True
+		else:
+			return False
+
+	return False
 
 def process_tests(args, log, sum_results, log_results, variant):
 	last_test_suite = "lost_and_found"
@@ -908,18 +1026,9 @@ def process_tests(args, log, sum_results, log_results, variant):
 	submit_dict = {}
 
 	submit_dict["tests"] = []
+	submit_dict["test_suites"] = []
 
-	submit_dict["tests"].append(init_test_structure())
-
-	submit_dict["initial_bootup"] = {"start_line": 1, "end_line": -1}
-
-	next_summary_index = 0
-	exec_start_time = None
-	exec_end_time = None
-	exec_time = None
 	user_name = None
-
-	variant = variant.replace("\\", "/")
 
 	if variant[-1] == "/":
 		variant  = variant[0:-1]
@@ -933,7 +1042,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 	else:
 		log.out("Failed to resovle variant parts from variant: " + variant)
 
-	# first see if we have two timestamp index:
+	# First see if we have two timestamp index:
 	if "time_stamp_indexes" in sum_results:
 		list_length = len(sum_results["time_stamp_indexes"])
 
@@ -990,72 +1099,128 @@ def process_tests(args, log, sum_results, log_results, variant):
 		submit_dict["exec_time"] =-1
 
 	index = 0
-	max_index = len(log_results["parsed_lines"])
-
-	test_index = 0
+	max_index = len(sum_results["parsed_lines"])
+	test_index = -1
 
 	while index < max_index:
+		regex_data = sum_results["parsed_lines"][index]
+
+		if regex_data["type"] == "test_suite":
+			last_test_suite = regex_data["test_suite_name"]
+			submit_dict["test_suites"].append(last_test_suite)
+
+		elif regex_data["type"] == "host":
+			if "sum_host_index" not in  submit_dict:
+				submit_dict["sum_host_index"] = index
+
+		elif regex_data["type"] == "TestPoint":
+			if regex_data["matches"]["testpnt"] != "boot: " and  regex_data["matches"]["testpnt"] != "BOOT: " and regex_data["matches"]["testpnt"] != "NOTE: " and regex_data["matches"]["testpnt"] != "POINT: ":
+				regex_data["matches"]["the_rest"] = regex_data["matches"]["the_rest"].replace("\\", "/")
+
+				sub_type, regex_data["matches"]["the_rest"] = get_subtype(args, log, regex_data["matches"]["the_rest"])
+
+				if sub_type is None:
+					sub_type = "general"
+
+				test_path = "."
+				test_params = None
+
+				pos = regex_data["matches"]["the_rest"].rfind("/")
+
+				if pos > 0:
+					test_path = regex_data["matches"]["the_rest"][0:pos]
+					pos = pos + 1
+				else:
+					pos = 0
+
+				temp = 	regex_data["matches"]["the_rest"][pos:].strip()
+
+				pos = temp.find(" ")
+
+				if pos > 0:
+					test_params = temp[pos:].strip()
+					test_name = temp[0:pos].strip()
+				else:
+					test_name = temp
+
+				submit_dict["tests"].append(init_test_structure())
+				test_index = test_index + 1
+
+				if submit_dict["tests"][test_index]["test_suite"] is None:
+					submit_dict["tests"][test_index]["test_suite"] = last_test_suite
+
+				if submit_dict["tests"][test_index]["test_name"] is None:
+					submit_dict["tests"][test_index]["test_name"] = test_name
+
+				if submit_dict["tests"][test_index]["test_path"] is None:
+					submit_dict["tests"][test_index]["test_path"] = test_path
+
+				if submit_dict["tests"][test_index]["test_params"] is None and test_params is not None:
+					submit_dict["tests"][test_index]["test_params"] = test_params
+
+				submit_dict["tests"][test_index]["sum_index"] = index
+		else:
+			log.out(regex_data["type"] + " is not handled.........................")
+			print pformat(sum_results["parsed_lines"][index])
+
+
+		index = index + 1
+
+	log_test_index = 0
+	index = 0
+	max_index = len(log_results["parsed_lines"])
+	while index < max_index:
 		regex_data = log_results["parsed_lines"][index]
-		print regex_data["type"]
 
 		if regex_data["type"] == "test_suite" or regex_data["type"] == "test_suite_2":
 			last_test_suite = regex_data["matches"]["test_suite"]
 
-		elif regex_data["type"] == "TestPoint":
-			if regex_data["matches"]["testpnt"] != "boot" or regex_data["matches"]["testpnt"] != "BOOT":
-				# Not everyone uses the physical test name for the test point start and stop messages.
-				# So we can't safely use these to determine if this is a new test or note.
+		elif regex_data["type"] == "download":
+			test_path, test_name = os.path.split(regex_data["matches"]["test_path"])
 
-				submit_dict["tests"][test_index]["indexes"].append(index)
+			test_name = test_name.strip()
+
+			test_params = None
+
+			pos = test_name.find(" ")
+
+			if pos > 0:
+				test_params = test_name[pos:].strip()
+				test_name = test_name[1:pos]
+
+			test_path = strip_ending_bin_from_path(test_path)
+
+			if submit_dict["tests"][log_test_index]["test_name"] == test_name or submit_dict["tests"][log_test_index]["test_path"] == test_path or submit_dict["tests"][log_test_index]["test_params"] == test_params:
+				if regex_data["matches"]["mode"] == 'Start':
+					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["DOWNLOAD_START"]):
+						log_test_index = log_test_index + 1
+				else:
+					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["DOWNLOAD_STOP"]):
+						log_test_index = log_test_index + 1
 
 
-		elif regex_data["type"] == "kermit_send":
-			pass
+			elif submit_dict["tests"][log_test_index+1]["test_name"] == test_name or submit_dict["tests"][log_test_index+1]["test_path"] == test_path or submit_dict["tests"][log_test_index+1]["test_params"] == test_params:
+				log_test_index = log_test_index + 1
+			else:
+				print pformat(submit_dict)
+				log.out("Warning next download marker test is not what we expected: "  + pformat(submit_dict["tests"][log_test_index+1]) + " Got: " + test_path+ " " + test_name + " " + test_params, EXCEPTION)
 
+
+			if regex_data["matches"]["mode"] == 'Start':
+				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["DOWNLOAD_START"]
+				submit_dict["tests"][log_test_index]["d_start_time"] = regex_data["date"]
+
+			else:
+				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["DOWNLOAD_STOP"]
+				if "d_start_time" in submit_dict["tests"][log_test_index]:
+					submit_dict["tests"][log_test_index]["download_time"] = (regex_data["date"] - submit_dict["tests"][log_test_index]["d_start_time"]).total_seconds()
+					del submit_dict["tests"][log_test_index]["d_start_time"]
+
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
 
 		elif regex_data["type"] == "execute":
 			test_path, test_name = os.path.split(regex_data["matches"]["test_path"])
-			test_name = test_name.strip()
 
-			test_params = None
-
-			pos = test_name.find(" ")
-
-			if pos > 0:
-				test_params = test_name[pos:].strip()
-				test_name = test_name[1:pos]
-
-			test_path = strip_ending_bin_from_path(test_path)
-			# Check to see if the teest is the same as the one that is already being processed.
-			if submit_dict["tests"][test_index]["test_name"] != test_name or submit_dict["tests"][test_index]["test_path"] != test_path or submit_dict["tests"][test_index]["test_params"] != test_params:
-				# if not then assume this is a new test and move the test index.
-				test_index = test_index + 1
-				submit_dict["tests"].append(init_test_structure())
-
-			if submit_dict["tests"][test_index]["test_suite"] is None:
-				submit_dict["tests"][test_index]["test_suite"] = last_test_suite
-
-			if submit_dict["tests"][test_index]["test_name"] is None:
-				submit_dict["tests"][test_index]["test_name"] = test_name
-
-			if submit_dict["tests"][test_index]["test_path"] is None:
-				submit_dict["tests"][test_index]["test_path"] = test_path
-
-			if submit_dict["tests"][test_index]["test_params"] is None and test_params is not None:
-				submit_dict["tests"][test_index]["test_params"] = test_params
-
-			if regex_data["matches"]["mode"] == 'Start':
-				submit_dict["tests"][test_index]["e_start_time"] = regex_data["date"]
-				del submit_dict["tests"][test_index]["e_start_time"]
-
-			if regex_data["matches"]["mode"] == 'Stop':
-				if "e_start_time" in submit_dict["tests"][test_index]:
-					submit_dict["tests"][test_index]["execute_time"] = (regex_data["date"] - submit_dict["tests"][test_index]["e_start_time"]).total_seconds()
-
-			submit_dict["tests"][test_index]["indexes"].append(index)
-
-		elif regex_data["type"] == "download":
-			test_path, test_name = os.path.split(regex_data["matches"]["test_path"])
 			test_name = test_name.strip()
 
 			test_params = None
@@ -1068,44 +1233,43 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 			test_path = strip_ending_bin_from_path(test_path)
 
+			if submit_dict["tests"][log_test_index]["test_name"] == test_name or submit_dict["tests"][log_test_index]["test_path"] == test_path or submit_dict["tests"][log_test_index]["test_params"] == test_params:
+				if regex_data["matches"]["mode"] == 'Start':
+					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["EXEC_START"]):
+						log_test_index = log_test_index + 1
+				else:
+					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["EXEC_STOP"]):
+						log_test_index = log_test_index + 1
+
+
+			elif submit_dict["tests"][log_test_index+1]["test_name"] == test_name or submit_dict["tests"][log_test_index+1]["test_path"] == test_path or submit_dict["tests"][log_test_index+1]["test_params"] == test_params:
+				log_test_index = log_test_index + 1
+			else:
+				print pformat(submit_dict)
+				log.out("Warning next download marker test is not what we expected: "  + pformat(submit_dict["tests"][log_test_index+1]) + " Got: " + test_path+ " " + test_name + " " + test_params, EXCEPTION)
+
+
 			if regex_data["matches"]["mode"] == 'Start':
-				# Most likely to be the very first thing that would signal the start of a new test is download start.
-				# You could not count on this being the first thing in the log tho. Sometimes the serial interface will miss it on
-				# a reconnect..
+				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["EXEC_START"]
+				submit_dict["tests"][log_test_index]["e_start_time"] = regex_data["date"]
+			else:
+				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["EXEC_STOP"]
 
-				# Check to see if the teest is the same as the one that is already being processed.
-				if submit_dict["tests"][test_index]["test_name"] != test_name or submit_dict["tests"][test_index]["test_path"] != test_path or submit_dict["tests"][test_index]["test_params"] != test_params:
-					# if not then assume this is a new test and move the test index.
-					test_index = test_index + 1
-					submit_dict["tests"].append(init_test_structure())
+				if "e_start_time" not in submit_dict["tests"][log_test_index]:
+					submit_dict["tests"][log_test_index]["exec_time"] = (regex_data["date"] - submit_dict["tests"][log_test_index]["e_start_time"]).total_seconds()
+					del submit_dict["tests"][log_test_index]["e_start_time"]
 
- 		 		submit_dict["tests"][test_index]["d_start_time"] = regex_data["date"]
 
-			if regex_data["matches"]["mode"] == 'Stop':
-				if "d_start_time" in submit_dict["tests"][test_index]:
-					submit_dict["tests"][test_index]["download_time"] = (regex_data["date"] - submit_dict["tests"][test_index]["d_start_time"]).total_seconds()
-					del submit_dict["tests"][test_index]["d_start_time"]
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
 
-			if submit_dict["tests"][test_index]["test_suite"] is None:
-				submit_dict["tests"][test_index]["test_suite"] = last_test_suite
-
-			if submit_dict["tests"][test_index]["test_name"] is None:
-				submit_dict["tests"][test_index]["test_name"] = test_name
-
-			if submit_dict["tests"][test_index]["test_path"] is None:
-				submit_dict["tests"][test_index]["test_path"] = test_path
-
-			if submit_dict["tests"][test_index]["test_params"] is None and test_params is not None:
-				submit_dict["tests"][test_index]["test_params"] = test_params
-
-			submit_dict["tests"][test_index]["indexes"].append(index)
 		else:
-			print "Unhandled!!!!!!!!!!!!!!!!!!!!"
+			log.out(regex_data["type"] + " is not handled.........................")
+			#print pformat(log_results["parsed_lines"][index])
 
 		index = index + 1
+
 	print pformat(submit_dict)
 	print len(submit_dict["tests"])
-
 
 def process_variants(args, log, fp, recovery_data):
 
