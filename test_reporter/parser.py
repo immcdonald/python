@@ -717,6 +717,7 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						break
 
 					elif key == "execute":
+						matches["test_path"] = truncate_test_line(args, log, matches["test_path"])
 						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
 						no_match = False
 						break
@@ -899,7 +900,7 @@ def link_sum_and_log_results(args, log, sum_results, log_results):
 			log.out("Match\n", DEBUG, v=100)
 
 def init_test_structure():
-	return {"test_path": None, "test_name": None, "test_params": None}
+	return {"test_path": None, "test_name": None, "test_params": None, "test_suite": None, "indexes":[]}
 
 def process_tests(args, log, sum_results, log_results, variant):
 	last_test_suite = "lost_and_found"
@@ -931,7 +932,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 		submit_dict["variant"] = variant_parts[-1]
 	else:
 		log.out("Failed to resovle variant parts from variant: " + variant)
-
 
 	# first see if we have two timestamp index:
 	if "time_stamp_indexes" in sum_results:
@@ -1003,11 +1003,56 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 		elif regex_data["type"] == "TestPoint":
 			if regex_data["matches"]["testpnt"] != "boot" or regex_data["matches"]["testpnt"] != "BOOT":
-				print pformat(regex_data)
+				# Not everyone uses the physical test name for the test point start and stop messages.
+				# So we can't safely use these to determine if this is a new test or note.
+
+				submit_dict["tests"][test_index]["indexes"].append(index)
+
+
 		elif regex_data["type"] == "kermit_send":
+			pass
 
 
-			print pformat(regex_data)
+		elif regex_data["type"] == "execute":
+			test_path, test_name = os.path.split(regex_data["matches"]["test_path"])
+			test_name = test_name.strip()
+
+			test_params = None
+
+			pos = test_name.find(" ")
+
+			if pos > 0:
+				test_params = test_name[pos:].strip()
+				test_name = test_name[1:pos]
+
+			test_path = strip_ending_bin_from_path(test_path)
+			# Check to see if the teest is the same as the one that is already being processed.
+			if submit_dict["tests"][test_index]["test_name"] != test_name or submit_dict["tests"][test_index]["test_path"] != test_path or submit_dict["tests"][test_index]["test_params"] != test_params:
+				# if not then assume this is a new test and move the test index.
+				test_index = test_index + 1
+				submit_dict["tests"].append(init_test_structure())
+
+			if submit_dict["tests"][test_index]["test_suite"] is None:
+				submit_dict["tests"][test_index]["test_suite"] = last_test_suite
+
+			if submit_dict["tests"][test_index]["test_name"] is None:
+				submit_dict["tests"][test_index]["test_name"] = test_name
+
+			if submit_dict["tests"][test_index]["test_path"] is None:
+				submit_dict["tests"][test_index]["test_path"] = test_path
+
+			if submit_dict["tests"][test_index]["test_params"] is None and test_params is not None:
+				submit_dict["tests"][test_index]["test_params"] = test_params
+
+			if regex_data["matches"]["mode"] == 'Start':
+				submit_dict["tests"][test_index]["e_start_time"] = regex_data["date"]
+				del submit_dict["tests"][test_index]["e_start_time"]
+
+			if regex_data["matches"]["mode"] == 'Stop':
+				if "e_start_time" in submit_dict["tests"][test_index]:
+					submit_dict["tests"][test_index]["execute_time"] = (regex_data["date"] - submit_dict["tests"][test_index]["e_start_time"]).total_seconds()
+
+			submit_dict["tests"][test_index]["indexes"].append(index)
 
 		elif regex_data["type"] == "download":
 			test_path, test_name = os.path.split(regex_data["matches"]["test_path"])
@@ -1034,6 +1079,15 @@ def process_tests(args, log, sum_results, log_results, variant):
 					test_index = test_index + 1
 					submit_dict["tests"].append(init_test_structure())
 
+ 		 		submit_dict["tests"][test_index]["d_start_time"] = regex_data["date"]
+
+			if regex_data["matches"]["mode"] == 'Stop':
+				if "d_start_time" in submit_dict["tests"][test_index]:
+					submit_dict["tests"][test_index]["download_time"] = (regex_data["date"] - submit_dict["tests"][test_index]["d_start_time"]).total_seconds()
+					del submit_dict["tests"][test_index]["d_start_time"]
+
+			if submit_dict["tests"][test_index]["test_suite"] is None:
+				submit_dict["tests"][test_index]["test_suite"] = last_test_suite
 
 			if submit_dict["tests"][test_index]["test_name"] is None:
 				submit_dict["tests"][test_index]["test_name"] = test_name
@@ -1043,6 +1097,10 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 			if submit_dict["tests"][test_index]["test_params"] is None and test_params is not None:
 				submit_dict["tests"][test_index]["test_params"] = test_params
+
+			submit_dict["tests"][test_index]["indexes"].append(index)
+		else:
+			print "Unhandled!!!!!!!!!!!!!!!!!!!!"
 
 		index = index + 1
 	print pformat(submit_dict)
@@ -1149,7 +1207,6 @@ def process_variants(args, log, fp, recovery_data):
 			log.out(root + " yoyo.log", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.log import completed"
 			if completed_string not in recovery_data:
-				pass
 				data[relative_root]["LOG"] = process_yoyo_log(args, log, root, line_regex)
 				if data[relative_root]["LOG"]:
 					if "SUM" in data[relative_root]:
