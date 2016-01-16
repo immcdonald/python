@@ -1038,6 +1038,15 @@ def is_new_test(args, logs, last_match, current_match):
 
 	return False
 
+
+def find_next_match_index(test_list, current_test_index, test_path, test_name, test_params):
+	test_list_length = len(test_list)
+
+	for offset in range(current_test_index, test_list_length):
+		if test_list[offset]["test_path"] == test_path and test_list[offset]["test_name"] == test_name and test_list[offset]["test_params"] == test_params:
+			return offset
+	return 0
+
 def process_tests(args, log, sum_results, log_results, variant):
 	last_test_suite = "lost_and_found"
 
@@ -1220,32 +1229,30 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 			test_path = strip_ending_bin_from_path(test_path)
 
+			b_new_test = False
 
 			if submit_dict["tests"][log_test_index]["test_name"] == test_name and submit_dict["tests"][log_test_index]["test_path"] == test_path and submit_dict["tests"][log_test_index]["test_params"] == test_params:
 				if regex_data["matches"]["mode"] == 'Start':
 					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["DOWNLOAD_START"]):
-						log_test_index = log_test_index + 1
+						b_new_test = True
 				else:
 					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["DOWNLOAD_STOP"]):
-						log_test_index = log_test_index + 1
-
-
-			elif submit_dict["tests"][log_test_index+1]["test_name"] == test_name  and  submit_dict["tests"][log_test_index+1]["test_path"] == test_path and submit_dict["tests"][log_test_index+1]["test_params"] == test_params:
-				log_test_index = log_test_index + 1
+						b_new_test = True
 			else:
-				print pformat(submit_dict)
-				print test_path, test_name, test_params
-				print pformat(submit_dict["tests"][log_test_index])
-				print pformat(submit_dict["tests"][log_test_index+1])
+				b_new_test = True
 
-				print pformat(regex_data)
-				log.out("Warning next download marker test is not what we expected: "  + pformat(submit_dict["tests"][log_test_index+1]) + " Got: " + test_path+ " " + test_name + " " + test_params, EXCEPTION)
+			if b_new_test:
+				next_match = find_next_match_index(submit_dict["tests"], log_test_index, test_path, test_name, test_params)
+
+				if next_match > 0:
+					log_test_index = next_match
+				else:
+					log.out("No match could be found for " + test_path + " " + test_name + " " + test_params, EXCEPTION)
 
 
 			if regex_data["matches"]["mode"] == 'Start':
 				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["DOWNLOAD_START"]
 				submit_dict["tests"][log_test_index]["d_start_time"] = regex_data["date"]
-
 			else:
 				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["DOWNLOAD_STOP"]
 				if "d_start_time" in submit_dict["tests"][log_test_index]:
@@ -1269,22 +1276,25 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 			test_path = strip_ending_bin_from_path(test_path)
 
+			b_new_test = False
+
 			if submit_dict["tests"][log_test_index]["test_name"] == test_name and submit_dict["tests"][log_test_index]["test_path"] == test_path and submit_dict["tests"][log_test_index]["test_params"] == test_params:
 				if regex_data["matches"]["mode"] == 'Start':
 					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["EXEC_START"]):
-						log_test_index = log_test_index + 1
+						b_new_test = True
 				else:
 					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["EXEC_STOP"]):
-						log_test_index = log_test_index + 1
-
-
-			elif submit_dict["tests"][log_test_index+1]["test_name"] == test_name and submit_dict["tests"][log_test_index+1]["test_path"] == test_path and submit_dict["tests"][log_test_index+1]["test_params"] == test_params:
-				log_test_index = log_test_index + 1
+						b_new_test = True
 			else:
-				print pformat(submit_dict)
-				print pformat(regex_data)
-				log.out("Warning next download marker test is not what we expected: "  + pformat(submit_dict["tests"][log_test_index+1]) + " Got: " + test_path+ " " + test_name + " " + test_params, EXCEPTION)
+				b_new_test = True
 
+			if b_new_test:
+				next_match = find_next_match_index(submit_dict["tests"], log_test_index, test_path, test_name, test_params)
+
+				if next_match > 0:
+					log_test_index = next_match
+				else:
+					log.out("No match could be found for " + test_path + " " + test_name + " " + test_params, EXCEPTION)
 
 			if regex_data["matches"]["mode"] == 'Start':
 				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["EXEC_START"]
