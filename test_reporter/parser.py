@@ -630,6 +630,8 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 
 def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 
+	test_point_line = re.compile('^\s*(?P<test_name>[a-zA-Z\_\-0-9]+)\.*(?P<extension>[a-zA-Z0-9]{0,5}):(?P<line_number>\d+)')
+
 	last_test_suite = "lost_and_found"
 
 	# Use a list and index so that items stay in the order they are found.
@@ -847,9 +849,25 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						no_match = False
 					elif key == "general_tst_pnt":
 						if matches["testpnt"][:-2] in test_point_prefix:
-							matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
+							final_flag = False
+
+							# Certain test point keys are not final results
+							if matches["testpnt"][:-2] != "START" and  matches["testpnt"][:-2] != "STOP" and matches["testpnt"][:-2] != "NOTE" and matches["testpnt"][:-2] != "BOOT" and matches["testpnt"][:-2] != "boot":
+
+								# Final result test points usually have the file_name.ext:line number fomrat
+								# output before the string.. Where as final results are just the path to the test file
+								result = test_point_line.search(matches["the_rest"])
+								if not result:
+									matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
+									final_flag = True
+
+							if 	final_flag:
+								log.out("FINAL RESULT: " +  yoyo_file_data[index], DEBUG, v=101)
+							else:
+								log.out("TEST POINT RESULT: " +  yoyo_file_data[index], DEBUG, v=101)
+
 							report["test_point_indexes"].append(len(report["parsed_lines"]))
-							report["parsed_lines"] .append({"type": "TestPoint",  "test_suite_name":	last_test_suite, "matches": matches, "start":  index, "end": index})
+							report["parsed_lines"] .append({"type": "TestPoint", "final_flag": final_flag, "test_suite_name":	last_test_suite, "matches": matches, "start":  index, "end": index})
 							no_match = False
 					elif key == "bug_ref":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
@@ -1129,6 +1147,18 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 				if pos > 0:
 					test_path = regex_data["matches"]["the_rest"][0:pos]
+
+					bin_pos = test_path.find("bin")
+
+					if bin_pos > 0:
+						test_path = test_path[0:bin_pos]
+
+					if test_path[-1] == "/":
+						test_path = test_path[0:-1]
+
+					if test_path[-1] == "\\":
+						test_path = test_path[0:-1]
+
 					pos = pos + 1
 				else:
 					pos = 0
@@ -1186,11 +1216,12 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 			if pos > 0:
 				test_params = test_name[pos:].strip()
-				test_name = test_name[1:pos]
+				test_name = test_name[0:pos]
 
 			test_path = strip_ending_bin_from_path(test_path)
 
-			if submit_dict["tests"][log_test_index]["test_name"] == test_name or submit_dict["tests"][log_test_index]["test_path"] == test_path or submit_dict["tests"][log_test_index]["test_params"] == test_params:
+
+			if submit_dict["tests"][log_test_index]["test_name"] == test_name and submit_dict["tests"][log_test_index]["test_path"] == test_path and submit_dict["tests"][log_test_index]["test_params"] == test_params:
 				if regex_data["matches"]["mode"] == 'Start':
 					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["DOWNLOAD_START"]):
 						log_test_index = log_test_index + 1
@@ -1199,10 +1230,15 @@ def process_tests(args, log, sum_results, log_results, variant):
 						log_test_index = log_test_index + 1
 
 
-			elif submit_dict["tests"][log_test_index+1]["test_name"] == test_name or submit_dict["tests"][log_test_index+1]["test_path"] == test_path or submit_dict["tests"][log_test_index+1]["test_params"] == test_params:
+			elif submit_dict["tests"][log_test_index+1]["test_name"] == test_name  and  submit_dict["tests"][log_test_index+1]["test_path"] == test_path and submit_dict["tests"][log_test_index+1]["test_params"] == test_params:
 				log_test_index = log_test_index + 1
 			else:
 				print pformat(submit_dict)
+				print test_path, test_name, test_params
+				print pformat(submit_dict["tests"][log_test_index])
+				print pformat(submit_dict["tests"][log_test_index+1])
+
+				print pformat(regex_data)
 				log.out("Warning next download marker test is not what we expected: "  + pformat(submit_dict["tests"][log_test_index+1]) + " Got: " + test_path+ " " + test_name + " " + test_params, EXCEPTION)
 
 
@@ -1229,11 +1265,11 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 			if pos > 0:
 				test_params = test_name[pos:].strip()
-				test_name = test_name[1:pos]
+				test_name = test_name[0:pos]
 
 			test_path = strip_ending_bin_from_path(test_path)
 
-			if submit_dict["tests"][log_test_index]["test_name"] == test_name or submit_dict["tests"][log_test_index]["test_path"] == test_path or submit_dict["tests"][log_test_index]["test_params"] == test_params:
+			if submit_dict["tests"][log_test_index]["test_name"] == test_name and submit_dict["tests"][log_test_index]["test_path"] == test_path and submit_dict["tests"][log_test_index]["test_params"] == test_params:
 				if regex_data["matches"]["mode"] == 'Start':
 					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["EXEC_START"]):
 						log_test_index = log_test_index + 1
@@ -1242,10 +1278,11 @@ def process_tests(args, log, sum_results, log_results, variant):
 						log_test_index = log_test_index + 1
 
 
-			elif submit_dict["tests"][log_test_index+1]["test_name"] == test_name or submit_dict["tests"][log_test_index+1]["test_path"] == test_path or submit_dict["tests"][log_test_index+1]["test_params"] == test_params:
+			elif submit_dict["tests"][log_test_index+1]["test_name"] == test_name and submit_dict["tests"][log_test_index+1]["test_path"] == test_path and submit_dict["tests"][log_test_index+1]["test_params"] == test_params:
 				log_test_index = log_test_index + 1
 			else:
 				print pformat(submit_dict)
+				print pformat(regex_data)
 				log.out("Warning next download marker test is not what we expected: "  + pformat(submit_dict["tests"][log_test_index+1]) + " Got: " + test_path+ " " + test_name + " " + test_params, EXCEPTION)
 
 
