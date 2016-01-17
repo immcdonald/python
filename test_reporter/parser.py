@@ -1040,6 +1040,18 @@ def find_next_match_index(test_list, current_test_index, test_path, test_name, t
 			return offset
 	return 0
 
+def match_error(log, test_list, index, current,test_path, test_name, test_params):
+	log.out("Current Sum")
+	log.out(pformat(test_list[current]))
+
+	log.out("\n Line Compare")
+	log.out(pformat(test_list[index]))
+
+	if test_params:
+		log.out(" No match found for: " + test_path + " " + test_name + " " + test_params, EXCEPTION)
+	else:
+		log.out(" No match found for: " + test_path + " " + test_name, EXCEPTION)
+
 def process_tests(args, log, sum_results, log_results, variant):
 	last_test_suite = "lost_and_found"
 
@@ -1164,7 +1176,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 			log.out(regex_data["type"] + " is not handled.........................")
 			print pformat(sum_results["parsed_lines"][index])
 
-
 		index = index + 1
 
 	log_test_index = 0
@@ -1229,9 +1240,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 				if next_match > 0:
 					log_test_index = next_match
 				else:
-					log.out("No match could be found for " + test_path + " " + test_name + " " + test_params, EXCEPTION)
-
-
+					match_error(log, submit_dict["tests"], index, log_test_index, test_path, test_name, test_params)
 			if regex_data["matches"]["mode"] == 'Start':
 				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["DOWNLOAD_START"]
 				submit_dict["tests"][log_test_index]["d_start_time"] = regex_data["date"]
@@ -1264,7 +1273,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 				if next_match > 0:
 					log_test_index = next_match
 				else:
-					log.out("No match could be found for " + test_path + " " + test_name + " " + test_params, EXCEPTION)
+					match_error(log, submit_dict["tests"], index, log_test_index, test_path, test_name, test_params)
 
 			if regex_data["matches"]["mode"] == 'Start':
 				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["EXEC_START"]
@@ -1291,7 +1300,10 @@ def process_tests(args, log, sum_results, log_results, variant):
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] == "buffer_overflow":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
-
+		elif regex_data["type"] == "memory_fault":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+		elif regex_data["type"] == "assertion_failure":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] == "exec_format_error":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 
