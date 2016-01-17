@@ -62,6 +62,43 @@ def dmdty2time(input_string):
 	# convert this format (Fri May 29 22:18:39 2015) to python time
 	return datetime.strptime(input_string, "%a %b %d %H:%M:%S %Y")
 
+def get_test_parts(full_test_path):
+	test_path = "."
+	test_name = None
+	test_params = None
+
+	full_test_path = full_test_path.strip()
+	full_test_path = full_test_path.replace("\\", "/")
+
+	# Find the last occurance of /
+	pos = full_test_path.rfind("/")
+	if pos >= 0:
+
+		test_path = full_test_path[0:pos].strip("/").strip()
+		if len(test_path) > 3:
+			if test_path[-3:] == "bin":
+				test_path = test_path[0:-3].strip("/")
+
+			if len(test_path) == 0:
+				test_path = "."
+		else:
+			test_path = "."
+
+
+		full_test_path = full_test_path[(pos+1):]
+
+	# find the first occurance of " "
+	pos = full_test_path.find(" ")
+
+	if pos > 0:
+		test_params = full_test_path[(pos+1):].strip()
+		full_test_path = full_test_path[0:pos].strip()
+
+	test_name = full_test_path
+	return test_path, test_name, test_params
+
+
+
 def generate_regex_prefix():
 	start = []
 	middle = []
@@ -303,18 +340,6 @@ def clean_line(line):
 			# Remove the # and strip from the left again
 			line = line[1:].lstrip()
 	return line
-
-def strip_ending_bin_from_path(path):
-	path = path.replace("\\", "/")
-
-	if path.endswith("bin"):
-		pos = path.rfind("bin")
-
-		# Remove the bin from the end.
-		path = path[0:pos]
-		if path[-1] == "/":
-			path = path[:-1]
-	return path
 
 def fix_test_point_over_writes(args, log, src_path):
 
@@ -587,7 +612,7 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 
 					matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
 
-					report["test_point_indexes"].append({"sum": len(report["parsed_lines"]), "log":None})
+					report["test_point_indexes"].append(len(report["parsed_lines"]))
 					report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 					no_match = False
 
@@ -756,7 +781,7 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 						no_match = False
 						break
 					elif key == "kermit_send":
-						matches["path"] = strip_ending_bin_from_path(truncate_test_line(args, log, matches["path"]))
+						matches["path"], test_name, test_params = get_test_parts(truncate_test_line(args, log, matches["path"]))
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 						break
@@ -858,8 +883,9 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 								# output before the string.. Where as final results are just the path to the test file
 								result = test_point_line.search(matches["the_rest"])
 								if not result:
-									matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
-									final_flag = True
+									if matches["the_rest"].find("/") >= 0 or matches["the_rest"].find("\\") >= 0:
+										matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
+										final_flag = True
 
 							if 	final_flag:
 								log.out("FINAL RESULT: " +  yoyo_file_data[index], DEBUG, v=101)
@@ -897,38 +923,6 @@ def print_list(log, the_list, pre_fix=""):
 	for data in the_list["parsed_lines"]:
 		if data["type"] == "TestPoint":
 			log.out(str(pre_fix) + str(data["start"]) + ", " + str(data["end"]) + " " + data["matches"]["testpnt"] + data["matches"]["the_rest"])
-
-def link_sum_and_log_results(args, log, sum_results, log_results):
-	last_match_index = -1
-	for test_point_index in sum_results["test_point_indexes"]:
-		sum_index = test_point_index["sum"]
-
-		sum_test_pnt = sum_results["parsed_lines"][sum_index]["matches"]
-
-		if sum_test_pnt["testpnt"] == "NOTE: ":
-			continue
-
-		index = last_match_index+1
-
-		match = False
-		while index < len(log_results["test_point_indexes"]):
-			log_tp_pos = log_results["test_point_indexes"][index]
-
-			log_test_pnt = log_results["parsed_lines"][log_tp_pos]["matches"]
-
-			if sum_test_pnt["testpnt"] == log_test_pnt["testpnt"]:
-				if sum_test_pnt["the_rest"] == log_test_pnt["the_rest"]:
-					test_point_index["log"] = log_tp_pos
-					match = True
-					last_match_index = index
-					break
-
-			index = index + 1
-
-		if match is False:
-			log.out("No match found for: " + sum_test_pnt["testpnt"] + sum_test_pnt["the_rest"] + "\n", ERROR)
-		else:
-			log.out("Match\n", DEBUG, v=100)
 
 def get_subtype(args, log, search_string):
 	# Lets not look for : with in quotes on the command line.
@@ -969,7 +963,6 @@ def is_new_test(args, logs, last_match, current_match):
 			return True
 		else:
 			return False
-
 
 	if last_match == scan_enum["SEND_TEST"]:
 		if current_match == scan_enum["DOWNLOAD_START"]:
@@ -1144,43 +1137,12 @@ def process_tests(args, log, sum_results, log_results, variant):
 			if regex_data["matches"]["testpnt"] != "boot: " and  regex_data["matches"]["testpnt"] != "BOOT: " and regex_data["matches"]["testpnt"] != "NOTE: " and regex_data["matches"]["testpnt"] != "POINT: ":
 				regex_data["matches"]["the_rest"] = regex_data["matches"]["the_rest"].replace("\\", "/")
 
-				sub_type, regex_data["matches"]["the_rest"] = get_subtype(args, log, regex_data["matches"]["the_rest"])
+				sub_type, full_test_path = get_subtype(args, log, regex_data["matches"]["the_rest"])
 
 				if sub_type is None:
 					sub_type = "general"
 
-				test_path = "."
-				test_params = None
-
-				pos = regex_data["matches"]["the_rest"].rfind("/")
-
-				if pos > 0:
-					test_path = regex_data["matches"]["the_rest"][0:pos]
-
-					bin_pos = test_path.find("bin")
-
-					if bin_pos > 0:
-						test_path = test_path[0:bin_pos]
-
-					if test_path[-1] == "/":
-						test_path = test_path[0:-1]
-
-					if test_path[-1] == "\\":
-						test_path = test_path[0:-1]
-
-					pos = pos + 1
-				else:
-					pos = 0
-
-				temp = 	regex_data["matches"]["the_rest"][pos:].strip()
-
-				pos = temp.find(" ")
-
-				if pos > 0:
-					test_params = temp[pos:].strip()
-					test_name = temp[0:pos].strip()
-				else:
-					test_name = temp
+ 				test_path, test_name, test_params = get_test_parts(full_test_path)
 
 				submit_dict["tests"].append(init_test_structure())
 				test_index = test_index + 1
@@ -1214,20 +1176,40 @@ def process_tests(args, log, sum_results, log_results, variant):
 		if regex_data["type"] == "test_suite" or regex_data["type"] == "test_suite_2":
 			last_test_suite = regex_data["matches"]["test_suite"]
 
+		elif regex_data["type"] == "TestPoint":
+			if regex_data["final_flag"]:
+				regex_data["matches"]["the_rest"] = regex_data["matches"]["the_rest"].replace("\\", "/")
+
+				sub_type, full_test_path = get_subtype(args, log, regex_data["matches"]["the_rest"])
+
+				if sub_type is None:
+					sub_type = "general"
+
+ 				test_path, test_name, test_params = get_test_parts(full_test_path)
+
+ 				if submit_dict["tests"][log_test_index]["test_name"] == test_name and submit_dict["tests"][log_test_index]["test_path"] == test_path and submit_dict["tests"][log_test_index]["test_params"] == test_params:
+ 					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["FINAL"]) is False:
+						submit_dict["tests"][log_test_index]["log_index"] = index
+						submit_dict["tests"][log_test_index]["indexes"].append(index)
+			else:
+				submit_dict["tests"][log_test_index]["indexes"].append(index)
+
+		elif regex_data["type"] == "bug_ref":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+		elif regex_data["type"] == "process_seg":
+			# Sometimes we will have multiple process segments in a row that are the same type
+			for offset in range(index+1, max_index):
+				regex_data_2 = log_results["parsed_lines"][offset]
+
+				if regex_data_2["type"] == "process_seg":
+					if regex_data["matches"]["type"] == regex_data_2["matches"]["type"]:
+						regex_data["repeated_end"] = regex_data_2["end"]
+						index = offset
+				else:
+					break
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] == "download":
-			test_path, test_name = os.path.split(regex_data["matches"]["test_path"])
-
-			test_name = test_name.strip()
-
-			test_params = None
-
-			pos = test_name.find(" ")
-
-			if pos > 0:
-				test_params = test_name[pos:].strip()
-				test_name = test_name[0:pos]
-
-			test_path = strip_ending_bin_from_path(test_path)
+			test_path, test_name, test_params = get_test_parts(regex_data["matches"]["test_path"])
 
 			b_new_test = False
 
@@ -1262,19 +1244,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 
 		elif regex_data["type"] == "execute":
-			test_path, test_name = os.path.split(regex_data["matches"]["test_path"])
-
-			test_name = test_name.strip()
-
-			test_params = None
-
-			pos = test_name.find(" ")
-
-			if pos > 0:
-				test_params = test_name[pos:].strip()
-				test_name = test_name[0:pos]
-
-			test_path = strip_ending_bin_from_path(test_path)
+			test_path, test_name, test_params = get_test_parts(regex_data["matches"]["test_path"])
 
 			b_new_test = False
 
@@ -1307,6 +1277,25 @@ def process_tests(args, log, sum_results, log_results, variant):
 					del submit_dict["tests"][log_test_index]["e_start_time"]
 
 
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+
+		elif regex_data["type"] == "reboot":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+		elif regex_data["type"] == "mem_proc":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+		elif regex_data["type"] == "kermit_send":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+		elif regex_data["type"] == "exec":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+		elif regex_data["type"] == "metric":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+		elif regex_data["type"] == "buffer_overflow":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+
+		elif regex_data["type"] == "exec_format_error":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
+
+		elif regex_data["type"] == "malloc_check_fail":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 
 		else:
@@ -1421,9 +1410,6 @@ def process_variants(args, log, fp, recovery_data):
 				data[relative_root]["LOG"] = process_yoyo_log(args, log, root, line_regex)
 				if data[relative_root]["LOG"]:
 					if "SUM" in data[relative_root]:
-						#print_list(log, data[relative_root]["LOG"], "LOG> ")
-						link_sum_and_log_results(args, log, data[relative_root]["SUM"], data[relative_root]["LOG"])
-						#print_list(log, data[relative_root]["SUM"], "SUM> ")
 						process_tests(args, log, data[relative_root]["SUM"], data[relative_root]["LOG"], root)
 				else:
 					log.out("yoyo.log file did not return any results.", ERROR)
