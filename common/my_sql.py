@@ -1,8 +1,10 @@
 from my_log import *
 
+
 class My_SQL(object):
 	import mysql.connector as mysql
 	import traceback
+	import re
 
 	MASK=0x00000001
 
@@ -20,6 +22,9 @@ class My_SQL(object):
 
 	def __init__(self, host=None, usr=None, passwd=None, db_name=None, log=None, commit_on_close=False, mask=None):
 		self.init()
+		self.mysql_datetime_regex = self.re.compile('^(?P<year>\d{4,4})\-(?P<month>\d{2,2})\-(?P<day>\d{2,2})\s(?P<hours>\d{2,2}):(?P<mins>\d{2,2}):(?P<secs>\d{2,2})$')
+
+		self.now_string = "NOW()"
 
 		if log is None:
 			self.log = my_log(verbosity=10)
@@ -46,6 +51,14 @@ class My_SQL(object):
 
 	def __del__(self):
 		self.close_connection()
+
+
+	def set_now_override_string(self, now_string):
+		if self.mysql_datetime_regex.search(now_string):
+			self.now_string = now_string
+			return True
+		else:
+			return False
 
 	def _error_macro(self, msg, verbosity=0, frameinfo=None):
 		self.error = msg
@@ -258,7 +271,7 @@ class My_SQL(object):
 		format = ["%s"] * self.size(fields)
 
 		if created:
-			query = "INSERT INTO " + table + " (" + ",".join(fields) + ", created) VALUES (" + ",".join(format) + ", NOW())"
+			query = "INSERT INTO " + table + " (" + ",".join(fields) + ", created) VALUES (" + ",".join(format) + ", " + self.now_string + ")"
 		else:
 			query = "INSERT INTO " + table + " (" + ",".join(fields) + ") VALUES (" + ",".join(format) + ")"
 
