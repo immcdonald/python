@@ -59,7 +59,8 @@ expected_sub_strings = ["(timeout) where is the STOP message?",
 					    "kernel crash",
 					    "test not found",
 					    "never started",
-					    "kernel crash kdump"]
+					    "kernel crash kdump",
+					    "No such file or directory"]
 
 valid_execution_types = ["daily", "weekend", "sanity"]
 
@@ -142,8 +143,6 @@ def generate_regex_prefix():
 
 
 def add_project(args, log):
-	print "ADDING PROJECT INFO!!!!!!!!!!!!!!!"
-
 	arches = ["aarch64", "arm", "mips", "ppc", "sh", "x86", "x86_64"]
 
 	targets = ["adsom-7222",
@@ -1351,56 +1350,122 @@ def process_tests(args, log, sum_results, log_results, variant):
 		index = index + 1
 
 
+	print pformat(submit_dict)
+
+	#TODO get older datatime from general info....
+
+
+
 	if args["reporter"].connect():
+
 		report = args["reporter"]
+
+		if user_name:
+			report.set_user_name(user_name)
 
 		rc = report.select_project_root(args["project"])
 		if rc <= 0:
 			return -1
 
-		rc = report.select_project_child(args["child"])
-		if rc <= 0:
-			return -1
+		if rc > 0:
+			rc = report.select_project_child(args["child"])
 
-		if args["exec_id"] > 0:
-			if "general_file_info" in args:
-				if "info" in args["general_file_info"]:
-					if "description" in args["general_file_info"]["info"]:
-						exec_type = None
+		if rc > 0:
+			if args["exec_id"] <= 0:
+				if "general_file_info" in args:
+					if "info" in args["general_file_info"]:
+						if "description" in args["general_file_info"]["info"]:
+							exec_type = None
 
-						pos = args["general_file_info"]["info"]["description"].find("daily")
+							pos = args["general_file_info"]["info"]["description"].find("daily")
 
-						if pos != -1:
-							exec_type = "daily"
+							if pos != -1:
+								exec_type = "daily"
 
-						pos = args["general_file_info"]["info"]["description"].find("weekend")
+							pos = args["general_file_info"]["info"]["description"].find("weekend")
 
-						if pos != -1:
-							exec_type = "weekend"
+							if pos != -1:
+								exec_type = "weekend"
 
-						if exec_type:
-							args["exec_id"] = report.register_exec(exec_type)
+							if exec_type:
+								args["exec_id"] = report.register_exec(exec_type)
 
+								if args["exec_id"] <= 0:
+									log.out(str(args["exec_id"]) + " returned as the exec id", ERROR)
+
+							else:
+								log.out("Unable to determine execution type.", ERROR)
+								rc = -1
 						else:
-							log.out("Unable to determine execution type.", EXCEPTION)
+							log.out("description dictionary missing from general info log file.", ERROR)
+							rc = -1
 					else:
-						log.out("description dictionary missing from general info log file.", EXCEPTION)
+						log.out("info dictionary missing from general info log file.", ERROR)
+						rc = -1
 				else:
-					log.out("info dictionary missing from general info log file.", EXCEPTION)
+					args["exec_id"] = report.register_exec("weekend")
 			else:
-				args["exec_id"] = report.register_exec("weekend")
-		else:
-			rc = report.set_exec_id(args["exec_id"])
+				rc = report.set_exec_id(args["exec_id"])
+
+		if rc > 0:
+			log.out("Execute ID: " + str(args["exec_id"]))
+
+			if "general_file_info" in args:
+				info_length = len(args["general_file_info"])
+
+				# Have to do length -1 here becuase there is a none numeric value ('info') in the dictionary.
+				for index in range(0, info_length-1):
+					src_data = args["general_file_info"][str(index)]
+
+					rc = report.add_src(src_data["type"], src_data["url"], src_data["unique_id"], src_data["src_desc"])
+
+					if rc <= 0:
+						log.out("Adding src has failed.", ERROR)
+
+		if rc > 0:
+			smp_pos = submit_dict["variant"].find("smp")
+			uni_pos = submit_dict["variant"].find("uni")
+
+			if smp_pos == -1 and uni_pos == -1:
+				pos = submit_dict["variant"].find(".")
+				if pos > 0:
+					tmp = submit_dict["variant"]
+					submit_dict["variant"] = tmp[0:pos] + ".uni" + tmp[pos:]
+
+			rc = report.add_variant_root(submit_dict["target"], submit_dict["arch"], submit_dict["variant"])
+
+			print pformat(rc)
 
 			if rc > 0:
-				return -1
+				if 'exec_time' in submit_dict:
+					print
+					rc = report.add_variant_exec(submit_dict["target"], submit_dict["arch"], submit_dict["variant"], time=submit_dict["exec_time"])
+				else:
+					rc = report.add_variant_exec(submit_dict["target"], submit_dict["arch"], submit_dict["variant"])
+
+				if rc <= 0:
+					log.out("Adding variant exec failed.", ERROR)
+			else:
+				log.out("Adding variant root failed.", ERROR)
 
 
-		print "Execute ID:", args["exec_id"]
+		if rc > 0:
+			if 'test_suites' in submit_dict:
+				# add test suites
+				for test_suite in submit_dict["test_suites"]:
+					rc = report.add_crash_type(test_suite)
 
+					if rc <= 0:
+						break
 
+		if rc > 0:
+			print args["full_root"]
 
+			# Get list of files in current variatn directory.
+			# Attach files that are not yoyo.log or yoyo.sum
 
+		args["reporter"].commit()
+		args["reporter"].close_connection()
 
 	#print pformat(submit_dict)
 	#print len(submit_dict["tests"])
@@ -1483,6 +1548,8 @@ def process_variants(args, log, fp, recovery_data):
 
 		relative_root = root[input_lenght:]
 
+		args["full_root"] = root
+
 		if len(relative_root) > 0:
 			if relative_root[0] == "/":
 				relative_root = relative_root[1:]
@@ -1514,7 +1581,9 @@ def process_variants(args, log, fp, recovery_data):
 
 				if data[relative_root]["LOG"]:
 					if "SUM" in data[relative_root]:
-						process_tests(args, log, data[relative_root]["SUM"], data[relative_root]["LOG"], root)
+						if process_tests(args, log, data[relative_root]["SUM"], data[relative_root]["LOG"], root) > 0:
+							fp.write(root + " " + "yoyo.sum import completed\n")
+							fp.write(root + " " + "yoyo.log import completed\n")
 				else:
 					log.out("yoyo.log file did not return any results.", ERROR)
 					return False

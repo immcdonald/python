@@ -84,6 +84,7 @@ class My_SQL(object):
 				self.log.out("Commiting on close.", WARNING, v=1, mask=self.mask)
 				self.commit()
 
+			self.log.out("Commiting on close.", WARNING, v=1, mask=self.mask)
 			self.conn.close()
 			self.conn = None
 			return True
@@ -168,7 +169,7 @@ class My_SQL(object):
 				self._error_macro("Failed to connect to sql server: %s" % self.host)
 				return False
 		else:
-			self._error_macro("SQL user password can not be set to None")
+			self._error_macro("Connection already established")
 			return False
 
 

@@ -851,7 +851,7 @@ class TestReporter(My_SQL):
 			return -1
 
 
-	def add_variant_exec(self, target, arch, variant, comment=None):
+	def add_variant_exec(self, target, arch, variant, time=None, comment=None):
 		variant_exec_id = self.get_variant_exec_id(target, arch, variant, display_error=False)
 
 		if variant_exec_id != -2:
@@ -870,6 +870,17 @@ class TestReporter(My_SQL):
 
 				fields.append("fk_variant_root_id")
 				data.append(variant_root_id)
+
+				if time:
+					in_seconds = None
+					try:
+						in_seconds = int(time)
+					except:
+						pass
+
+					if in_seconds:
+						fields.append("exec_time_secs")
+						data.append(in_seconds)
 
 				if comment:
 					if self.size(comment) > 0:
