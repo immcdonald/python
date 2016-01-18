@@ -85,7 +85,7 @@ class TestReporter(My_SQL):
 			rc = self.load_line_marker_types()
 
 		if rc:
-			rc = load_line_marker_sub_types()
+			rc = self.load_line_marker_sub_types()
 
 		return rc
 
@@ -491,7 +491,7 @@ class TestReporter(My_SQL):
 			return -1
 
 
-	def get_line_marker_sub_type(self, sub_type, display_error=True):
+	def get_line_marker_sub_type_id(self, sub_type, display_error=True):
 		if sub_type in self.line_marker_sub_type_dict:
 			return self.line_marker_sub_type_dict[sub_type]
 		else:
@@ -1566,37 +1566,45 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-	def register_exec(self, comment=None):
-		if self.common_check(project_root=True, project_child=True):
-			fields = []
-			data = []
+	def register_exec(self, exec_type, comment=None):
+		exec_type_id = self.get_exec_type_id(exec_type)
 
-			fields.append("fk_project_child_id")
-			data.append(self.project_child_id)
+		if exec_type_id > 0:
+			if self.common_check(project_root=True, project_child=True):
+				fields = []
+				data = []
 
-			fields.append("user_name")
-			data.append(self.reporter_user_name)
+				fields.append("fk_project_child_id")
+				data.append(self.project_child_id)
 
-			if comment:
-				if self.size(comment) > 0:
-					if self.size(comment) < 65535:
-						fields.append("comment")
-						data.append(comment)
+				fields.append("fk_exec_type_id")
+				data.append(exec_type_id)
+
+				fields.append("user_name")
+				data.append(self.reporter_user_name)
+
+				if comment:
+					if self.size(comment) > 0:
+						if self.size(comment) < 65535:
+							fields.append("comment")
+							data.append(comment)
+						else:
+							self._error_macro("The comment is too long")
+							return -1
 					else:
-						self._error_macro("The comment is too long")
+						self._error_macro("The comment is too short")
 						return -1
+
+				db_id = self.insert("exec", fields, data, True)
+
+				if db_id > 0:
+					self.reset_exec_id()
+					self.exec_id = db_id
+					return db_id
 				else:
-					self._error_macro("The comment is too short")
-					return -1
-
-			db_id = self.insert("exec", fields, data, True)
-
-			if db_id > 0:
-				self.reset_exec_id()
-				self.exec_id = db_id
-				return db_id
+					return db_id
 			else:
-				return db_id
+				return -1
 		else:
 			return -1
 
@@ -1911,7 +1919,7 @@ class TestReporter(My_SQL):
 
 												if self.variant_exec_id is not None:
 													if supress_variant_exec_id is False:
-														variant_data = report.get_variant_exec_info(self.variant_exec_id)
+														variant_data = self.get_variant_exec_info(self.variant_exec_id)
 
 														if variant_data:
 															fields.append("fk_variant_exec_id")
@@ -2047,7 +2055,7 @@ class TestReporter(My_SQL):
 					fields.append("fk_line_marker_type_id")
 					data.append(marker_type_id)
 
-					fields.append("marker_sub_type_id")
+					fields.append("fk_line_marker_sub_type_id")
 					data.append(marker_sub_type_id)
 
 					fields.append("start")
@@ -2097,9 +2105,6 @@ class TestReporter(My_SQL):
 
 						fields.append("fk_attachment_id")
 						data.append(attachment_id)
-
-						fields.append("fk_line_marker_type_id")
-						data.append(marker_type_id)
 
 						fields.append("fk_line_marker_type_id")
 						data.append(marker_type_id)
@@ -2363,12 +2368,12 @@ class TestReporter(My_SQL):
 			return crash_exec_id
 
 def test():
-	report = TestReporter(user.sql_host,  user.sql_name, user.sql_password, "project_db")
+	report = TestReporter(user.sql_host,  user.sql_user_name, user.sql_password, "project_db")
 
 	if report.connect():
 		print "Project Root:", report.add_project_root("Mainline")
 		print "Select Project Root:", report.select_project_root("Mainline")
-		print "Project Child:", report.add_project_child("Kernel", "/media/BackUp/regression_data/logs", user.ftp_host, user.ftp_usr_name, user.ftp_password)
+		print "Project Child:", report.add_project_child("Kernel", "/media/BackUp/regression_data/logs", user.ftp_host, user.ftp_user_name, user.ftp_password)
 		print "Select Child:", report.select_project_child("Kernel")
 
 		print "Get Attachment Type:", report.get_attachment_type_id("primary_log")
@@ -2520,7 +2525,7 @@ def test():
 		print  rc
 
 		if rc < 0:
-			print "Register Exec:", report.register_exec()
+			print "Register Exec:", report.register_exec("weekend")
 
 		print "Set Exec:", report.set_exec_id(1)
 		print "Add Src:", report.add_src("svn", "http://svn.shim.sham/man", "12345", "toolchain")
@@ -2570,3 +2575,5 @@ def test():
 		print "Done"
 
 		report.commit()
+
+test()
