@@ -56,7 +56,9 @@ expected_sub_strings = ["(timeout) where is the STOP message?",
 					    "premature exit",
 					    "no pass",
 					    "no point",
-					    "kernel crash"]
+					    "kernel crash",
+					    "test not found",
+					    "never started"]
 
 def dmdty2time(input_string):
 	# convert this format (Fri May 29 22:18:39 2015) to python time
@@ -653,9 +655,7 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 			index = index + 1
 	return report
 
-def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
-
-	test_point_line = re.compile('^\s*(?P<test_name>[a-zA-Z\_\-0-9]+)\.*(?P<extension>[a-zA-Z0-9]{0,5}):(?P<line_number>\d+)')
+def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 
 	last_test_suite = "lost_and_found"
 
@@ -877,20 +877,17 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex):
 							final_flag = False
 
 							# Certain test point keys are not final results
-							if matches["testpnt"][:-2] != "START" and  matches["testpnt"][:-2] != "STOP" and matches["testpnt"][:-2] != "NOTE" and matches["testpnt"][:-2] != "BOOT" and matches["testpnt"][:-2] != "boot":
-
-								# Final result test points usually have the file_name.ext:line number fomrat
-								# output before the string.. Where as final results are just the path to the test file
-								result = test_point_line.search(matches["the_rest"])
-								if not result:
-									if matches["the_rest"].find("/") >= 0 or matches["the_rest"].find("\\") >= 0:
-										matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
-										final_flag = True
-
-							if 	final_flag:
-								log.out("FINAL RESULT: " +  yoyo_file_data[index], DEBUG, v=101)
-							else:
-								log.out("TEST POINT RESULT: " +  yoyo_file_data[index], DEBUG, v=101)
+							if matches["testpnt"][:-2] != "START" and  matches["testpnt"][:-2] != "STOP" and matches["testpnt"][:-2] != "NOTE" and matches["testpnt"][:-2] != "BOOT" and matches["testpnt"][:-2] != "boot" and matches["testpnt"][:-2] != "POINT":
+								# The diffference between a final testpoint and a result test point can be very small.
+								# The easiest way to tell is to look at the sum results and see if we have a match and then it is final test point
+								for sum_regex in sum_data["parsed_lines"]:
+									if sum_regex["type"] == "TestPoint":
+										if sum_regex["matches"]["testpnt"] == matches["testpnt"]:
+											the_rest = truncate_test_line(args, log, matches["the_rest"])
+											if sum_regex["matches"]["the_rest"] == the_rest:
+												matches["the_rest"] = the_rest
+												final_flag = True
+												break
 
 							report["test_point_indexes"].append(len(report["parsed_lines"]))
 							report["parsed_lines"] .append({"type": "TestPoint", "final_flag": final_flag, "test_suite_name":	last_test_suite, "matches": matches, "start":  index, "end": index})
@@ -948,7 +945,7 @@ def get_subtype(args, log, search_string):
 			else:
 				return sub_string, search_string[:max_quote+pos]
 		else:
-			log.out("(" + sub_string + " found after ':', but is not a recognised sub type value)", ERROR)
+			log.out("(" + sub_string + " found after ':', but is not a recognised sub type value) [" + search_string + "]", EXCEPTION)
 			return None, search_string
 	else:
 		return None, search_string
@@ -1039,18 +1036,6 @@ def find_next_match_index(test_list, current_test_index, test_path, test_name, t
 		if test_list[offset]["test_path"] == test_path and test_list[offset]["test_name"] == test_name and test_list[offset]["test_params"] == test_params:
 			return offset
 	return 0
-
-def match_error(log, test_list, index, current,test_path, test_name, test_params):
-	log.out("Current Sum")
-	log.out(pformat(test_list[current]))
-
-	log.out("\n Line Compare")
-	log.out(pformat(test_list[index]))
-
-	if test_params:
-		log.out(" No match found for: " + test_path + " " + test_name + " " + test_params, EXCEPTION)
-	else:
-		log.out(" No match found for: " + test_path + " " + test_name, EXCEPTION)
 
 def process_tests(args, log, sum_results, log_results, variant):
 	last_test_suite = "lost_and_found"
@@ -1172,8 +1157,11 @@ def process_tests(args, log, sum_results, log_results, variant):
 					submit_dict["tests"][test_index]["test_params"] = test_params
 
 				submit_dict["tests"][test_index]["sum_index"] = index
+
+		elif regex_data["type"] ==	"user_time_stamp":
+			pass
 		else:
-			log.out(regex_data["type"] + " is not handled.........................")
+			log.out(regex_data["type"] + " is not handled.........................", DEBUG, v=1)
 			print pformat(sum_results["parsed_lines"][index])
 
 		index = index + 1
@@ -1237,10 +1225,15 @@ def process_tests(args, log, sum_results, log_results, variant):
 			if b_new_test:
 				next_match = find_next_match_index(submit_dict["tests"], log_test_index, test_path, test_name, test_params)
 
-				if next_match > 0:
+				if next_match >= 0:
 					log_test_index = next_match
 				else:
-					match_error(log, submit_dict["tests"], index, log_test_index, test_path, test_name, test_params)
+
+					if test_params:
+						log.out("No match could be found for " + test_path + " " + test_name + " " + test_params, EXCEPTION)
+					else:
+						log.out("No match could be found for " + test_path + " " + test_name, EXCEPTION)
+
 			if regex_data["matches"]["mode"] == 'Start':
 				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["DOWNLOAD_START"]
 				submit_dict["tests"][log_test_index]["d_start_time"] = regex_data["date"]
@@ -1270,10 +1263,15 @@ def process_tests(args, log, sum_results, log_results, variant):
 			if b_new_test:
 				next_match = find_next_match_index(submit_dict["tests"], log_test_index, test_path, test_name, test_params)
 
-				if next_match > 0:
+				if next_match >= 0:
 					log_test_index = next_match
 				else:
-					match_error(log, submit_dict["tests"], index, log_test_index, test_path, test_name, test_params)
+					print pformat(submit_dict["tests"][log_test_index])
+					print pformat(submit_dict["tests"][log_test_index+1])
+					if test_params:
+						log.out("No match could be found for " + test_path + " " + test_name + " " + test_params, EXCEPTION)
+					else:
+						log.out("No match could be found for " + test_path + " " + test_name, EXCEPTION)
 
 			if regex_data["matches"]["mode"] == 'Start':
 				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["EXEC_START"]
@@ -1304,19 +1302,25 @@ def process_tests(args, log, sum_results, log_results, variant):
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] == "assertion_failure":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
+
 		elif regex_data["type"] == "exec_format_error":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 
 		elif regex_data["type"] == "malloc_check_fail":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
-
+		elif regex_data["type"] ==	"user_time_stamp":
+			pass
+		elif regex_data["type"] ==	"host":
+			pass
+		elif regex_data["type"] ==	"stack_smashing":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		else:
-			log.out(regex_data["type"] + " is not handled.........................")
+			log.out(regex_data["type"] + " is not handled.........................", DEBUG, v=1)
 			#print pformat(log_results["parsed_lines"][index])
 
 		index = index + 1
 
-	print pformat(submit_dict)
+	#print pformat(submit_dict)
 	print len(submit_dict["tests"])
 
 def process_variants(args, log, fp, recovery_data):
@@ -1419,7 +1423,9 @@ def process_variants(args, log, fp, recovery_data):
 			log.out(root + " yoyo.log", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.log import completed"
 			if completed_string not in recovery_data:
-				data[relative_root]["LOG"] = process_yoyo_log(args, log, root, line_regex)
+				data[relative_root]["LOG"] = process_yoyo_log(args, log, root, line_regex, data[relative_root]["SUM"])
+
+
 				if data[relative_root]["LOG"]:
 					if "SUM" in data[relative_root]:
 						process_tests(args, log, data[relative_root]["SUM"], data[relative_root]["LOG"], root)
