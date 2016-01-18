@@ -58,7 +58,8 @@ expected_sub_strings = ["(timeout) where is the STOP message?",
 					    "no point",
 					    "kernel crash",
 					    "test not found",
-					    "never started"]
+					    "never started",
+					    "kernel crash kdump"]
 
 def dmdty2time(input_string):
 	# convert this format (Fri May 29 22:18:39 2015) to python time
@@ -756,6 +757,7 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 				result = regex.search(yoyo_file_data[index])
 				if result:
 					matches = result.groupdict()
+
 					if key == "download":
 						matches["test_path"] = truncate_test_line(args, log, matches["test_path"])
 						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
@@ -775,9 +777,8 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 						break
-					elif key == "user_time_stamp":
-						report["time_stamp_indexes"].append(len(report["parsed_lines"]))
-						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
+					elif key == "process_seg":
+						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 						break
 					elif key == "kermit_send":
@@ -786,7 +787,6 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 						no_match = False
 						break
 					elif key == "test_suite":
-
 						test_suite_name = matches["test_suite"]
 						test_suite_name = test_suite_name.replace("\\", "/")
 						pos = test_suite_name.rfind("/")
@@ -819,6 +819,11 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 						break
 					elif key == "metric":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
+						no_match = False
+						break
+					elif key == "user_time_stamp":
+						report["time_stamp_indexes"].append(len(report["parsed_lines"]))
+						report["parsed_lines"].append({"type": key, "matches": matches, "date": dmdty2time(matches["date"]),"start":  index, "end": index })
 						no_match = False
 						break
 					elif key == "host":
@@ -895,9 +900,6 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 					elif key == "bug_ref":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
-					elif key == "process_seg":
-						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
-						no_match = False
 					elif key == "assertion_failure":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
@@ -938,6 +940,12 @@ def get_subtype(args, log, search_string):
 
 	if pos > 0:
 		sub_string = temp[pos+1:].strip()
+
+		# looking now for kernel crash kdump.00000
+		pos = sub_string.rfind(".")
+
+		if pos > 0:
+			sub_string = sub_string[0:pos]
 
 		if sub_string in expected_sub_strings:
 			if sub_string == "(timeout) where is the STOP message?":
@@ -1282,10 +1290,30 @@ def process_tests(args, log, sum_results, log_results, variant):
 				if "e_start_time" in submit_dict["tests"][log_test_index]:
 					submit_dict["tests"][log_test_index]["exec_time"] = (regex_data["date"] - submit_dict["tests"][log_test_index]["e_start_time"]).total_seconds()
 					del submit_dict["tests"][log_test_index]["e_start_time"]
-
-
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 
+		elif regex_data["type"] == "kernel_start":
+			# see if we can determine the end line for this kernel start..
+			for offset in range(index + 1, max_index):
+				local_regex = log_results["parsed_lines"][offset]
+				if local_regex["type"] != "shutdown" and local_regex["type"] != "TestPoint"  and local_regex["type"] != "kdump":
+					regex_data["end"] = local_regex["start"] -1
+					break
+		elif regex_data["type"] == "kdump":
+			# see if we can determine the end line for this kernel start..
+			for offset in range(index + 1, max_index):
+				local_regex = log_results["parsed_lines"][offset]
+				if local_regex["type"] != "shutdown" and local_regex["type"] != "TestPoint":
+					regex_data["end"] = local_regex["start"] -1
+					break
+
+		elif regex_data["type"] == "shutdown":
+			# see if we can determine the end line for this kernel start..
+			for offset in range(index + 1, max_index):
+				local_regex = log_results["parsed_lines"][offset]
+				if local_regex["type"] != "TestPoint":
+					regex_data["end"] = local_regex["start"] -1
+					break
 		elif regex_data["type"] == "reboot":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] == "mem_proc":
@@ -1302,10 +1330,10 @@ def process_tests(args, log, sum_results, log_results, variant):
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] == "assertion_failure":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
-
+		elif regex_data["type"] == "send-class":
+			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] == "exec_format_error":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
-
 		elif regex_data["type"] == "malloc_check_fail":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] ==	"user_time_stamp":
@@ -1320,7 +1348,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 		index = index + 1
 
-	#print pformat(submit_dict)
+	print pformat(submit_dict)
 	print len(submit_dict["tests"])
 
 def process_variants(args, log, fp, recovery_data):

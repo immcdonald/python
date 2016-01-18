@@ -1478,6 +1478,64 @@ class TestReporter(My_SQL):
 			else:
 				return -1
 
+	def get_exec_type_id(self, exec_type, display_error=True):
+		if self.common_check():
+			fields = []
+			data = []
+
+			if self.size(exec_type) > 0:
+				if self.size(exec_type) < 46:
+					fields.append("name")
+					data.append(exec_type)
+				else:
+					self._error_macro("The Execution type is too long")
+					return -1
+			else:
+				self._error_macro("The Execution type is too short")
+				return -1
+
+			exec_type_rows = self.select("exec_type_id", "exec_type", fields, data)
+
+			if self.size(exec_type_rows) > 0:
+				return exec_type_rows[0][0]
+			else:
+				if display_error:
+					self._error_macro("Execution type not found.")
+				return -2
+		else:
+			return -1
+
+	def add_exec_type(self, exec_type, comment):
+		exec_type_id = self.get_exec_type_id(exec_type, False)
+
+		if exec_type_id == 2:
+			fields = []
+			data = []
+
+			fields.append("name")
+			data.append(exec_type)
+
+			if comment:
+				if self.size(comment) > 0:
+					if self.size(comment) < 65535:
+						fields.append("comment")
+						data.append(comment)
+					else:
+						self._error_macro("The comment is too long")
+						return -1
+				else:
+					self._error_macro("The comment is too short")
+					return -1
+
+			db_id = self.insert("exec_type", fields, data, True)
+
+			if db_id > 0:
+				return db_id
+			else:
+				return db_id
+		else:
+			return exec_type_id
+
 	def set_exec_id(self, exec_id):
 		if self.common_check(project_root=True, project_child=True):
 			if isinstance( exec_id, int ):
