@@ -2576,4 +2576,3 @@ def test():
 
 		report.commit()
 
-test()

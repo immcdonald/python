@@ -142,6 +142,8 @@ def generate_regex_prefix():
 
 
 def add_project(args, log):
+	print "ADDING PROJECT INFO!!!!!!!!!!!!!!!"
+
 	arches = ["aarch64", "arm", "mips", "ppc", "sh", "x86", "x86_64"]
 
 	targets = ["adsom-7222",
@@ -253,20 +255,17 @@ def add_project(args, log):
 
 	if args["reporter"].check_ftp_path(args["ftp_host"], args["ftp_user_name"], args["ftp_password"], args["set_storage_path"]):
 
-		project_name = raw_input("Project Name: ")
-
-		if len(project_name) > 0:
-			project_child_name = raw_input("Child name: ")
-			if len(project_child_name) > 0:
+		if len(args["project"]) > 0:
+			if len(args["child"]) > 0:
 				if args["reporter"].connect():
 
 					args["reporter"].fix_auto_inc()
 
 
-					if args["reporter"].add_project_root(project_name) < 0:
+					if args["reporter"].add_project_root(args["project"]) < 0:
 						return -1
 
-					if args["reporter"].add_project_child(project_child_name,
+					if args["reporter"].add_project_child(args["child"],
 														  args["set_storage_path"],
 														  args["ftp_host"],
 														  args["ftp_user_name"],
@@ -320,8 +319,8 @@ def add_project(args, log):
 					if args["reporter"].add_attachment_type("image_build", "plain/text", "BPS build results") < 0:
 						return -1
 
-
 					args["reporter"].commit()
+					args["reporter"].close_connection()
 
 					return True
 				else:
@@ -1351,8 +1350,60 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 		index = index + 1
 
-	print pformat(submit_dict)
-	print len(submit_dict["tests"])
+
+	if args["reporter"].connect():
+		report = args["reporter"]
+
+		rc = report.select_project_root(args["project"])
+		if rc <= 0:
+			return -1
+
+		rc = report.select_project_child(args["child"])
+		if rc <= 0:
+			return -1
+
+		if args["exec_id"] > 0:
+			if "general_file_info" in args:
+				if "info" in args["general_file_info"]:
+					if "description" in args["general_file_info"]["info"]:
+						exec_type = None
+
+						pos = args["general_file_info"]["info"]["description"].find("daily")
+
+						if pos != -1:
+							exec_type = "daily"
+
+						pos = args["general_file_info"]["info"]["description"].find("weekend")
+
+						if pos != -1:
+							exec_type = "weekend"
+
+						if exec_type:
+							args["exec_id"] = report.register_exec(exec_type)
+
+						else:
+							log.out("Unable to determine execution type.", EXCEPTION)
+					else:
+						log.out("description dictionary missing from general info log file.", EXCEPTION)
+				else:
+					log.out("info dictionary missing from general info log file.", EXCEPTION)
+			else:
+				args["exec_id"] = report.register_exec("weekend")
+		else:
+			rc = report.set_exec_id(args["exec_id"])
+
+			if rc > 0:
+				return -1
+
+
+		print "Execute ID:", args["exec_id"]
+
+
+
+
+
+	#print pformat(submit_dict)
+	#print len(submit_dict["tests"])
 
 def process_variants(args, log, fp, recovery_data):
 
@@ -1438,8 +1489,7 @@ def process_variants(args, log, fp, recovery_data):
 
 		if "!!!_general.json" in files:
 			with open(os.path.join(root, "!!!_general.json"), "r") as fp_general:
-				args["general"] = json.loads(fp_general.read())
-				print pformat(args["general"])
+				args["general_file_info"] = json.loads(fp_general.read())
 
 		if "yoyo.sum" in files:
 			log.out(root + " yoyo.sum", DEBUG, v=3)
@@ -1606,13 +1656,14 @@ def main(argv=None):
 	log.out(str_buffer + ("=" * (len(str_buffer)-1)) + "\n" + pformat(args), DEBUG, v=1)
 
 	if args["reporter"]:
+
 		if args["add_project"]:
 			if add_project(args, log):
-				return 0
+				pass
 			else:
 				return -1
 
-		elif args["input"]:
+		if args["input"]:
 
 			if args["exec_type"] is None:
 				log.out("exec_type command line parameter is required when input is specified.")
@@ -1620,6 +1671,14 @@ def main(argv=None):
 
 			if args["exec_type"] not in valid_execution_types:
 				log.out(args["exec_type"] + " is not a valid execution type. Please choose: " + ",".join(valid_execution_types))
+				return -1
+
+			if args["project"] is None:
+				log.out("project command line parameter is required when input is specified.")
+				return -1
+
+			if args["child"] is None:
+				log.out("project command line parameter is required when input is specified.")
 				return -1
 
 			if parse(args, log):
