@@ -1,5 +1,5 @@
 import argparse
-import sys, os, shutil
+import sys, os, shutil, json
 from datetime import datetime
 import re
 import user
@@ -60,6 +60,9 @@ expected_sub_strings = ["(timeout) where is the STOP message?",
 					    "test not found",
 					    "never started",
 					    "kernel crash kdump"]
+
+valid_execution_types = ["daily", "weekend", "sanity"]
+
 
 def dmdty2time(input_string):
 	# convert this format (Fri May 29 22:18:39 2015) to python time
@@ -1433,6 +1436,11 @@ def process_variants(args, log, fp, recovery_data):
 			if relative_root[0] == "/":
 				relative_root = relative_root[1:]
 
+		if "!!!_general.json" in files:
+			with open(os.path.join(root, "!!!_general.json"), "r") as fp_general:
+				args["general"] = json.loads(fp_general.read())
+				print pformat(args["general"])
+
 		if "yoyo.sum" in files:
 			log.out(root + " yoyo.sum", DEBUG, v=3)
 			completed_string = root + " " + "yoyo.sum import completed"
@@ -1517,7 +1525,6 @@ def main(argv=None):
 						action='store_true',
 						help='')
 
-
 	parser.add_argument('-project', '--project',
 						help='')
 
@@ -1538,6 +1545,9 @@ def main(argv=None):
 	parser.add_argument('-exec_id', '--exec_id',
 						help='',
 						default=-1)
+
+	parser.add_argument('-exec_type', '--exec_type',
+						help='')
 
 	parser.add_argument('-mysql_host', '--mysql_host',
 						default=user.sql_host,
@@ -1585,8 +1595,6 @@ def main(argv=None):
 
 	args = vars(parser.parse_args())
 
-
-
 	args["reporter"] = TestReporter(args["mysql_host"],  args["mysql_user_name"], args["mysql_password"], args["schema"])
 
 	log = args["reporter"].get_log()
@@ -1605,6 +1613,15 @@ def main(argv=None):
 				return -1
 
 		elif args["input"]:
+
+			if args["exec_type"] is None:
+				log.out("exec_type command line parameter is required when input is specified.")
+				return -1
+
+			if args["exec_type"] not in valid_execution_types:
+				log.out(args["exec_type"] + " is not a valid execution type. Please choose: " + ",".join(valid_execution_types))
+				return -1
+
 			if parse(args, log):
 				return 0
 			else:

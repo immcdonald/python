@@ -475,7 +475,7 @@ class TestReporter(My_SQL):
 			line_marker_type_rows = self.select(fields, "line_marker_sub_type", None, None)
 
 			if self.size(line_marker_type_rows) > 0:
-				self.line_marker_dict = {}
+				self.line_marker_sub_type_dict= {}
 				for row in line_marker_type_rows:
 					self.line_marker_sub_type_dict[row[1]] = row[0]
 			return True
@@ -489,7 +489,6 @@ class TestReporter(My_SQL):
 			if display_error:
 				self._error_macro(str(line_marker_type) + " line marker type not found. Try calling add first.")
 			return -1
-
 
 	def get_line_marker_sub_type_id(self, sub_type, display_error=True):
 		if sub_type in self.line_marker_sub_type_dict:
@@ -505,6 +504,7 @@ class TestReporter(My_SQL):
 				if self.size(line_marker_type) < 46:
 
 					line_marker_id = self.get_line_marker_type_id(line_marker_type, display_error=False)
+
 
 					if line_marker_id > 0:
 						return line_marker_id
