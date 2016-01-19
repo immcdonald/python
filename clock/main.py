@@ -4,8 +4,8 @@ import pygame
 import math
 from datetime import datetime, timedelta
 from pygame.locals import *
-import pytz
-import Pysolar
+import pytz			# sudo pip install pytz
+import pysolar 			# sudo pip install pysolar
 
 
 parentPath = os.path.abspath("../common")
