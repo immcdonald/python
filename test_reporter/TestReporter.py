@@ -2197,7 +2197,7 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id=None, comment=None):
+	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, exec_time=None, extra_time=None, unique_test_rev_id=None, comment=None):
 		test_exec_id = self.get_test_exec_id(result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id, display_error=None)
 
 		if test_exec_id == -2:
@@ -2223,6 +2223,32 @@ class TestReporter(My_SQL):
 
 						fields.append("fk_result_tag_id")
 						data.append(result_id)
+
+						if exec_time:
+							try:
+								exec_time = int(exec_time)
+							except:
+								exec_time = None
+
+							if exec_time:
+								fields.append("exec_time_secs")
+								data.append(exec_time)
+							else:
+								self._error_macro("Exec time must be a whole number.")
+								return -1
+
+						if extra_time:
+							try:
+								extra_time = int(extra_time)
+							except:
+								extra_time = None
+
+							if extra_time:
+								fields.append("extra_time_secs")
+								data.append(extra_time)
+							else:
+								self._error_macro("Extra time must be a whole number.")
+								return -1
 
 						if comment:
 							if self.size(comment) > 0:

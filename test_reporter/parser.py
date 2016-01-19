@@ -260,6 +260,7 @@ def add_project(args, log):
 
 					args["reporter"].fix_auto_inc()
 
+					args["reporter"].set_now_override_string("2015-05-26 15:01:15")
 
 					if args["reporter"].add_project_root(args["project"]) < 0:
 						return -1
@@ -316,6 +317,9 @@ def add_project(args, log):
 						return -1
 
 					if args["reporter"].add_attachment_type("image_build", "plain/text", "BPS build results") < 0:
+						return -1
+
+					if args["reporter"].add_attachment_type("pid", "plain/text", "yoyo pid file") < 0:
 						return -1
 
 					args["reporter"].commit()
@@ -584,12 +588,12 @@ def truncate_test_line(args, log, test_line):
 		pos = test_line.rfind("/"+word+"/")
 		if pos >= 0:
 			test_line = test_line[(pos+len("/"+word+"/")):]
-	if test_line[0] == "/":
-		test_line = test_line[1:]
+		if len(test_line) > 0:
+			if test_line[0] == "/":
+				test_line = test_line[1:]
 	return test_line.strip()
 
 def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
-
 	report = {}
 
 	# Use a list and index so that items stay in the order they are found
@@ -961,7 +965,7 @@ def get_subtype(args, log, search_string):
 
 
 def init_test_structure():
-	return {"test_path": None, "test_name": None, "test_params": None, "test_suite": None, "indexes":[], "last_log_match" : scan_enum["NOTHING"]}
+	return {"test_path": None, "test_name": None, "test_params": None, "test_suite": None, "indexes":[], "last_log_match": scan_enum["NOTHING"], "revision": None}
 
 def is_new_test(args, logs, last_match, current_match):
 	if last_match == scan_enum["DOWNLOAD_START"]:
@@ -1047,6 +1051,10 @@ def find_next_match_index(test_list, current_test_index, test_path, test_name, t
 	return 0
 
 def process_tests(args, log, sum_results, log_results, variant):
+
+	kdump_regex = re.compile("^kdump.(?P<index>\d{5,10})\.elf.gz$")
+	kdump_index_regex = re.compile("^kdump.(?P<index>\d{5,10})$")
+
 	last_test_suite = "lost_and_found"
 
 	submit_dict = {}
@@ -1352,20 +1360,25 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 	print pformat(submit_dict)
 
-	#TODO get older datatime from general info....
-
-
-
 	if args["reporter"].connect():
 
 		report = args["reporter"]
 
-		if user_name:
-			report.set_user_name(user_name)
+		rc = 1
 
-		rc = report.select_project_root(args["project"])
-		if rc <= 0:
-			return -1
+		if "general_file_info" in args:
+			if "info" in  args["general_file_info"]:
+				if "date" in args["general_file_info"]["info"]:
+					if report.set_now_override_string(args["general_file_info"]["info"]["date"]):
+						rc = 1
+					else:
+						rc = -1
+		if rc > 0:
+			if user_name:
+				rc = report.set_user_name(user_name)
+
+		if rc > 0:
+			rc = report.select_project_root(args["project"])
 
 		if rc > 0:
 			rc = report.select_project_child(args["child"])
@@ -1434,11 +1447,8 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 			rc = report.add_variant_root(submit_dict["target"], submit_dict["arch"], submit_dict["variant"])
 
-			print pformat(rc)
-
 			if rc > 0:
 				if 'exec_time' in submit_dict:
-					print
 					rc = report.add_variant_exec(submit_dict["target"], submit_dict["arch"], submit_dict["variant"], time=submit_dict["exec_time"])
 				else:
 					rc = report.add_variant_exec(submit_dict["target"], submit_dict["arch"], submit_dict["variant"])
@@ -1453,20 +1463,93 @@ def process_tests(args, log, sum_results, log_results, variant):
 			if 'test_suites' in submit_dict:
 				# add test suites
 				for test_suite in submit_dict["test_suites"]:
-					rc = report.add_crash_type(test_suite)
+					rc = report.add_test_suite(test_suite)
 
 					if rc <= 0:
 						break
 
-		if rc > 0:
-			print args["full_root"]
+		yoyo_log_id = -1
+		yoyo_sum_id = -1
 
-			# Get list of files in current variatn directory.
-			# Attach files that are not yoyo.log or yoyo.sum
+		if rc > 0:
+			for item in os.listdir(args["full_root"]):
+				file_name = os.path.join(args["full_root"], item)
+				if os.path.isfile(file_name):
+					if item == "yoyo.log":
+						rc  = report.add_attachment("yoyo_log", file_name)
+						if rc > 0:
+							yoyo_log_id = rc
+					elif item == "yoyo.sum":
+						rc = report.add_attachment("yoyo_sum",  file_name)
+						if rc > 0:
+							yoyo_sum_id = rc
+					elif item == "image.txt":
+						rc = report.add_attachment("image_build",  file_name)
+					elif item == "site.exp":
+						rc = report.add_attachment("site", file_name)
+					elif item == "yoyo.pid":
+						report.add_attachment("pid", file_name)
+					elif item.find(".build") != -1:
+						rc = report.add_attachment("build", file_name)
+					elif item.find(".sym") != -1:
+						rc = report.add_attachment("symbol", file_name)
+					elif item.find("kdump.elf.gz") != -1:
+						rc = report.add_attachment("kdump_raw", file_name)
+					else:
+						result = kdump_regex.search(item)
+						if result:
+							rc = report.add_attachment("kdump",  file_name)
+						else:
+							result = kdump_index_regex.search(item)
+							if result:
+								rc = report.add_attachment("kdump_index", file_name)
+				if rc < 0:
+					print "Attachments Failed!!!!!!!!!!!!!!!!!"
+					break
+				else:
+					log.out(str(rc), DEBUG, v=1)
+
+		if rc > 0:
+			for test in submit_dict["tests"]:
+
+				log.out(pformat(test))
+
+				sum_index = test["sum_index"]
+
+				log.out(pformat(sum_index))
+
+				sum_line = sum_results["parsed_lines"][sum_index]
+
+				log.out(pformat(sum_line))
+
+				test_result = sum_line["matches"]["testpnt"][:-2]
+
+				log.out(pformat(test_result))
+
+				exec_time = None
+
+				if exec_time in test:
+					exec_time = test["exec_time"]
+
+				download_time = None
+
+				if "download_time" in test:
+					download_time = test["download_time"]
+
+				rc = report.add_test_revision(test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"])
+
+				if rc > 0:
+					rc = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=exec_time, extra_time=download_time)
+
+				print rc
+
+				if rc <= 0:
+					break
 
 		args["reporter"].commit()
 		args["reporter"].close_connection()
 
+		print rc, "=" * 80
 	#print pformat(submit_dict)
 	#print len(submit_dict["tests"])
 

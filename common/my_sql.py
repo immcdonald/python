@@ -52,10 +52,13 @@ class My_SQL(object):
 	def __del__(self):
 		self.close_connection()
 
-
 	def set_now_override_string(self, now_string):
+		now_string = now_string.strip("\"")
+		now_string = now_string.strip("'")
+		now_string = now_string.strip(" ")
+
 		if self.mysql_datetime_regex.search(now_string):
-			self.now_string = now_string
+			self.now_string = '"' + now_string + '"'
 			return True
 		else:
 			return False
@@ -177,7 +180,7 @@ class My_SQL(object):
 		return self.error
 
 	def query(self, query, data=None, supress=False):
-		#print query, data
+		# print query, data
 		if self.conn is not None:
 			if self.cursor is not None:
 				if data is not None:
