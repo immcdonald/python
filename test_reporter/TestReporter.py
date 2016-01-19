@@ -904,7 +904,7 @@ class TestReporter(My_SQL):
 				return variant_root_id
 
 	def get_bug_root_id(self, recorder_type, unique_ref, display_error=True):
-		valid_record_type = ["pr", "jira"]
+		valid_record_type = ["pr", "ji"]
 
 		if recorder_type not in valid_record_type:
 			self._error_macro(str(recorder_type) + " is not a valid recorder type.")
@@ -2050,10 +2050,12 @@ class TestReporter(My_SQL):
 
 	def get_line_marker_id(self, attachment_id, marker_type, start_line, end_line=None, sub_type="general", display_error=True):
 		if self.common_check():
-			marker_type_id = self.get_line_marker_type_id(marker_type,  display_error=display_error)
+			marker_type_id = self.get_line_marker_type_id(marker_type,  True)
 
 			if marker_type_id > 0:
+
 				marker_sub_type_id = self.get_line_marker_sub_type_id(sub_type)
+				print "Marker subtype id", marker_sub_type_id
 
 				if marker_sub_type_id > 0:
 
@@ -2100,14 +2102,24 @@ class TestReporter(My_SQL):
 			return -1
 
 	def add_line_marker(self, attachment_id, marker_type, start_line, end_line=None, test_exec_id=None, sub_type="general", comment=None):
+
+		print attachment_id, marker_type, start_line, sub_type
+
 		if self.common_check():
 			line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
+
+			print "check to see if it already exists", line_marker_id
 
 			if line_marker_id == -2:
 				marker_type_id = self.get_line_marker_type_id(marker_type)
 
+				print "Get line marker id type", marker_type_id
+
 				if marker_type_id > 0:
 					marker_sub_type_id = self.get_line_marker_sub_type_id(sub_type)
+
+					print "Get sub line marker type", marker_sub_type_id
+
 
 					if marker_sub_type_id > 0:
 
@@ -2122,6 +2134,10 @@ class TestReporter(My_SQL):
 
 						fields.append("fk_line_marker_sub_type_id")
 						data.append(marker_sub_type_id)
+
+						fields.append("start")
+						data.append(start_line)
+
 
 						if end_line:
 							fields.append("end")
@@ -2145,6 +2161,8 @@ class TestReporter(My_SQL):
 
 						db_id = self.insert("line_marker", fields, data, True)
 
+
+						print " This is returned from the insert", db_id
 						return db_id
 					else:
 						return marker_sub_type_id
@@ -2197,8 +2215,8 @@ class TestReporter(My_SQL):
 		else:
 			return -1
 
-	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, exec_time=None, extra_time=None, unique_test_rev_id=None, comment=None):
-		test_exec_id = self.get_test_exec_id(result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id, display_error=None)
+	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, exec_time=None, extra_time=None, revision_string=None, comment=None):
+		test_exec_id = self.get_test_exec_id(result, test_suite_name, test_exec_path, test_name, test_params, revision_string, display_error=None)
 
 		if test_exec_id == -2:
 			result_id = self.get_tag_result_id(result)
@@ -2206,7 +2224,7 @@ class TestReporter(My_SQL):
 				suite_name_id = self.get_test_suite_id(test_suite_name)
 
 				if suite_name_id > 0:
-					test_revision_id = self.get_test_revision_id(test_exec_path, test_name, test_params, unique_test_rev_id)
+					test_revision_id = self.get_test_revision_id(test_exec_path, test_name, test_params, revision_string)
 
 					if test_revision_id:
 						fields = []
@@ -2505,17 +2523,17 @@ def test():
 		print "Add Target:", report.add_target("tolapai-6109")
 		print "Add Target:", report.add_target("adsom-7222")
 
-		print "Add Bug Root:", report.add_bug_root("jira", "123456789", "This is a stupid summary")
-		print "Add Bug Root:", report.add_bug_root("jira", "123456789", "This is a stupid summary")
+		print "Add Bug Root:", report.add_bug_root("ji", "123456789", "This is a stupid summary")
+		print "Add Bug Root:", report.add_bug_root("ji", "123456789", "This is a stupid summary")
 
-		print "Get Project Bug:", report.get_project_bug_id("jira", "123456789")
-		print "Get Project Bug:", report.get_project_bug_id("jira", "123456790")
-		print "Add Project Bug:", report.add_project_bug("jira", "123456789")
-		print "Add Project Bug:", report.add_project_bug("jira", "123456789")
-		print "Add Project Bug:", report.add_project_bug("jira", "123456790")
-		print "Add Project Bug:", report.add_project_bug("jira", "123456790")
-		print "Get Project Bug:", report.get_project_bug_id("jira", "123456789")
-		print "Get Project Bug:", report.get_project_bug_id("jira", "123456790")
+		print "Get Project Bug:", report.get_project_bug_id("ji", "123456789")
+		print "Get Project Bug:", report.get_project_bug_id("ji", "123456790")
+		print "Add Project Bug:", report.add_project_bug("ji", "123456789")
+		print "Add Project Bug:", report.add_project_bug("ji", "123456789")
+		print "Add Project Bug:", report.add_project_bug("ji", "123456790")
+		print "Add Project Bug:", report.add_project_bug("ji", "123456790")
+		print "Get Project Bug:", report.get_project_bug_id("ji", "123456789")
+		print "Get Project Bug:", report.get_project_bug_id("ji", "123456790")
 
 
 		print "Add Crash Type: ", report.add_crash_type("sigsegv")

@@ -210,7 +210,8 @@ def add_project(args, log):
 		"fail",
 		"xfail",
 		"unresolved",
-		"untested"
+		"untested",
+		"error"
 	]
 
 
@@ -222,16 +223,16 @@ def add_project(args, log):
 		"kdump"
 	]
 
-
 	line_markers = [
 		"host_system",
 		"log_start_time_stamp",
 		"boot",
-		"boot_failure"
-		"reboot"
+		"boot_failure",
+		"reboot",
 		"download",
 		"test_suite",
 		"test",
+		"sum",
 		"exec"
 		"stop",
 		"error",
@@ -249,8 +250,6 @@ def add_project(args, log):
 		"log_end_time_stamp",
 		"assertion_failure"
 	]
-
-
 
 	if args["reporter"].check_ftp_path(args["ftp_host"], args["ftp_user_name"], args["ftp_password"], args["set_storage_path"]):
 
@@ -659,6 +658,28 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 				log.out(sum_file_data[index], DEBUG, v=8)
 
 			index = index + 1
+
+		if len(report["test_point_indexes"]) == 0:
+			result = line_regex["test_suite"].search("../../lost_and_found.exp ...")
+			if result:
+				matches = result.groupdict()
+				test_suite_name = matches["test_suite"]
+				test_suite_name = test_suite_name.replace("\\", "/")
+				pos = test_suite_name.rfind("/")
+
+				if pos > 0:
+					test_suite_name = test_suite_name[(pos+1):]
+
+				report["parsed_lines"].append({"type": "test_suite", "test_suite_name": test_suite_name, "matches": matches, "start":  -1, "end": -1})
+
+		result = line_regex["general_tst_pnt"].search("FAIL: /home/tests/non/test/bad_boot")
+		if result:
+			matches = result.groupdict()
+			if matches["testpnt"][:-2] in test_point_prefix:
+				matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
+				report["test_point_indexes"].append(len(report["parsed_lines"]))
+				report["parsed_lines"].append({"type": "TestPoint", "matches": matches, "start":  -1, "end": -1})
+
 	return report
 
 def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
@@ -921,6 +942,31 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 			else:
 				log.out(yoyo_file_data[index], DEBUG, v=8)
 			index = index + 1
+
+
+		# if no test where found that this was likely a bad boot..
+		# so create a full test so it gets tracked.
+		if len(report["test_point_indexes"]) == 0:
+			result = line_regex["test_suite"].search("../../lost_and_found.exp ...")
+			if result:
+				matches = result.groupdict()
+				test_suite_name = matches["test_suite"]
+				test_suite_name = test_suite_name.replace("\\", "/")
+				pos = test_suite_name.rfind("/")
+
+				if pos > 0:
+					test_suite_name = test_suite_name[(pos+1):]
+
+				report["parsed_lines"].append({"type": "test_suite", "test_suite_name": test_suite_name, "matches": matches, "start":  -1, "end": -1})
+
+		result = line_regex["general_tst_pnt"].search("FAIL: /home/tests/non/test/bad_boot")
+		if result:
+			matches = result.groupdict()
+			if matches["testpnt"][:-2] in test_point_prefix:
+				matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
+				report["test_point_indexes"].append(len(report["parsed_lines"]))
+				report["parsed_lines"].append({"type": "TestPoint", "final_flag": True, "matches": matches, "start":  -1, "end": -1})
+
 	return report
 
 def print_list(log, the_list, pre_fix=""):
@@ -1166,6 +1212,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 				if submit_dict["tests"][test_index]["test_name"] is None:
 					submit_dict["tests"][test_index]["test_name"] = test_name
+					submit_dict["tests"][test_index]["sub_type"] = sub_type
 
 				if submit_dict["tests"][test_index]["test_path"] is None:
 					submit_dict["tests"][test_index]["test_path"] = test_path
@@ -1182,6 +1229,11 @@ def process_tests(args, log, sum_results, log_results, variant):
 			print pformat(sum_results["parsed_lines"][index])
 
 		index = index + 1
+
+
+	# ========================================================
+	# ========================================================
+
 
 	log_test_index = 0
 	index = 0
@@ -1506,29 +1558,17 @@ def process_tests(args, log, sum_results, log_results, variant):
 				if rc < 0:
 					print "Attachments Failed!!!!!!!!!!!!!!!!!"
 					break
-				else:
-					log.out(str(rc), DEBUG, v=1)
 
 		if rc > 0:
 			for test in submit_dict["tests"]:
-
-				log.out(pformat(test))
-
+				test_exec_id = -1
 				sum_index = test["sum_index"]
-
-				log.out(pformat(sum_index))
-
 				sum_line = sum_results["parsed_lines"][sum_index]
-
-				log.out(pformat(sum_line))
-
 				test_result = sum_line["matches"]["testpnt"][:-2]
-
-				log.out(pformat(test_result))
 
 				exec_time = None
 
-				if exec_time in test:
+				if "exec_time" in test:
 					exec_time = test["exec_time"]
 
 				download_time = None
@@ -1539,19 +1579,71 @@ def process_tests(args, log, sum_results, log_results, variant):
 				rc = report.add_test_revision(test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"])
 
 				if rc > 0:
-					rc = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=exec_time, extra_time=download_time)
+					test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=exec_time, extra_time=download_time)
 
-				print rc
+				if test_exec_id > 0:
+					if yoyo_sum_id > 0:
+						# Add line marker for sum...
+						rc = report.add_line_marker(yoyo_sum_id, "sum", sum_line["start"], end_line=sum_line["end"], test_exec_id=test_exec_id, sub_type=test["sub_type"])
+				else:
+					rc = test_exec_id
+
+				if rc > 0:
+					if yoyo_log_id > 0:
+						# add other sum log info, line markers, crash deeds and things..
+						for log_index in test["indexes"]:
+							log_regex = log_results["parsed_lines"][log_index];
+							print log_regex["type"]
+
+							if log_regex["type"] == "download":
+								rc = report.add_line_marker(yoyo_log_id, "download", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "reboot":
+								rc = report.add_line_marker(yoyo_log_id, "reboot", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "bug_ref":
+
+								log_regex["matches"]["bug_type"] = log_regex["matches"]["bug_type"].lower()
+								if log_regex["matches"]["bug_type"] == "jira":
+									log_regex["matches"]["bug_type"] = "ji"
+
+								# Make sure the bug root is added
+								rc = report.add_bug_root(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
+								print "bug root", rc
+
+								# Make sure the project bug is added
+								if rc > 0:
+									rc = report.add_project_bug(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
+									print "bug project", rc
+
+
+								# Add the line that bug occured one
+								if rc > 0:
+									rc = report.add_line_marker(yoyo_log_id, "bug_ref", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+									print "line marker", rc
+
+								# track that the bug occured during this execution.
+								if rc > 0:
+									rc = report.add_bug_exec(rc, log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
+									print "bug exec", rc
+
+
+							else:
+								log.out(str(log_regex["type"]) + " was not handled", ERROR)
+
+							if rc < 0:
+								print "Exciting add log details loop!!!!"
+								break
 
 				if rc <= 0:
+					print "Exciting adding test details loop";
 					break
 
 		args["reporter"].commit()
 		args["reporter"].close_connection()
 
 		print rc, "=" * 80
-	#print pformat(submit_dict)
-	#print len(submit_dict["tests"])
+
 
 def process_variants(args, log, fp, recovery_data):
 
@@ -1605,7 +1697,7 @@ def process_variants(args, log, fp, recovery_data):
 
 	line_regex["metric"] = re.compile('^(?P<desc>.+)\sVALUE:\s(?P<value>.+)\sUNITS:\s(?P<units>.+)$')
 
-	line_regex["bug_ref"] = re.compile('(?P<bug_type>JI|PR|ji|pr)[_|:]*\s*(?P<value>\d{5,10})')
+	line_regex["bug_ref"] = re.compile('(?P<bug_type>jira|JIRA|JI|PR|ji|pr)[_|:]*\s*(?P<value>\d{5,10})')
 
 	line_regex["kernel_start"] = re.compile('(?P<kernel_dump_start>KERNEL\s+DUMP\s+START)')
 
