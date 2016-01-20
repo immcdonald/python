@@ -15,6 +15,16 @@ from my_sql import *
 from my_ftp import *
 
 class TestReporter(My_SQL):
+	ERROR_GENERAL_ERROR=-1
+	ERROR_NOT_FOUND_ERROR=-2
+	ERROR_TOO_SHORT_ERROR=-3
+	ERROR_TOO_LONG_ERROR=-3
+	ERROR_LINE_MARKER_ID_NOT_FOUND_ERROR=-4
+	ERROR_LINE_MARKER_SUB_ID_NOT_FOUND_ERROR=-5
+	ERROR_PROJECT_NOT_FOUND_ERROR = -6
+	ERROR_NOT_READY_ERROR=-7
+	ERROR_TEST_ID_NOT_FOUND=-8
+
 
 	def reset_variant_exec_id(self):
 		self.variant_exec_id = None
@@ -152,14 +162,14 @@ class TestReporter(My_SQL):
 
 			if entry_enum not in valid_entry_enum:
 				self._error_macro(entry_enum + " is not a valid entry enum.")
-				return -1
+				return TestReporter.ERROR_GENERAL_ERROR
 			else:
 				fields.append("entry_enum")
 				data.append(entry_enum)
 
 			if type_enum not in valid_type_enum:
 				self._error_macro(type_enum + " is not a valid type enum.")
-				return -1
+				return TestReporter.ERROR_GENERAL_ERROR
 			else:
 				fields.append("type_enum")
 				data.append(type_enum)
@@ -177,7 +187,7 @@ class TestReporter(My_SQL):
 
 			return history_id
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_project_root(self,  project_root, comment=None):
 		project_root = project_root.replace(" ", "_")
@@ -185,7 +195,7 @@ class TestReporter(My_SQL):
 		if self.common_check():
 			if self.size(project_root) > 45:
 				self._error_macro("Project name is too long.")
-				return -1
+				return TestReporter.ERROR_TOO_LONG_ERROR
 
 			if self.size(project_root) > 0:
 				fields = []
@@ -213,14 +223,14 @@ class TestReporter(My_SQL):
 						self.project_root_name = project_root
 						self.history(str(project_root) + " added as project root.", "project_root_added", "auto", use_child_id=False)
 					else:
-						return -1
+						return TestReporter.ERROR_GENERAL_ERROR
 
 				return self.project_root_id
 			else:
 				self._error_macro("Project name is too short.")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def select_project_root(self, project_root):
 		project_root = project_root.replace(" ", "_")
@@ -240,10 +250,10 @@ class TestReporter(My_SQL):
 				return self.project_root_id
 			else:
 				self._error_macro(project_root + " not found in the database")
-				return -1
+				return TestReporter.ERROR_PROJECT_NOT_FOUND_ERROR
 
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 
 	def set_user_name(self, user_name):
@@ -267,7 +277,7 @@ class TestReporter(My_SQL):
 
 			if self.size(project_child) > 60:
 				self._error_macro("Project child is too long.")
-				return -1
+				return TestReporter.ERROR_TOO_LONG_ERROR
 
 			if self.size(project_child) > 0:
 				fields = []
@@ -293,10 +303,10 @@ class TestReporter(My_SQL):
 							data.append(attach_path)
 						else:
 							self._error_macro("The attachment path is too long")
-							return -1
+							return TestReporter.ERROR_TOO_LONG_ERROR
 					else:
 						self._error_macro("The attachment path is too short")
-						return -1
+						return TestReporter.ERROR_TOO_SHORT_ERROR
 
 					if self.size(ftp_host) > 0:
 						if self.size(ftp_host) < 65535:
@@ -304,10 +314,10 @@ class TestReporter(My_SQL):
 							data.append(ftp_host)
 						else:
 							self._error_macro("The ftp host path is too long")
-							return -1
+							return TestReporter.ERROR_TOO_LONG_ERROR
 					else:
 						self._error_macro("The ftp host path is too short")
-						return -1
+						return TestReporter.ERROR_TOO_SHORT_ERROR
 
 					if self.size(ftp_user_name) > 0:
 						if self.size(ftp_user_name) < 65535:
@@ -315,10 +325,10 @@ class TestReporter(My_SQL):
 							data.append(ftp_user_name)
 						else:
 							self._error_macro("The ftp user name is too long")
-							return -1
+							return TestReporter.ERROR_TOO_LONG_ERROR
 					else:
 						self._error_macro("The ftp user name is too short")
-						return -1
+						return TestReporter.ERROR_TOO_SHORT_ERROR
 
 
 					if self.size(ftp_password) > 0:
@@ -327,10 +337,10 @@ class TestReporter(My_SQL):
 							data.append(ftp_password)
 						else:
 							self._error_macro("The ftp password is too long")
-							return -1
+							return TestReporter.ERROR_TOO_LONG_ERROR
 					else:
 						self._error_macro("The ftp password is too short")
-						return -1
+						return TestReporter.ERROR_TOO_SHORT_ERROR
 
 					if comment:
 						if self.size(comment) > 0:
@@ -339,10 +349,10 @@ class TestReporter(My_SQL):
 								data.append(comment)
 							else:
 								self._error_macro("The comment is too long")
-								return -1
+								return TestReporter.ERROR_TOO_LONG_ERROR
 						else:
 							self._error_macro("The comment is too short")
-							return -1
+							return TestReporter.ERROR_TOO_SHORT_ERROR
 
 					db_id = self.insert("project_child", fields, data, True)
 
@@ -358,14 +368,14 @@ class TestReporter(My_SQL):
 
 						self.history(str(project_child) + " added as project child.", "project_child_added", "auto")
 					else:
-						return -1
+						return TestReporter.ERROR_GENERAL_ERROR
 
 				return self.project_root_id
 			else:
 				self._error_macro("Project_child is too short.")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def select_project_child(self, project_child):
 		project_child = project_child.replace(" ", "_")
@@ -395,9 +405,9 @@ class TestReporter(My_SQL):
 				return self.project_child_id
 			else:
 				self._error_macro(str(project_child) + " not found in the database.")
-				return -1
+				return TestReporter.ERROR_GENERAL_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def _load_child_project_properties(self):
 		#Reload things for the selected project:
@@ -423,21 +433,21 @@ class TestReporter(My_SQL):
 					else:
 						if display_error:
 							self._error_macro("Arch not found.")
-						return -2
+						return TestReporter.ERROR_NOT_FOUND_ERROR
 				else:
 					self._error_macro("Arch is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Arch is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_arch(self, arch):
 		arch_id = self.get_arch_id(arch, display_error=False)
 
-		if arch_id == -2:
+		if arch_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			arch = arch.replace(" ", "_")
 			fields = []
 			data = []
@@ -488,7 +498,7 @@ class TestReporter(My_SQL):
 		else:
 			if display_error:
 				self._error_macro(str(line_marker_type) + " line marker type not found. Try calling add first.")
-			return -1
+			return TestReporter.ERROR_LINE_MARKER_ID_NOT_FOUND_ERROR
 
 	def get_line_marker_sub_type_id(self, sub_type, display_error=True):
 		if sub_type in self.line_marker_sub_type_dict:
@@ -496,7 +506,7 @@ class TestReporter(My_SQL):
 		else:
 			if display_error:
 				self._error_macro(str(sub_type) + " line marker sub type not found. Try calling add first.")
-			return -1
+			return TestReporter.ERROR_LINE_MARKER_SUB_ID_NOT_FOUND_ERROR
 
 	def add_line_marker_type(self, line_marker_type, comment=None):
 		if self.common_check():
@@ -504,7 +514,6 @@ class TestReporter(My_SQL):
 				if self.size(line_marker_type) < 46:
 
 					line_marker_id = self.get_line_marker_type_id(line_marker_type, display_error=False)
-
 
 					if line_marker_id > 0:
 						return line_marker_id
@@ -522,25 +531,25 @@ class TestReporter(My_SQL):
 									data.append(comment)
 								else:
 									self._error_macro("The comment is too long")
-									return -1
+									return TestReporter.ERROR_TOO_LONG_ERROR
 							else:
 								self._error_macro("The comment is too short")
-								return -1
+								return TestReporter.ERROR_TOO_SHORT_ERROR
 
 						db_id = self.insert("line_marker_type", fields, data, True)
 
 						if db_id > 0:
 							self.line_marker_dict[line_marker_type] = db_id
 							return db_id
-					return -1
+					return TestReporter.ERROR_GENERAL_ERROR
 				else:
 					self._error_macro("Line marker type is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Line marker type is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_line_marker_sub_type(self, sub_type, comment=None):
 		if self.common_check():
@@ -549,7 +558,7 @@ class TestReporter(My_SQL):
 
 					line_marker_sub_type_id = self.get_line_marker_sub_type_id(sub_type, display_error=False)
 
-					if line_marker_id > 0:
+					if line_marker_sub_type_id > 0:
 						return line_marker_sub_type_id
 					else:
 						fields = []
@@ -565,25 +574,25 @@ class TestReporter(My_SQL):
 									data.append(comment)
 								else:
 									self._error_macro("The comment is too long")
-									return -1
+									return TestReporter.ERROR_TOO_LONG_ERROR
 							else:
 								self._error_macro("The comment is too short")
-								return -1
+								return TestReporter.ERROR_TOO_SHORT_ERROR
 
 						db_id = self.insert("line_marker_sub_type", fields, data, True)
 
 						if db_id > 0:
 							self.line_marker_sub_type_dict[sub_type] = db_id
 							return db_id
-					return -1
+					return TestReporter.ERROR_GENERAL_ERROR
 				else:
 					self._error_macro("Line marker sub type is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Line marker sub type is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def load_result_tags(self):
 		if self.common_check(project_root=True, project_child=True):
@@ -614,7 +623,7 @@ class TestReporter(My_SQL):
 		else:
 			if display_error:
 				self._error_macro(str(tag) + " result tag not found. Try calling add first.")
-			return -1
+			return TestReporter.ERROR_TEST_ID_NOT_FOUND
 
 	def add_result_tag(self, tag, comment=None):
 		if self.common_check(project_root=True, project_child=True):
@@ -640,10 +649,10 @@ class TestReporter(My_SQL):
 									data.append(comment)
 								else:
 									self._error_macro("The comment is too long")
-									return -1
+									return TestReporter.ERROR_TOO_LONG_ERROR
 							else:
 								self._error_macro("The comment is too short")
-								return -1
+								return TestReporter.ERROR_TOO_SHORT_ERROR
 
 						fields.append("fk_project_child_id")
 						data.append(self.project_child_id)
@@ -657,15 +666,15 @@ class TestReporter(My_SQL):
 							self.history("Result tag: " + str(tag) + " added.", "result_tag", "auto")
 							self.result_tag_dict[tag] = {"id":db_id, "offset": self.size(self.result_tag_dict)}
 							return db_id
-					return -1
+					return TestReporter.ERROR_GENERAL_ERROR
 				else:
 					self._error_macro("Line marker type is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Line marker type is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def get_target_id(self, name, display_error=True):
 		if self.common_check(project_root=True, project_child=True):
@@ -687,20 +696,20 @@ class TestReporter(My_SQL):
 					else:
 						if display_error:
 							self._error_macro("target not found.")
-						return -2
+						return TestReporter.ERROR_NOT_FOUND_ERROR
 				else:
 					self._error_macro("Target name is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Target name is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_target(self, name, comment=None):
 		target_id = self.get_target_id(name, display_error=False)
 
-		if target_id == -2:
+		if target_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			fields = []
 			data = []
 			fields.append("name")
@@ -712,10 +721,10 @@ class TestReporter(My_SQL):
 						data.append(comment)
 					else:
 						self._error_macro("The comment is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The comment is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			fields.append("fk_project_child_id")
 			data.append(self.project_child_id)
@@ -752,10 +761,10 @@ class TestReporter(My_SQL):
 						data.append(variant)
 					else:
 						self._error_macro("The variant is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The variant is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 				variant_rows = self.select("variant_root_id", "variant_root", fields, data)
 
@@ -764,7 +773,7 @@ class TestReporter(My_SQL):
 				else:
 					if display_error:
 						self._error_macro("Variant root not found.")
-					return -2
+					return TestReporter.ERROR_NOT_FOUND_ERROR
 			else:
 				return arch_id
 		else:
@@ -774,7 +783,7 @@ class TestReporter(My_SQL):
 	def add_variant_root(self, target, arch, variant, comment=None):
 		variant_root_id = self.get_variant_root_id(target, arch, variant, display_error=False)
 
-		if variant_root_id == -2:
+		if variant_root_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			target_id = self.get_target_id(target)
 			arch_id = self.get_arch_id(arch)
 
@@ -844,17 +853,17 @@ class TestReporter(My_SQL):
 				else:
 					if display_error:
 						self._error_macro("Variant root not found.")
-					return -2
+					return TestReporter.ERROR_NOT_FOUND_ERROR
 			else:
 				return variant_root_id
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 
 	def add_variant_exec(self, target, arch, variant, time=None, comment=None):
 		variant_exec_id = self.get_variant_exec_id(target, arch, variant, display_error=False)
 
-		if variant_exec_id != -2:
+		if variant_exec_id != TestReporter.ERROR_NOT_FOUND_ERROR:
 			self.reset_variant_exec_id()
 			self.variant_exec_id = variant_exec_id
 			return variant_exec_id
@@ -889,10 +898,10 @@ class TestReporter(My_SQL):
 							data.append(comment)
 						else:
 							self._error_macro("The comment is too long")
-							return -1
+							return TestReporter.ERROR_TOO_LONG_ERROR
 					else:
 						self._error_macro("The comment is too short")
-						return -1
+						return TestReporter.ERROR_TOO_SHORT_ERROR
 
 				db_id = self.insert("variant_exec", fields, data, True)
 
@@ -908,7 +917,7 @@ class TestReporter(My_SQL):
 
 		if recorder_type not in valid_record_type:
 			self._error_macro(str(recorder_type) + " is not a valid recorder type.")
-			return -1
+			return TestReporter.ERROR_GENERAL_ERROR
 
 		if self.common_check():
 			if self.size(unique_ref) > 0:
@@ -929,20 +938,20 @@ class TestReporter(My_SQL):
 					else:
 						if display_error:
 							self._error_macro("project root not found.")
-						return -2
+						return TestReporter.ERROR_NOT_FOUND_ERROR
 				else:
 					self._error_macro("Unique reference is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Unique refernce is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_bug_root(self, recorder_type, unique_ref, summary=None, comment=None):
 		bug_root_id = self.get_bug_root_id(recorder_type, unique_ref, display_error=False)
 
-		if bug_root_id == -2:
+		if bug_root_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			fields = []
 			data = []
 
@@ -959,10 +968,10 @@ class TestReporter(My_SQL):
 						data.append(comment)
 					else:
 						self._error_macro("The comment is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The comment is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			if summary:
 				if self.size(summary) > 0:
@@ -971,17 +980,17 @@ class TestReporter(My_SQL):
 						data.append(summary)
 					else:
 						self._error_macro("The summary is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The summary is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			db_id = self.insert("bug_root", fields, data, True)
 
 			if db_id > 0:
 				return db_id
 			else:
-				return -1
+				return TestReporter.ERROR_GENERAL_ERROR
 		else:
 			return bug_root_id
 
@@ -1005,12 +1014,12 @@ class TestReporter(My_SQL):
 				else:
 					if display_error:
 						self._error_macro("project bug not found.")
-					return -2
+					return TestReporter.ERROR_NOT_FOUND_ERROR
 
 			else:
 				return bug_root_id
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_project_bug(self, recorder_type, unique_ref, summary=None, comment=None):
 		if self.common_check(project_root=True, project_child=True):
@@ -1047,22 +1056,22 @@ class TestReporter(My_SQL):
 								data.append(comment)
 							else:
 								self._error_macro("The comment is too long")
-								return -1
+								return TestReporter.ERROR_TOO_LONG_ERROR
 						else:
 							self._error_macro("The comment is too short")
-							return -1
+							return TestReporter.ERROR_TOO_SHORT_ERROR
 
 					db_id = self.insert("project_bug", fields, data, True)
 
 					if db_id > 0:
 						return db_id
 					else:
-						return -1
+						return TestReporter.ERROR_GENERAL_ERROR
 
 			else:
 				return bug_root_id
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def get_bug_exec_id(self, line_marker_id, recorder_type, unique_ref, display_error=True):
 		if self.common_check():
@@ -1085,16 +1094,16 @@ class TestReporter(My_SQL):
 				else:
 					if display_error:
 						self._error_macro("Crash exec not found.")
-					return -2
+					return TestReporter.ERROR_NOT_FOUND_ERROR
 			else:
 				return project_bug_id
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_bug_exec(self, line_marker_id, recorder_type, unique_ref, comment=None):
 		bug_exec_id = self.get_bug_exec_id(line_marker_id, recorder_type, unique_ref, display_error=False)
 
-		if bug_exec_id == -2:
+		if bug_exec_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			project_bug_id = self.get_project_bug_id(recorder_type, unique_ref)
 
 			if project_bug_id:
@@ -1143,7 +1152,7 @@ class TestReporter(My_SQL):
 		else:
 			if display_error:
 				self._error_macro(str(name) + " crash type not found. Try calling add first.")
-			return -1
+			return TestReporter.ERROR_GENERAL_ERROR
 
 	def add_crash_type(self, name, comment=None):
 		if self.common_check(project_root=True, project_child=True):
@@ -1168,10 +1177,10 @@ class TestReporter(My_SQL):
 									data.append(comment)
 								else:
 									self._error_macro("The comment is too long")
-									return -1
+									return TestReporter.ERROR_TOO_LONG_ERROR
 							else:
 								self._error_macro("The comment is too short")
-								return -1
+								return TestReporter.ERROR_TOO_SHORT_ERROR
 
 						fields.append("fk_project_child_id")
 						data.append(self.project_child_id)
@@ -1182,15 +1191,15 @@ class TestReporter(My_SQL):
 							self.history("name tag: " + str(name) + " added.", "crash_type", "auto")
 							self.crash_type_dict[name] = db_id
 							return db_id
-					return -1
+					return TestReporter.ERROR_GENERAL_ERROR
 				else:
 					self._error_macro("Line marker type is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Line marker type is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def get_test_suite_id(self, suite_name, display_error=True):
 		if self.common_check(project_root=True, project_child=True):
@@ -1212,20 +1221,20 @@ class TestReporter(My_SQL):
 					else:
 						if display_error:
 							self._error_macro("test suite name not found.")
-						return -2
+						return TestReporter.ERROR_NOT_FOUND_ERROR
 				else:
 					self._error_macro("Suite name is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Suite name is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_test_suite(self, suite_name, comment=None):
 		test_suite_id = self.get_test_suite_id(suite_name, display_error=False)
 
-		if test_suite_id == -2:
+		if test_suite_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			fields = []
 			data = []
 
@@ -1242,10 +1251,10 @@ class TestReporter(My_SQL):
 						data.append(comment)
 					else:
 						self._error_macro("The comment is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The comment is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			db_id = self.insert("test_suite_root", fields, data, True)
 			if db_id > 0:
@@ -1274,20 +1283,20 @@ class TestReporter(My_SQL):
 					else:
 						if display_error:
 							self._error_macro("exec abort name not found.")
-						return -2
+						return TestReporter.ERROR_NOT_FOUND_ERROR
 				else:
 					self._error_macro("Abort name is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Abort name is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_GENERAL_ERROR
 
 	def add_exec_abort(self, abort_name, comment=None):
 		exec_abort_id = self.get_exec_abort_id(abort_name, display_error=False)
 
-		if exec_abort_id == -2:
+		if exec_abort_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			fields = []
 			data = []
 
@@ -1304,10 +1313,10 @@ class TestReporter(My_SQL):
 						data.append(comment)
 					else:
 						self._error_macro("The comment is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The comment is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			db_id = self.insert("exec_abort", fields, data, True)
 			if db_id > 0:
@@ -1341,10 +1350,10 @@ class TestReporter(My_SQL):
 										data.append(params)
 									else:
 										self._error_macro("Parameter stringis too long")
-										return -1
+										return TestReporter.ERROR_TOO_LONG_ERROR
 								else:
 									self._error_macro("Parameter string is too short")
-									return -1
+									return TestReporter.ERROR_TOO_SHORT_ERROR
 
 							test_root_rows = self.select("test_root_id", "test_root", fields, data)
 
@@ -1353,27 +1362,27 @@ class TestReporter(My_SQL):
 							else:
 								if display_error:
 									self._error_macro("Test root not found.")
-								return -2
+								return TestReporter.ERROR_NOT_FOUND_ERROR
 
 						else:
 							self._error_macro("Test name is too long")
-							return -1
+							return TestReporter.ERROR_TOO_LONG_ERROR
 					else:
 						self._error_macro("Test name is too short")
-						return -1
+						return TestReporter.ERROR_TOO_SHORT_ERROR
 				else:
 					self._error_macro("exec path is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("exec_path is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_test_root(self, exec_path, name, params=None, comment=None):
 		test_root_id = self.get_test_root_id(exec_path, name, params, display_error=False)
 
-		if test_root_id == -2:
+		if test_root_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			fields = []
 			data = []
 
@@ -1396,10 +1405,10 @@ class TestReporter(My_SQL):
 						data.append(comment)
 					else:
 						self._error_macro("The comment is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The comment is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			db_id = self.insert("test_root", fields, data, True)
 			if db_id > 0:
@@ -1424,7 +1433,7 @@ class TestReporter(My_SQL):
 					data.append(revision_string)
 				else:
 					self._error_macro("The revision string is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				revision_string = "base"
 				fields.append("unique_ref")
@@ -1437,7 +1446,7 @@ class TestReporter(My_SQL):
 			else:
 				if display_error:
 					self._error_macro("Test revision was not found!")
-				return -2
+				return TestReporter.ERROR_NOT_FOUND_ERROR
 		else:
 			return test_root_id
 
@@ -1461,7 +1470,7 @@ class TestReporter(My_SQL):
 						data.append(revision_string)
 					else:
 						self._error_macro("The revision string is too long")
-						return -1
+						return TestReporter.ERROR_GENERAL_ERROR
 				else:
 					revision_string = "base"
 					fields.append("unique_ref")
@@ -1474,10 +1483,10 @@ class TestReporter(My_SQL):
 							data.append(comment)
 						else:
 							self._error_macro("The comment is too long")
-							return -1
+							return TestReporter.ERROR_TOO_LONG_ERROR
 					else:
 						self._error_macro("The comment is too short")
-						return -1
+						return TestReporter.ERROR_TOO_SHORT_ERROR
 
 				db_id = self.insert("test_revision", fields, data, True)
 
@@ -1487,7 +1496,7 @@ class TestReporter(My_SQL):
 				else:
 					return db_id
 			else:
-				return -1
+				return TestReporter.ERROR_NOT_READY_ERROR
 
 	def get_exec_type_id(self, exec_type, display_error=True):
 		if self.common_check():
@@ -1500,10 +1509,10 @@ class TestReporter(My_SQL):
 					data.append(exec_type)
 				else:
 					self._error_macro("The Execution type is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("The Execution type is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			exec_type_rows = self.select("exec_type_id", "exec_type", fields, data)
 
@@ -1512,9 +1521,9 @@ class TestReporter(My_SQL):
 			else:
 				if display_error:
 					self._error_macro("Execution type not found.")
-				return -2
+				return TestReporter.ERROR_NOT_FOUND_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_exec_type(self, exec_type, comment):
 		exec_type_id = self.get_exec_type_id(exec_type, False)
@@ -1533,10 +1542,10 @@ class TestReporter(My_SQL):
 						data.append(comment)
 					else:
 						self._error_macro("The comment is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The comment is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			db_id = self.insert("exec_type", fields, data, True)
 
@@ -1567,15 +1576,15 @@ class TestReporter(My_SQL):
 						return exec_rows[0][0]
 					else:
 						self._error_macro("The provided exec id ("+ str(exec_id) +") was not found for the current specified child project.")
-						return -2
+						return TestReporter.ERROR_NOT_FOUND_ERROR
 				else:
 					self._error_macro("Exec id must be an positive integer greater then 0.")
-					return -1
+					return TestReporter.ERROR_GENERAL_ERROR
 			else:
 				self._error_macro("Exec id must be an integer.")
-				return -1
+				return TestReporter.ERROR_GENERAL_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def register_exec(self, exec_type, comment=None):
 		exec_type_id = self.get_exec_type_id(exec_type)
@@ -1601,10 +1610,10 @@ class TestReporter(My_SQL):
 							data.append(comment)
 						else:
 							self._error_macro("The comment is too long")
-							return -1
+							return TestReporter.ERROR_TOO_LONG_ERROR
 					else:
 						self._error_macro("The comment is too short")
-						return -1
+						return TestReporter.ERROR_TOO_SHORT_ERROR
 
 				db_id = self.insert("exec", fields, data, True)
 
@@ -1615,9 +1624,9 @@ class TestReporter(My_SQL):
 				else:
 					return db_id
 			else:
-				return -1
+				return TestReporter.ERROR_GENERAL_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_src(self, src_type, url_path, unique_id, src_description, comment=None):
 		if self.common_check(project_root=True, project_child=True, exec_id=True):
@@ -1636,10 +1645,10 @@ class TestReporter(My_SQL):
 						data.append(url_path)
 					else:
 						self._error_macro("URL/Path is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("URL/Path is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 				if self.size(unique_id) > 0:
 					if self.size(unique_id) < 65535:
@@ -1647,10 +1656,10 @@ class TestReporter(My_SQL):
 						data.append(unique_id)
 					else:
 						self._error_macro("Unique identifier is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("Unique identifier is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 				# Check to see if this entry already exists.
 				src_rows = self.select("src_id", "src", fields, data)
@@ -1664,18 +1673,18 @@ class TestReporter(My_SQL):
 							data.append(src_description)
 						else:
 							self._error_macro("Unique identifier is too long")
-							return -1
+							return TestReporter.ERROR_TOO_LONG_ERROR
 					else:
 						self._error_macro("Unique identifier is too short")
-						return -1
+						return TestReporter.ERROR_TOO_SHORT_ERROR
 
 					db_id = self.insert("src", fields, data, True)
 					return db_id
 			else:
 				self._error_macro(str(src_type) + " is not a valid source type.")
-				return -1
+				return TestReporter.ERROR_GENERAL_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def get_test_exec_id(self, result, test_suite_name, test_exec_path, test_name, test_params, test_unique_ref=None, display_error=True):
 		if self.common_check(project_root=True, project_child=True, exec_id=True, variant_exec_id=True):
@@ -1711,7 +1720,7 @@ class TestReporter(My_SQL):
 						else:
 							if display_error:
 								self._error_macro("Test execution not found.")
-							return -2
+							return TestReporter.ERROR_NOT_FOUND_ERROR
 					else:
 						return test_rev_id
 				else:
@@ -1719,7 +1728,7 @@ class TestReporter(My_SQL):
 			else:
 				return result_tag_id
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def get_attachment_type_id(self, name, display_error=True):
 		if self.common_check():
@@ -1732,10 +1741,10 @@ class TestReporter(My_SQL):
 					data.append(name)
 				else:
 					self._error_macro("Attachment type is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Attachment type is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			attachment_type_rows = self.select("attachment_type_id", "attachment_type", fields, data)
 
@@ -1744,14 +1753,14 @@ class TestReporter(My_SQL):
 			else:
 				if display_error:
 					self._error_macro("Attachment type (" + str(name) + ") not found.")
-				return -2
+				return TestReporter.ERROR_NOT_FOUND_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_attachment_type(self, name, mime_type, comment=None):
 		attachment_type_id = self.get_attachment_type_id(name, display_error=False)
 
-		if attachment_type_id == -2:
+		if attachment_type_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			fields = []
 			data = []
 
@@ -1761,10 +1770,10 @@ class TestReporter(My_SQL):
 					data.append(name)
 				else:
 					self._error_macro("Attachment type is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("Attachment type is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			if self.size(mime_type) > 0:
 				if self.size(mime_type) < 65535:
@@ -1772,10 +1781,10 @@ class TestReporter(My_SQL):
 					data.append(mime_type)
 				else:
 					self._error_macro("The mime type is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("The mime type is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			if comment:
 				if self.size(comment) > 0:
@@ -1784,10 +1793,10 @@ class TestReporter(My_SQL):
 						data.append(comment)
 					else:
 						self._error_macro("The comment is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The comment is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			db_id = self.insert("attachment_type", fields, data, True)
 
@@ -1828,9 +1837,9 @@ class TestReporter(My_SQL):
 			else:
 				if display_error:
 					self._error_macro("Attachment (" + str(full_attachment_src_path) + ") not found.")
-				return -2
+				return TestReporter.ERROR_NOT_FOUND_ERROR
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_attachment(self, attachment_type, full_attachment_src_path, comment=None, supress_exec_id=False, supress_variant_exec_id=False):
 
@@ -1840,7 +1849,7 @@ class TestReporter(My_SQL):
 			if self.common_check(project_root=True, project_child=True):
 				attachment_id = self.get_attachment_id(full_attachment_src_path, display_error=False)
 
-				if attachment_id == -2:
+				if attachment_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 					attachment_type_id = self.get_attachment_type_id(attachment_type)
 
 					if attachment_type_id > 0:
@@ -1877,10 +1886,10 @@ class TestReporter(My_SQL):
 									data.append(comment)
 								else:
 									self._error_macro("The comment is too long")
-									return -1
+									return TestReporter.ERROR_TOO_LONG_ERROR
 							else:
 								self._error_macro("The comment is too short")
-								return -1
+								return TestReporter.ERROR_TOO_SHORT_ERROR
 
 
 						ftp = my_ftp(self.ftp_host,
@@ -1893,7 +1902,7 @@ class TestReporter(My_SQL):
 
 								# Attempt to change to the attachment directory.
 								if ftp.chdir(str(self.attachment_path)) is not True:
-									return -1
+									return TestReporter.ERROR_GENERAL_ERROR
 
 								dest_path = self.attachment_path
 								relative_dest_path = "";
@@ -1902,9 +1911,9 @@ class TestReporter(My_SQL):
 									if ftp.chdir(self.project_root_name):
 										relative_dest_path = os.path.join(relative_dest_path, self.project_root_name)
 									else:
-										return -1
+										return TestReporter.ERROR_GENERAL_ERROR
 								else:
-									return -1
+									return TestReporter.ERROR_GENERAL_ERROR
 
 								# Now create or move into the project child direcotry
 								if ftp.mkdir(self.project_child_name, True):
@@ -1912,9 +1921,9 @@ class TestReporter(My_SQL):
 										relative_dest_path = os.path.join(relative_dest_path, self.project_child_name)
 
 									else:
-										return -1
+										return TestReporter.ERROR_GENERAL_ERROR
 								else:
-									return -1
+									return TestReporter.ERROR_GENERAL_ERROR
 
 								if self.exec_id is not None:
 									if supress_exec_id is False:
@@ -1940,31 +1949,31 @@ class TestReporter(My_SQL):
 																if ftp.chdir(variant_data["target"]):
 																	relative_dest_path = os.path.join(relative_dest_path, variant_data["target"])
 																else:
-																	return -1
+																	return TestReporter.ERROR_GENERAL_ERROR
 															else:
-																return -1
+																return TestReporter.ERROR_GENERAL_ERROR
 
 															if ftp.mkdir(variant_data["arch"], True):
 																if ftp.chdir(variant_data["arch"]):
 																	relative_dest_path = os.path.join(relative_dest_path, variant_data["arch"])
 																else:
-																	return -1
+																	return TestReporter.ERROR_GENERAL_ERROR
 															else:
-																return -1
+																return TestReporter.ERROR_GENERAL_ERROR
 
 															if ftp.mkdir(variant_data["variant"], True):
 																if ftp.chdir(variant_data["variant"]):
 																	relative_dest_path = os.path.join(relative_dest_path, variant_data["variant"])
 																else:
-																	return -1
+																	return TestReporter.ERROR_GENERAL_ERROR
 															else:
-																return -1
+																return TestReporter.ERROR_GENERAL_ERROR
 														else:
-															return -1
+															return TestReporter.ERROR_GENERAL_ERROR
 											else:
-												return -1
+												return TestReporter.ERROR_GENERAL_ERROR
 										else:
-											return -1
+											return TestReporter.ERROR_GENERAL_ERROR
 
 
 								fields.append("storage_rel_path")
@@ -1998,7 +2007,7 @@ class TestReporter(My_SQL):
 
 									if index >= 1000:
 										self._error_macro(full_attachment_src_path + " Failed to find an acceptable name to generate a compressed file.")
-										return -1
+										return TestReporter.ERROR_GENERAL_ERROR
 
 									fields.append("storage_ext")
 									data.append(storage_extension)
@@ -2018,7 +2027,7 @@ class TestReporter(My_SQL):
 
 										return db_id
 									else:
-										return -1
+										return TestReporter.ERROR_GENERAL_ERROR
 								else:
 									fields.append("compressed_state_enum")
 									data.append("src_compressed")
@@ -2032,21 +2041,21 @@ class TestReporter(My_SQL):
 										db_id = self.insert("attachment", fields, data, True)
 										return db_id
 									else:
-										return -1
+										return TestReporter.ERROR_GENERAL_ERROR
 							else:
-								return -1
+								return TestReporter.ERROR_GENERAL_ERROR
 						else:
 							self._error_macro("Failed to create ftp object.")
-							return -1
+							return TestReporter.ERROR_GENERAL_ERROR
 					else:
 						return attachment_type_id
 				else:
 					return attachment_id
 			else:
-				return -1
+				return TestReporter.ERROR_GENERAL_ERROR
 		else:
 			self._error_macro(full_attachment_src_path + " does not exist or is not accessable")
-			return -1
+			return TestReporter.ERROR_GENERAL_ERROR
 
 	def get_line_marker_id(self, attachment_id, marker_type, start_line, end_line=None, sub_type="general", display_error=True):
 		if self.common_check():
@@ -2055,7 +2064,6 @@ class TestReporter(My_SQL):
 			if marker_type_id > 0:
 
 				marker_sub_type_id = self.get_line_marker_sub_type_id(sub_type)
-				print "Marker subtype id", marker_sub_type_id
 
 				if marker_sub_type_id > 0:
 
@@ -2093,33 +2101,21 @@ class TestReporter(My_SQL):
 					else:
 						if display_error:
 							self._error_macro("Matching line marker not found.")
-						return -2
+						return TestReporter.ERROR_NOT_FOUND_ERROR
 				else:
 					return marker_sub_type_id
 			else:
 				return marker_type_id
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_line_marker(self, attachment_id, marker_type, start_line, end_line=None, test_exec_id=None, sub_type="general", comment=None):
-
-		print attachment_id, marker_type, start_line, sub_type
-
 		if self.common_check():
 			line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
-
-			print "check to see if it already exists", line_marker_id
-
-			if line_marker_id == -2:
+			if line_marker_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 				marker_type_id = self.get_line_marker_type_id(marker_type)
-
-				print "Get line marker id type", marker_type_id
-
 				if marker_type_id > 0:
 					marker_sub_type_id = self.get_line_marker_sub_type_id(sub_type)
-
-					print "Get sub line marker type", marker_sub_type_id
-
 
 					if marker_sub_type_id > 0:
 
@@ -2138,7 +2134,6 @@ class TestReporter(My_SQL):
 						fields.append("start")
 						data.append(start_line)
 
-
 						if end_line:
 							fields.append("end")
 							data.append(end_line)
@@ -2154,15 +2149,13 @@ class TestReporter(My_SQL):
 									data.append(comment)
 								else:
 									self._error_macro("The comment is too long")
-									return -1
+									return TestReporter.ERROR_TOO_LONG_ERROR
 							else:
 								self._error_macro("The comment is too short")
-								return -1
+								return TestReporter.ERROR_TOO_SHORT_ERROR
 
 						db_id = self.insert("line_marker", fields, data, True)
 
-
-						print " This is returned from the insert", db_id
 						return db_id
 					else:
 						return marker_sub_type_id
@@ -2171,7 +2164,7 @@ class TestReporter(My_SQL):
 			else:
 				return line_marker_id
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def get_test_exec_id(self, result, test_suite_name, test_exec_path, test_name, test_params, unique_test_rev_id=None, display_error=True):
 		if self.common_check(project_root=True, project_child=True, exec_id=True, variant_exec_id=True):
@@ -2205,7 +2198,7 @@ class TestReporter(My_SQL):
 						else:
 							if display_error:
 								self._error_macro("Test Exec: [" + str(test_suite_name) + "] " + str(test_exec_path) + "/"+ test_name + " " + test_params + " {" + result + "} not found.")
-							return -2
+							return TestReporter.ERROR_NOT_FOUND_ERROR
 					else:
 						return test_revision_id
 				else:
@@ -2213,12 +2206,12 @@ class TestReporter(My_SQL):
 			else:
 				return result_id
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, exec_time=None, extra_time=None, revision_string=None, comment=None):
 		test_exec_id = self.get_test_exec_id(result, test_suite_name, test_exec_path, test_name, test_params, revision_string, display_error=None)
 
-		if test_exec_id == -2:
+		if test_exec_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			result_id = self.get_tag_result_id(result)
 			if result_id > 0:
 				suite_name_id = self.get_test_suite_id(test_suite_name)
@@ -2253,7 +2246,7 @@ class TestReporter(My_SQL):
 								data.append(exec_time)
 							else:
 								self._error_macro("Exec time must be a whole number.")
-								return -1
+								return TestReporter.ERROR_GENERAL_ERROR
 
 						if extra_time:
 							try:
@@ -2266,7 +2259,7 @@ class TestReporter(My_SQL):
 								data.append(extra_time)
 							else:
 								self._error_macro("Extra time must be a whole number.")
-								return -1
+								return TestReporter.ERROR_GENERAL_ERROR
 
 						if comment:
 							if self.size(comment) > 0:
@@ -2275,10 +2268,10 @@ class TestReporter(My_SQL):
 									data.append(comment)
 								else:
 									self._error_macro("The comment is too long")
-									return -1
+									return TestReporter.ERROR_TOO_LONG_ERROR
 							else:
 								self._error_macro("The comment is too short")
-								return -1
+								return TestReporter.ERROR_TOO_SHORT_ERROR
 
 						db_id = self.insert("test_exec", fields, data, False)
 
@@ -2309,10 +2302,10 @@ class TestReporter(My_SQL):
 					data.append(unit)
 				else:
 					self._error_macro("The unit is too long")
-					return -1
+					return TestReporter.ERROR_TOO_LONG_ERROR
 			else:
 				self._error_macro("The unit is too short")
-				return -1
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 
 
 			query = 'SELECT test_metric_id FROM test_metric'
@@ -2332,15 +2325,15 @@ class TestReporter(My_SQL):
 			else:
 				if display_error:
 					self._error_macro("Test Metric not found.")
-				return -2
+				return TestReporter.ERROR_NOT_FOUND_ERROR
 
 		else:
-			return -1
+			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_test_metric(self, line_marker_id, value, unit, comment=None):
 		test_metric_id = self.get_test_metric_id(line_marker_id, value, unit, display_error=False)
 
-		if test_metric_id == -2:
+		if test_metric_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			fields = []
 			data = []
 
@@ -2360,10 +2353,10 @@ class TestReporter(My_SQL):
 						data.append(comment)
 					else:
 						self._error_macro("The comment is too long")
-						return -1
+						return TestReporter.ERROR_TOO_LONG_ERROR
 				else:
 					self._error_macro("The comment is too short")
-					return -1
+					return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			db_id = self.insert("test_metric", fields, data, False)
 
@@ -2392,16 +2385,16 @@ class TestReporter(My_SQL):
 				else:
 					if display_error:
 						self._error_macro("Crash exec not found.")
-					return -2
+					return TestReporter.ERROR_NOT_FOUND_ERROR
 			else:
 				return crash_type_id
 		else:
-			return -1
+			return TestReporter.ERROR_GENERAL_ERROR
 
 	def add_crash_exec(self, line_marker_id, crash_type):
 		crash_exec_id = self.get_crash_exec_id(line_marker_id, crash_type)
 
-		if crash_exec_id == -2:
+		if crash_exec_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			crash_type_id = self.get_crash_type_id(crash_type)
 
 			if crash_type_id > 0:

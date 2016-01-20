@@ -51,16 +51,16 @@ arch_type_file_path_breaks = ["tests",
 							]
 
 expected_sub_strings = ["(timeout) where is the STOP message?",
-					    "Assertion failed",
-					    "program crashed",
-					    "premature exit",
-					    "no pass",
-					    "no point",
-					    "kernel crash",
-					    "test not found",
-					    "never started",
-					    "kernel crash kdump",
-					    "No such file or directory"]
+						"Assertion failed",
+						"program crashed",
+						"premature exit",
+						"no pass",
+						"no point",
+						"kernel crash",
+						"test not found",
+						"never started",
+						"kernel crash kdump",
+						"No such file or directory"]
 
 valid_execution_types = ["daily", "weekend", "sanity"]
 
@@ -224,31 +224,52 @@ def add_project(args, log):
 	]
 
 	line_markers = [
-		"host_system",
-		"log_start_time_stamp",
+		"assertion_failure",
+		"bad_transfer",
 		"boot",
 		"boot_failure",
-		"reboot",
-		"download",
-		"test_suite",
-		"test",
-		"sum",
-		"exec"
-		"stop",
-		"error",
-		"memory fault",
-		"ldd_fault",
-		"bad_transfer",
+		"buffer_overflow",
 		"bug_ref",
-		"sigsegv",
-		"sigill",
-		"sigbus",
-		"shutdown",
-		"kdump",
-		"stack_smashing",
+		"download",
+		"error",
+		"exec",
+		"execute",
+		"exec_format_error",
 		"failed_library_load",
+		"host_system",
+		"kdump",
+		"kermit_send",
+		"ldd_fault",
 		"log_end_time_stamp",
-		"assertion_failure"
+		"log_start_time_stamp",
+		"memory_fault",
+		"malloc_check_fail",
+		"process_seg",
+		"reboot",
+		"send-class",
+		"shutdown",
+		"stack_smashing",
+		"stop",
+		"sum",
+		"test",
+		"test_suite"
+	]
+
+	line_marker_sub_types = [
+		"Assertion failed",
+		"program crashed",
+		"premature exit",
+		"no pass",
+		"no point",
+		"kernel crash",
+		"test not found",
+		"never started",
+		"kernel crash kdump",
+		"No such file or directory"
+		"sigbus",
+		"sigill",
+		"sigsegv",
+		"timeout"
 	]
 
 	if args["reporter"].check_ftp_path(args["ftp_host"], args["ftp_user_name"], args["ftp_password"], args["set_storage_path"]):
@@ -289,6 +310,10 @@ def add_project(args, log):
 
 					for line_marker in line_markers:
 						if args["reporter"].add_line_marker_type(line_marker) < 0:
+							return -1
+
+					for line_marker_sub_type in line_marker_sub_types:
+						if args["reporter"].add_line_marker_sub_type(line_marker_sub_type) < 0:
 							return -1
 
 					if args["reporter"].add_attachment_type("yoyo_log", "plain/text", "Yoyo Log File") < 0:
@@ -1237,6 +1262,9 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 	log_test_index = 0
 	index = 0
+
+	last_mem_proc = 0
+
 	max_index = len(log_results["parsed_lines"])
 	while index < max_index:
 		regex_data = log_results["parsed_lines"][index]
@@ -1378,6 +1406,17 @@ def process_tests(args, log, sum_results, log_results, variant):
 		elif regex_data["type"] == "reboot":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] == "mem_proc":
+			mem_proc = None
+			try:
+				mem_proc = int(local_regex["matches"]["proc_memory"])
+			except:
+				mem_proc = None
+
+			if mem_proc:
+				if last_mem_proc:
+					regex_data["mem_diff"] = last_mem_proc - mem_proc
+
+			last_mem_proc = mem_proc
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
 		elif regex_data["type"] == "kermit_send":
 			submit_dict["tests"][log_test_index]["indexes"].append(index)
@@ -1595,41 +1634,48 @@ def process_tests(args, log, sum_results, log_results, variant):
 							log_regex = log_results["parsed_lines"][log_index];
 							print log_regex["type"]
 
-							if log_regex["type"] == "download":
-								rc = report.add_line_marker(yoyo_log_id, "download", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
-							elif log_regex["type"] == "reboot":
-								rc = report.add_line_marker(yoyo_log_id, "reboot", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
-
-							elif log_regex["type"] == "bug_ref":
-
+							if log_regex["type"] == "bug_ref":
 								log_regex["matches"]["bug_type"] = log_regex["matches"]["bug_type"].lower()
 								if log_regex["matches"]["bug_type"] == "jira":
 									log_regex["matches"]["bug_type"] = "ji"
 
 								# Make sure the bug root is added
 								rc = report.add_bug_root(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
-								print "bug root", rc
 
 								# Make sure the project bug is added
 								if rc > 0:
 									rc = report.add_project_bug(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
-									print "bug project", rc
-
 
 								# Add the line that bug occured one
 								if rc > 0:
 									rc = report.add_line_marker(yoyo_log_id, "bug_ref", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
-									print "line marker", rc
 
 								# track that the bug occured during this execution.
 								if rc > 0:
 									rc = report.add_bug_exec(rc, log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
-									print "bug exec", rc
+							elif log_regex["type"] == "TestPoint":
+								print " TestPoint   	           DO SOMETHING VERY SPECIAL HERE"
+								print pformat(log_regex)
 
 
+							elif log_regex["type"] == "mem_proc":
+								print " MEMPROC                      DO SOMETHING SPECIAL"
+								print pformat(log_regex)
+							elif log_regex["type"] == "kdump":
+								print " KDUMP                     DO SOMETHING SPECIAL HERE"
+								print pformat(log_regex)
+
+							elif log_regex["type"] == "metric":
+								print " METRIC                    DO SOMETHING SPECIAL HERE"
+								print pformat(log_regex)
+
+							elif log_regex["type"] == "process_seg":
+								print " PROCESS SEG               DO SOMETHING SPECIAL HERE"
+								print pformat(log_regex)
 							else:
-								log.out(str(log_regex["type"]) + " was not handled", ERROR)
+
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							if rc < 0:
 								print "Exciting add log details loop!!!!"
