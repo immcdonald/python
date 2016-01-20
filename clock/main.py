@@ -4,8 +4,8 @@ import pygame
 import math
 from datetime import datetime, timedelta
 from pygame.locals import *
-import pytz
-import Pysolar
+import pytz			# sudo pip install pytz
+from pysolar import solar	# sudo pip install pysolar
 
 
 parentPath = os.path.abspath("../common")
@@ -573,7 +573,7 @@ def convert_sun_time(args):
 def determine_day_mode(args):
 	delta = 0
 
-	print "Sun Angle:", args.sun_alt_deg
+	print ("Sun Angle:", args.sun_alt_deg)
 	
 	if args.sun_alt_deg < 0.00:
 		if ((args.sun_alt_deg < 0.00) and (args.sun_alt_deg > DEF_CIVIL_TWILIGHT_ANGLE)):
@@ -633,7 +633,7 @@ def time_update(args):
 	else:
 		args.utc_time =  args.current_time - timedelta(seconds=(5*(60*60)))
 	
-	args.sun_alt_deg = Pysolar.GetAltitude(args.latitude, args.longitude, args.utc_time)
+	args.sun_alt_deg =  solar.get_altitude(args.latitude, args.longitude, args.utc_time)
 	#args.sun_azimuth_deg = Pysolar.GetAzimuth(args.latitude, args.longitude, args.utc_time)
 	
 	determine_day_mode(args)
@@ -648,7 +648,7 @@ def time_update(args):
 
 def command_processor(args, cmd_string):
 	
-	print cmd_string
+	print (cmd_string)
 	cmd_parts = cmd_string.split(" ")
 	
 	if cmd_parts[0] == "set":
@@ -661,15 +661,14 @@ def command_processor(args, cmd_string):
 					except:
 						args.debug_time_of_day_offset = 0
 				else:
-					print "The set time command requires one or more parameters."
+					print ("The set time command requires one or more parameters.")
 			else:
-				print "<" + cmd_parts[1] + "> is not a valid second parameter for set."
+				print ("<" + cmd_parts[1] + "> is not a valid second parameter for set.")
 		else:
-			print "The set command requires one or more parameters."
+			print ("The set command requires one or more parameters.")
 
 	else:
-		print "<"+cmd_string + "> cmd is not known."
-
+		print ("<"+cmd_string + "> cmd is not known.")
 
 def ellipse_path(args, x, sun_radius=0, horizontal_offset=0,  vertical_offset = 0):	
 	x_plane = (args.width-sun_radius) / 2.0
@@ -757,8 +756,8 @@ def render(args, screen):
 def main(argv):
 	log = my_log()
 	parser = argparse.ArgumentParser(description='Clock')
-	parser.add_argument('-y', "--height", default=400, type=check_negative)
-	parser.add_argument('-x', "--width", default=640, type=check_negative)
+	parser.add_argument('-y', "--height", default=480, type=check_negative)
+	parser.add_argument('-x', "--width", default=800, type=check_negative)
 	parser.add_argument("-v","--verbosity",  nargs='+', help="increase output verbosity")
 	parser.add_argument("-z", "--timezone", default="America/New_York")
 	parser.add_argument("-lat", "--latitude", default=45.4214)
@@ -805,32 +804,31 @@ def main(argv):
 		args.font_handle = pygame.font.Font(None, args.cmd_font)
 		args.clock_font_handle = pygame.font.Font(args.clock_font, args.clock_font_size)
 		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
- 		
-		args.debug_time_of_day_offset = 0
 
- 		time_update(args)
+		args.debug_time_of_day_offset = 60 * 60 * 6
 
- 		args.horizon_size = int(args.height * 0.33)
+		time_update(args)
 
- 		args.offset = 0
- 		args.x_value = 0
+		args.horizon_size = int(args.height * 0.33)
 
+		args.offset = 0
+		args.x_value = 0
 
 		while(run):
 			for args.event in pygame.event.get():
 				if args.event.type == pygame.QUIT:
 					run = False
 				elif args.event.type == DEF_TIME_UPDATE_EVENT:
- 					time_update(args)
- 				elif args.event.type == pygame.KEYUP:
+					time_update(args)
+				elif args.event.type == pygame.KEYUP:
 					process_key_up(args)
- 				elif args.event.type == pygame.KEYDOWN:
- 					process_key_down(args)
+				elif args.event.type == pygame.KEYDOWN:
+					process_key_down(args)
 
- 			render(args, screen)
+			render(args, screen)
 
 			# limit the frame rate
-			clock.tick(100)
+			clock.tick(10)
 
 
  	#log.out("Good Bye")
