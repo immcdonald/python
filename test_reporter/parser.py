@@ -63,7 +63,8 @@ expected_sub_strings = ["(timeout) where is the STOP message?",
 						"test not found",
 						"never started",
 						"kernel crash kdump",
-						"No such file or directory"]
+						"No such file or directory",
+						"cannot transfer file to target"]
 
 valid_execution_types = ["daily", "weekend", "sanity"]
 
@@ -284,19 +285,23 @@ def add_project(args, log):
 		"test not found",
 		"never started",
 		"kernel crash kdump",
-		"No such file or directory"
+		"No such file or directory",
 		"sigbus",
 		"sigill",
 		"sigsegv",
-		"timeout"
+		"timeout",
+		"start",
+		"stop",
+		"point",
+		"error",
 
 		# These are for none final test results
 		"start",
 		"stop",
 		"pass",
 		"fail",
-		"xpass",
-		"xfail",
+		"passx",
+		"failx",
 		"unresolved",
 		"untested",
 		"unsupported"
@@ -1068,12 +1073,14 @@ def get_subtype(args, log, search_string):
 		period_pos = sub_string.rfind(".")
 
 		if period_pos > 0:
-			sub_string = sub_string[0:pos]
+			sub_string = sub_string[0:period_pos]
 
 		if sub_string in expected_sub_strings:
 			if sub_string == "(timeout) where is the STOP message?":
 				return "timeout", search_string[:max_quote+splitter_position]
 			elif sub_string == "(timeout) kermit not responsive":
+				return "bad transfer", search_string[:max_quote+splitter_position]
+			elif sub_string == "cannot transfer file to target":
 				return "bad transfer", search_string[:max_quote+splitter_position]
 			else:
 				return sub_string, search_string[:max_quote+splitter_position]
@@ -1666,7 +1673,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 								exec_type = "weekend"
 
 							if exec_type:
-								args["exec_id"] = report.register_exec(exec_type)
+								args["exec_id"] = report.register_exec(exec_type, comment=args["general_file_info"]["info"]["description"])
 
 								if args["exec_id"] <= 0:
 									log.out(str(args["exec_id"]) + " returned as the exec id", ERROR)
@@ -1835,30 +1842,50 @@ def process_tests(args, log, sum_results, log_results, variant):
 						for parsed_log_index in test["log_parse_line_indexes"]:
 							log_regex = log_results["parsed_lines"][parsed_log_index]
 
-							if log_regex["type"] == "download":
+
+							if log_regex["type"] == "TestPoint":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+
+								if log_regex["final_flag"]:
+									rc = report.add_line_marker(yoyo_log_id, "yoyo_log", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=log_regex["sub_type"])
+								else:
+									# Don't line mark NOTE
+									if log_regex["matches"]["testpnt"] != "NOTE: ":
+										line_type = log_regex["matches"]["testpnt"][:-2].lower()
+										rc = report.add_line_marker(yoyo_log_id, "test_point", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=line_type)
+
+							elif log_regex["type"] == "download":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 							elif log_regex["type"] == "kermit_send":
-								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							elif log_regex["type"] == "execute":
-								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							elif log_regex["type"] == "exec":
-								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 							elif log_regex["type"] == "mem_proc":
-								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+							elif log_regex["type"] == "mem_proc":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 							elif log_regex["type"] == "metric":
-								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 								if rc > 0:
 									log_regex = log_results["parsed_lines"][parsed_log_index]
 									rc = report.add_test_metric(rc, log_regex["matches"]["value"], log_regex["matches"]["units"], log_regex["matches"]["desc"])
+							elif log_regex["type"] == "send-class":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+
 							else:
 								log.out("-------------------------------- " + str(log_regex["type"]) + " --------------------------------", DEBUG, v=3)
 

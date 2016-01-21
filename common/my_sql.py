@@ -290,7 +290,7 @@ class My_SQL(object):
 			return len(value)
 
 	def fix_auto_inc(self):
-		query = 'show tables'
+		query = "show full tables where Table_Type != 'VIEW'"
 		data = None
 
 		self.query(query, data)
@@ -298,6 +298,9 @@ class My_SQL(object):
 		table_rows = self.cursor.fetchall()
 
 		for table_row in table_rows:
+			if table_row[0].find("view_") == 0:
+				continue
+
 			query = 'LOCK TABLES ' + str(table_row[0]) + " WRITE"
 			self.query(query)
 
