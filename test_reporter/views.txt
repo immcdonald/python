@@ -4,3 +4,9 @@ view_variant_root
 CREATE VIEW `view_variant_root` AS
 SELECT variant_root.variant_root_id, target.name as target, arch.name as arch, variant_root.variant, variant_root.comment, variant_root.created FROM variant_root, arch, target WHERE target.target_id=variant_root.fk_target_id and arch.arch_id=variant_root.fk_arch_id;
 
+========================
+view_variant_exec
+========================
+SELECT variant_exec.variant_exec_id, variant_exec.fk_exec_id, view_variant_root.target, view_variant_root.arch, view_variant_root.variant, variant_exec.exec_time_secs, variant_exec.comment, variant_exec.created, variant_exec.hide_enum FROM variant_exec, view_variant_root WHERE variant_exec.fk_variant_root_id=view_variant_root.variant_root_id;
+
+

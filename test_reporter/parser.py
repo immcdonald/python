@@ -234,7 +234,6 @@ def add_project(args, log):
 		"buffer_overflow",
 		"bug_ref",
 		"download",
-		"err",
 		"error",
 		"exec",
 		"execute",
@@ -293,7 +292,9 @@ def add_project(args, log):
 		"start",
 		"stop",
 		"point",
+		"err",
 		"error",
+		"warn",
 
 		# These are for none final test results
 		"start",
@@ -304,7 +305,7 @@ def add_project(args, log):
 		"failx",
 		"unresolved",
 		"untested",
-		"unsupported"
+		"unsup"
 	]
 
 	if args["reporter"].check_ftp_path(args["ftp_host"], args["ftp_user_name"], args["ftp_password"], args["set_storage_path"]):
@@ -1844,7 +1845,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 
 							if log_regex["type"] == "TestPoint":
-								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 
 								if log_regex["final_flag"]:
 									rc = report.add_line_marker(yoyo_log_id, "yoyo_log", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=log_regex["sub_type"])
@@ -1881,9 +1882,49 @@ def process_tests(args, log, sum_results, log_results, variant):
 								if rc > 0:
 									log_regex = log_results["parsed_lines"][parsed_log_index]
 									rc = report.add_test_metric(rc, log_regex["matches"]["value"], log_regex["matches"]["units"], log_regex["matches"]["desc"])
-							elif log_regex["type"] == "send-class":
+
+							elif log_regex["type"] == "bug_ref":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+
+								log_regex["matches"]["bug_type"] = log_regex["matches"]["bug_type"].lower()
+								if log_regex["matches"]["bug_type"] == "jira":
+									log_regex["matches"]["bug_type"] = "ji"
+
+								# Make sure that the bug root exists
+								rc = report.add_bug_root(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
+
+								# Make sure the project bug is added
+								if rc > 0:
+									rc = report.add_project_bug(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
+
+								# Now track where it was seen within the log file.
+								if rc > 0:
+									rc = report.add_line_marker(yoyo_log_id, "bug_ref", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+								# track that the bug occured during this execution and use the log marker above.
+								if rc > 0:
+									rc = report.add_bug_exec(rc, log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
+
+							elif log_regex["type"] == "assertion_failure":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "buffer_overflow":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "memory_fault":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "malloc_check_fail":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "reboot":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
 
 
 							else:
@@ -1902,45 +1943,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 						log.out("An error (" + str(rc) +") occurred while processing " + test["test_path"] + "/" + test["test_name"]+ " exiting the test processing loop" , ERROR)
 					break
 
-						# 				print "Exciting adding test details loop";
-						# 				break
-						# 			if rc > 0:
-						# 				# add other log info, line markers, crash deeds and things..
-						# 				for log_index in test["log_parse_line_indexes"]:
-						# 					log_regex = log_results["parsed_lines"][log_index];
-						# 					print log_regex["type"]
 
-
-						# 					if log_regex["type"] == "bug_ref":
-						# 						log_regex["matches"]["bug_type"] = log_regex["matches"]["bug_type"].lower()
-						# 						if log_regex["matches"]["bug_type"] == "jira":
-						# 							log_regex["matches"]["bug_type"] = "ji"
-
-						# 						# Make sure the bug root is added
-						# 						rc = report.add_bug_root(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
-
-						# 						# Make sure the project bug is added
-						# 						if rc > 0:
-						# 							rc = report.add_project_bug(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
-
-						# 						# Add the line that bug occured one
-						# 						if rc > 0:
-						# 							rc = report.add_line_marker(yoyo_log_id, "bug_ref", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
-
-						# 						# track that the bug occured during this execution.
-						# 						if rc > 0:
-						# 							rc = report.add_bug_exec(rc, log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
-						# 					elif log_regex["type"] == "TestPoint":
-						# 						print " TestPoint   	           DO SOMETHING VERY SPECIAL HERE"
-
-						# 						if log_regex["final_flag"]:
-						# 							print "ADDING YOYO.LOG FINAL"
-						# 							rc = report.add_line_marker(yoyo_log_id, "yoyo_log", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=log_regex["sub_type"])
-						# 						else:
-						# 							if log_regex["matches"]["testpnt"] != "NOTE: " and log_regex["matches"]["testpnt"] != "PASS: " and log_regex["matches"]["testpnt"] != "POINT: ":
-						# 								line_type = log_regex["matches"]["testpnt"][:-2].lower()
-						# 								rc = report.add_line_marker(yoyo_log_id, "test_point", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=line_type)
-						# 							print pformat(log_regex)
 						# 					elif log_regex["type"] == "kdump":
 						# 						print " KDUMP                     DO SOMETHING SPECIAL HERE"
 						# 						print pformat(log_regex)
