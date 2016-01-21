@@ -2208,7 +2208,7 @@ class TestReporter(My_SQL):
 		else:
 			return TestReporter.ERROR_NOT_READY_ERROR
 
-	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, exec_time=None, extra_time=None, revision_string=None, comment=None):
+	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, exec_time=None, extra_time=None, revision_string=None, mem_before=None, mem_after=None, comment=None):
 		test_exec_id = self.get_test_exec_id(result, test_suite_name, test_exec_path, test_name, test_params, revision_string, display_error=None)
 
 		if test_exec_id == TestReporter.ERROR_NOT_FOUND_ERROR:
@@ -2261,6 +2261,33 @@ class TestReporter(My_SQL):
 								self._error_macro("Extra time must be a whole number.")
 								return TestReporter.ERROR_GENERAL_ERROR
 
+
+						if mem_before:
+							try:
+								mem_before = int(mem_before)
+							except:
+								mem_before = None
+
+							if mem_before:
+								fields.append("mem_before")
+								data.append(mem_before)
+							else:
+								self._error_macro("Memory before must be a whole number.")
+								return TestReporter.ERROR_GENERAL_ERROR
+
+						if mem_after:
+							try:
+								mem_after = int(mem_after)
+							except:
+								mem_after = None
+
+							if mem_after:
+								fields.append("mem_after")
+								data.append(mem_after)
+							else:
+								self._error_macro("Memory after must be a whole number.")
+								return TestReporter.ERROR_GENERAL_ERROR
+
 						if comment:
 							if self.size(comment) > 0:
 								if self.size(comment) < 65535:
@@ -2291,7 +2318,11 @@ class TestReporter(My_SQL):
 			fields = []
 			data = []
 
-			value = value + 1.0
+			try:
+				value = float(value)
+			except:
+				self._error_macro("Conversion of value from X to float failed")
+				return -1
 
 			fields.append("fk_line_marker_id")
 			data.append(line_marker_id)
@@ -2330,7 +2361,14 @@ class TestReporter(My_SQL):
 		else:
 			return TestReporter.ERROR_NOT_READY_ERROR
 
-	def add_test_metric(self, line_marker_id, value, unit, comment=None):
+	def add_test_metric(self, line_marker_id, value, unit, comment):
+		try:
+			value = float(value)
+		except:
+			self._error_macro("Conversion of value from X to float failed")
+			return -1
+
+
 		test_metric_id = self.get_test_metric_id(line_marker_id, value, unit, display_error=False)
 
 		if test_metric_id == TestReporter.ERROR_NOT_FOUND_ERROR:
@@ -2341,22 +2379,21 @@ class TestReporter(My_SQL):
 			data.append(line_marker_id)
 
 			fields.append("metric")
-			data.append(value * 1.0)
+			data.append(value)
 
 			fields.append("unit")
 			data.append(unit)
 
-			if comment:
-				if self.size(comment) > 0:
-					if self.size(comment) < 65535:
-						fields.append("comment")
-						data.append(comment)
-					else:
-						self._error_macro("The comment is too long")
-						return TestReporter.ERROR_TOO_LONG_ERROR
+			if self.size(comment) > 0:
+				if self.size(comment) < 65535:
+					fields.append("comment")
+					data.append(comment)
 				else:
-					self._error_macro("The comment is too short")
-					return TestReporter.ERROR_TOO_SHORT_ERROR
+					self._error_macro("The metric description is too long")
+					return TestReporter.ERROR_TOO_LONG_ERROR
+			else:
+				self._error_macro("The metric description is too short")
+				return TestReporter.ERROR_TOO_SHORT_ERROR
 
 			db_id = self.insert("test_metric", fields, data, False)
 

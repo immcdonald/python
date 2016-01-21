@@ -24,7 +24,9 @@ scan_enum = {"NOTHING": 0,
 # 6 - Show all output lines for log file
 # 5 - Show lines that were not processed by the parser for the log file
 
-test_point_prefix = ["METRIC",
+
+test_point_prefix = [
+					# METRIC: is purposely keep out of this list and handled seperately.
 					 "START",
 					 "STOP",
 					 "POINT",
@@ -51,6 +53,7 @@ arch_type_file_path_breaks = ["tests",
 							]
 
 expected_sub_strings = ["(timeout) where is the STOP message?",
+						"(timeout) kermit not responsive",
 						"Assertion failed",
 						"program crashed",
 						"premature exit",
@@ -225,7 +228,6 @@ def add_project(args, log):
 
 	line_markers = [
 		"assertion_failure",
-		"bad_transfer",
 		"boot",
 		"boot_failure",
 		"buffer_overflow",
@@ -245,7 +247,9 @@ def add_project(args, log):
 		"log_end_time_stamp",
 		"log_start_time_stamp",
 		"memory_fault",
+		"mem_proc",
 		"malloc_check_fail",
+		"metric",
 		"process_seg",
 		"reboot",
 		"send-class",
@@ -256,6 +260,7 @@ def add_project(args, log):
 		"yoyo_sum",
 		"test_suite",
 		"test_point",   # for none final test results
+		"timeout",
 
 		# Test ones are for final results only
 		"pass",
@@ -274,6 +279,7 @@ def add_project(args, log):
 		"premature exit",
 		"no pass",
 		"no point",
+		"bad transfer",
 		"kernel crash",
 		"test not found",
 		"never started",
@@ -671,10 +677,14 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 			if result:
 				matches = result.groupdict()
 
-				if matches["testpnt"] != "ERROR: ":
-					none_error_counter = none_error_counter + 1
-
 				if matches["testpnt"][:-2] in test_point_prefix:
+					if matches["testpnt"][:-2] == "ERROR":
+						none_error_counter = none_error_counter + 1
+						temp_string = matches["the_rest"].replace("\\", "/")
+
+						if temp_string.find("/") == -1:
+							matches["the_rest"] = "/error/tests/error/error error:" + matches["the_rest"]
+
 					matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
 					report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 					no_match = False
@@ -964,6 +974,11 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 						if matches["testpnt"][:-2] in test_point_prefix:
 							final_flag = False
 
+							if matches["testpnt"][:-2] == "ERROR":
+								temp_string = matches["the_rest"].replace("\\", "/")
+								if temp_string.find("/") == -1:
+									matches["the_rest"] = "/error/tests/error/error:" + matches["the_rest"]
+
 							# Certain test point keys are not final results
 							if matches["testpnt"][:-2] != "START" and  matches["testpnt"][:-2] != "STOP" and matches["testpnt"][:-2] != "NOTE" and matches["testpnt"][:-2] != "BOOT" and matches["testpnt"][:-2] != "boot" and matches["testpnt"][:-2] != "POINT":
 								# The diffference between a final testpoint and a result test point can be very small.
@@ -1030,10 +1045,13 @@ def print_list(log, the_list, pre_fix=""):
 
 def get_subtype(args, log, search_string):
 	# Lets not look for : with in quotes on the command line.
+
 	double_qoute_pos = search_string.rfind('"')
 	single_qoute_pos = search_string.rfind("'")
 
 	max_quote = max(double_qoute_pos, single_qoute_pos)
+
+	#blahblah/test param:kdumper.0000
 
 	if max_quote > 0:
 		temp = search_string[(max_quote +1):]
@@ -1041,31 +1059,33 @@ def get_subtype(args, log, search_string):
 		temp = search_string
 		max_quote = 0
 
-	pos = temp.rfind(":")
+	splitter_position = temp.rfind(":")
 
-	if pos > 0:
-		sub_string = temp[pos+1:].strip()
+	if splitter_position > 0:
+		sub_string = temp[splitter_position+1:].strip()
 
-		# looking now for kernel crash kdump.00000
-		pos = sub_string.rfind(".")
+		# Looking now for kernel crash kdump.00000
+		period_pos = sub_string.rfind(".")
 
-		if pos > 0:
+		if period_pos > 0:
 			sub_string = sub_string[0:pos]
 
 		if sub_string in expected_sub_strings:
 			if sub_string == "(timeout) where is the STOP message?":
-				return "timeout", search_string[:max_quote+pos]
+				return "timeout", search_string[:max_quote+splitter_position]
+			elif sub_string == "(timeout) kermit not responsive":
+				return "bad transfer", search_string[:max_quote+splitter_position]
 			else:
-				return sub_string, search_string[:max_quote+pos]
+				return sub_string, search_string[:max_quote+splitter_position]
 		else:
-			log.out("(" + sub_string + " found after ':', but is not a recognised sub type value) [" + search_string + "]", EXCEPTION)
-			return None, search_string
+			log.out("(" + sub_string + ") found after ':', but is not a recognised sub type value) [" + search_string + "]", EXCEPTION)
+			return None, search_string[:max_quote+splitter_position]
 	else:
 		return None, search_string
 
 
 def init_test_structure():
-	return {"test_path": None, "test_name": None, "test_params": None, "test_suite": None, "log_parse_line_indexes":[], "last_log_match": scan_enum["NOTHING"], "exec_time": -1, "download_time": -1,"log_start":-1, "log_end":-1, "revision": None}
+	return {"test_path": None, "test_name": None, "test_params": None, "test_suite": None, "log_parse_line_indexes":[], "last_log_match": scan_enum["NOTHING"], "exec_time": -1, "download_time": -1,"log_start":-1, "log_end":-1, "revision": None, "mem_before":-1, "mem_after":-1}
 
 def is_new_test(args, logs, last_match, current_match):
 	if last_match == scan_enum["DOWNLOAD_START"]:
@@ -1315,7 +1335,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 	sumbit_test_index = -1
 	index = 0
 
-	last_mem_proc = 0
+	last_mem_proc = -1
 
 	max_index = len(log_results["parsed_lines"])
 
@@ -1514,15 +1534,18 @@ def process_tests(args, log, sum_results, log_results, variant):
 				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
 
 		elif regex_data["type"] == "mem_proc":
-			mem_proc = None
-			try:
-				mem_proc = int(local_regex["matches"]["proc_memory"])
-			except:
-				mem_proc = None
 
-			if mem_proc:
-				if last_mem_proc:
-					regex_data["mem_diff"] = last_mem_proc - mem_proc
+			if last_mem_proc > 0:
+				submit_dict["tests"][sumbit_test_index]["mem_before"] = last_mem_proc
+
+			mem_proc = -1
+			try:
+				mem_proc = int(regex_data["matches"]["proc_memory"])
+			except:
+				mem_proc = -1
+
+			if mem_proc > 0:
+				submit_dict["tests"][sumbit_test_index]["mem_after"] = mem_proc
 
 			last_mem_proc = mem_proc
 
@@ -1790,7 +1813,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 						sum_index = test["sum_index"]
 						sum_line = sum_results["parsed_lines"][sum_index]
 						test_result = sum_line["matches"]["testpnt"][:-2]
-						test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=test["exec_time"], extra_time=test["download_time"])
+						test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=test["exec_time"], extra_time=test["download_time"], mem_before=test["mem_before"], mem_after=test["mem_after"])
 					else:
 						log.out("sum index was unexpectedly not greater then 0", ERROR)
 
@@ -1811,49 +1834,49 @@ def process_tests(args, log, sum_results, log_results, variant):
 						# Look at the log_parse_line_indexes and write key information to the file.
 						for parsed_log_index in test["log_parse_line_indexes"]:
 							log_regex = log_results["parsed_lines"][parsed_log_index]
-							log.out("-------------------------------- " + str(log_regex["type"]) + "-------------------------------- ", DEBUG, v=3)
-						# 			print "-" * 80
 
+							if log_regex["type"] == "download":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+							elif log_regex["type"] == "kermit_send":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
-						# 			test_exec_id = -1
-						# 			sum_index = test["sum_index"]
-						# 			sum_line = sum_results["parsed_lines"][sum_index]
-						# 			test_result = sum_line["matches"]["testpnt"][:-2]
+							elif log_regex["type"] == "execute":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
-						# 			exec_time = None
+							elif log_regex["type"] == "exec":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+							elif log_regex["type"] == "mem_proc":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+							elif log_regex["type"] == "metric":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=3)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
-						# 			if "exec_time" in test:
-						# 				exec_time = test["exec_time"]
+								if rc > 0:
+									log_regex = log_results["parsed_lines"][parsed_log_index]
+									rc = report.add_test_metric(rc, log_regex["matches"]["value"], log_regex["matches"]["units"], log_regex["matches"]["desc"])
+							else:
+								log.out("-------------------------------- " + str(log_regex["type"]) + " --------------------------------", DEBUG, v=3)
 
-						# 			download_time = None
+							if rc <= 0:
+								log.out("An error (" + str(rc) +") occurred while processing " + log_regex["type"] + " exiting the line marker loop" , ERROR)
+								break
+				else:
+					rc = -1
 
-						# 			if "download_time" in test:
-						# 				download_time = test["download_time"]
+				if rc <= 0:
+					if test["test_params"]:
+						log.out("An error (" + str(rc) +") occurred while processing " + test["test_path"] + "/" + test["test_name"] + " " + test["test_params"] + " exiting the test processing loop" , ERROR)
+					else:
+						log.out("An error (" + str(rc) +") occurred while processing " + test["test_path"] + "/" + test["test_name"]+ " exiting the test processing loop" , ERROR)
+					break
 
-						# 			rc = report.add_test_revision(test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"])
-
-						# 			if rc > 0:
-						# 				test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=exec_time, extra_time=download_time)
-
-						# 			if test_exec_id > 0:
-						# 				if yoyo_sum_id > 0:
-						# 					# Add line marker for test...
-						# 					rc = report.add_line_marker(yoyo_sum_id, "yoyo_sum", sum_line["start"], end_line=sum_line["end"], test_exec_id=test_exec_id, sub_type=test["sub_type"])
-						# 			else:
-						# 				rc = test_exec_id
-
-						# 			if rc > 0:
-						# 				if yoyo_log_id > 0:
-						# 					if len(test["log_parse_line_indexes"]) > 0:
-						# 						print "START INDEX", test["log_parse_line_indexes"][0]
-						# 						print "END INDEX", test["log_parse_line_indexes"][-1]
-
-						# 						start = log_results["parsed_lines"][test["log_parse_line_indexes"][0]]["start"]
-						# 						end = log_results["parsed_lines"][test["log_parse_line_indexes"][-1]]["end"]
-
-						# 						print "TEST START:", start, " END:", end
-						# 						rc = report.add_line_marker(yoyo_log_id, "full_test", start, end_line=end, test_exec_id=test_exec_id, sub_type="general")
-
+						# 				print "Exciting adding test details loop";
+						# 				break
 						# 			if rc > 0:
 						# 				# add other log info, line markers, crash deeds and things..
 						# 				for log_index in test["log_parse_line_indexes"]:
@@ -1891,9 +1914,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 						# 								line_type = log_regex["matches"]["testpnt"][:-2].lower()
 						# 								rc = report.add_line_marker(yoyo_log_id, "test_point", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=line_type)
 						# 							print pformat(log_regex)
-						# 					elif log_regex["type"] == "mem_proc":
-						# 						print " MEMPROC                      DO SOMETHING SPECIAL"
-						# 						print pformat(log_regex)
 						# 					elif log_regex["type"] == "kdump":
 						# 						print " KDUMP                     DO SOMETHING SPECIAL HERE"
 						# 						print pformat(log_regex)
@@ -1975,7 +1995,7 @@ def process_variants(args, log, fp, recovery_data):
 
 	line_regex["kermit_send"] = re.compile('C-Kermit>send\s+(?P<path>.+)/(?P<test_name>.+)')
 
-	line_regex["metric"] = re.compile('^(?P<desc>.+)\sVALUE:\s(?P<value>.+)\sUNITS:\s(?P<units>.+)$')
+	line_regex["metric"] = re.compile('METRIC: (?P<desc>.+)\sVALUE:\s(?P<value>.+)\sUNITS:\s(?P<units>.+)$')
 
 	line_regex["bug_ref"] = re.compile('(?P<bug_type>jira|JIRA|JI|PR|ji|pr)[_|:]*\s*(?P<value>\d{5,10})')
 
