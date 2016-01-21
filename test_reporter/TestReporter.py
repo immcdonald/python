@@ -497,7 +497,7 @@ class TestReporter(My_SQL):
 			return self.line_marker_dict[line_marker_type]
 		else:
 			if display_error:
-				self._error_macro("(" + str(line_marker_type) + ") line marker type not found. Try calling add first.")
+				self._error_macro("(" + str(line_marker_type) + ") line marker type not found. Try calling add first.", True)
 			return TestReporter.ERROR_LINE_MARKER_ID_NOT_FOUND_ERROR
 
 	def get_line_marker_sub_type_id(self, sub_type, display_error=True):
@@ -505,7 +505,7 @@ class TestReporter(My_SQL):
 			return self.line_marker_sub_type_dict[sub_type]
 		else:
 			if display_error:
-				self._error_macro("("+str(sub_type) + ") line marker sub type not found. Try calling add first.")
+				self._error_macro("("+str(sub_type) + ") line marker sub type not found. Try calling add first.", True)
 			return TestReporter.ERROR_LINE_MARKER_SUB_ID_NOT_FOUND_ERROR
 
 	def add_line_marker_type(self, line_marker_type, comment=None):
@@ -2426,10 +2426,10 @@ class TestReporter(My_SQL):
 			else:
 				return crash_type_id
 		else:
-			return TestReporter.ERROR_GENERAL_ERROR
+			return TestReporter.ERROR_NOT_READY_ERROR
 
-	def add_crash_exec(self, line_marker_id, crash_type):
-		crash_exec_id = self.get_crash_exec_id(line_marker_id, crash_type)
+	def add_crash_exec(self, line_marker_id, crash_type, known_crash_id=None):
+		crash_exec_id = self.get_crash_exec_id(line_marker_id, crash_type, display_error=False)
 
 		if crash_exec_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			crash_type_id = self.get_crash_type_id(crash_type)
@@ -2444,6 +2444,10 @@ class TestReporter(My_SQL):
 				fields.append("fk_crash_type_id")
 				data.append(crash_type_id)
 
+				if known_crash_id:
+					fields.append("fk_crash_known_id")
+					data.append(known_crash_id)
+
 				db_id = self.insert("crash_exec", fields, data, False)
 
 				return db_id
@@ -2451,6 +2455,30 @@ class TestReporter(My_SQL):
 				return crash_type_id
 		else:
 			return crash_exec_id
+
+	def get_known_crashes_for_test(self, test_root_id, crash_type):
+		if self.common_check():
+			crash_type_id = self.get_crash_type_id(crash_type)
+
+			if crash_type > 0:
+				fields = []
+				data = []
+
+				fields.append("fk_test_root_id")
+				data.append(test_root_id)
+
+				fields.append("fk_crash_type_id")
+				data.append(crash_type_id)
+
+				data = self.select(["crash_known_id", "regex"], "crash_known",fields, data)
+
+				return data
+			else:
+				log._error_macro(str(crash_type) + " is not a valid crash type.")
+				return crash_type_id
+		else:
+			return TestReporter.ERROR_NOT_READY_ERROR
+
 
 def test():
 	report = TestReporter(user.sql_host,  user.sql_user_name, user.sql_password, "project_db")

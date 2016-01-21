@@ -295,6 +295,7 @@ def add_project(args, log):
 		"err",
 		"error",
 		"warn",
+		"boot",
 
 		# These are for none final test results
 		"start",
@@ -303,7 +304,7 @@ def add_project(args, log):
 		"fail",
 		"passx",
 		"failx",
-		"unresolved",
+		"unres",
 		"untested",
 		"unsup"
 	]
@@ -1199,6 +1200,8 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 	kdump_regex = re.compile("^kdump.(?P<index>\d{5,10})\.elf.gz$")
 	kdump_index_regex = re.compile("^kdump.(?P<index>\d{5,10})$")
+	test_point_regex = re.compile("(?P<testpnt>" + generate_regex_prefix() + ")(?P<the_rest>.*)")
+
 
 	last_test_suite = "lost_and_found"
 
@@ -1212,7 +1215,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 	user_name = None
 
 	if variant[-1] == "/":
-		variant  = variant[0:-1]
+		variant = variant[0:-1]
 
 	variant_parts = variant.split("/")
 
@@ -1806,6 +1809,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 		if rc > 0:
 			# Go over all the tests that are in the submit test list.
 			for test in submit_dict["tests"]:
+				test_root_id  = -1
 				test_exec_id = -1
 				exec_time = None
 				extra_time = None
@@ -1821,7 +1825,14 @@ def process_tests(args, log, sum_results, log_results, variant):
 						sum_index = test["sum_index"]
 						sum_line = sum_results["parsed_lines"][sum_index]
 						test_result = sum_line["matches"]["testpnt"][:-2]
-						test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=test["exec_time"], extra_time=test["download_time"], mem_before=test["mem_before"], mem_after=test["mem_after"])
+
+						# Check to make sure this test root has been added.
+						# keep the test root id as we may need it later when looking for known crashes of a test.
+						test_root_id = report.add_test_root(test["test_path"], test["test_name"],  test["test_params"])
+
+						if test_root_id > 0:
+							test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=test["exec_time"], extra_time=test["download_time"], mem_before=test["mem_before"], mem_after=test["mem_after"])
+
 					else:
 						log.out("sum index was unexpectedly not greater then 0", ERROR)
 
@@ -1855,6 +1866,73 @@ def process_tests(args, log, sum_results, log_results, variant):
 										line_type = log_regex["matches"]["testpnt"][:-2].lower()
 										rc = report.add_line_marker(yoyo_log_id, "test_point", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=line_type)
 
+							elif log_regex["type"] == "process_seg":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+
+								# add the process seg line marker...
+								line_marker = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=log_regex["matches"]["type"].lower())
+
+								if line_marker > 0:
+									known_crash_id = None
+
+									# Get the known crashes for this test and this crash type.
+									known_crashes_rows = report.get_known_crashes_for_test(test_root_id, log_regex["matches"]["type"].lower())
+
+									if known_crashes_rows:
+
+										if isinstance(known_crashes, list):
+											# Read from the log file the process data.
+											with open(os.path.join(variant, "yoyo.log"),"Ur") as fp_in:
+
+												lines = fp_in.readlines()
+
+												max_lines = len(lines)
+
+												# We want some lines before and after the crash part.. in order to match against..
+												count = 0
+												for line_index in range(log_regex["end"], max_lines):
+													if len(lines[line_index]) > 1:
+														count = count + 1
+
+														# look to see if we have hit a testpoint line
+														result = test_point_regex.search(lines[line_index])
+
+														if result:
+															matches = result.groupdict()
+															if matches["testpnt"] != "NOTE: ":
+																break
+
+													# check to see if we have gone ahead ten lines
+													if count >= 10:
+														break
+
+												lines = lines[:line_index + 1]
+
+												count = 0
+												for line_index in range(log_regex["start"], 0, -1):
+													if len(lines[line_index]) > 1:
+														count = count + 1
+
+													if count >= 3:
+														break
+
+												lines = lines[line_index:]
+
+												text_block = "".join(lines)
+
+											# compare lines to known crashes
+											for known_crash_row in known_crashes_rows:
+												# Index 1 should be the regex string pattern, index 0 should be the table id for the pattern.
+												regex = re.compile(known_crash_row[1])
+												result = regex.search(text_block)
+
+												if result:
+													known_crash_id = known_crash_row[0]
+													break
+
+									rc = report.add_crash_exec(line_marker, log_regex["matches"]["type"].lower(), known_crash_id)
+								else:
+									rc = -1
 							elif log_regex["type"] == "download":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
@@ -1925,7 +2003,13 @@ def process_tests(args, log, sum_results, log_results, variant):
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
+							elif log_regex["type"] == "exec_format_error":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
+							elif log_regex["type"] == "send-class":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							else:
 								log.out("-------------------------------- " + str(log_regex["type"]) + " --------------------------------", DEBUG, v=3)
