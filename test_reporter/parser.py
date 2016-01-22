@@ -1706,7 +1706,11 @@ def process_tests(args, log, sum_results, log_results, variant):
 					report.disable_pre_check()
 			else:
 				rc = report.set_exec_id(args["exec_id"])
-				report.enable_pre_check()
+				# precheck is enabled by default. So if we startup and have an exec id it should be on already
+				# if insteasd the first time we import a variant we would use the regist the exec id. Then for the next
+				# variant we would use the exec we already register and hit this point. But we don't want to enable precheck here.
+
+
 
 		# see if we have source information in the general file.
 		if rc > 0:

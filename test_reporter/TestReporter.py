@@ -2151,6 +2151,7 @@ class TestReporter(My_SQL):
 		if self.common_check():
 
 			if self.look_for_exists_already:
+				print "\t\t\t\t\t\t\t GETTTING LINE MARKER ID"
 				line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
 			else:
 				line_marker_id = TestReporter.ERROR_NOT_FOUND_ERROR
