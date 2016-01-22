@@ -514,7 +514,6 @@ class TestReporter(My_SQL):
 		else:
 			if display_error:
 				self._error_macro("(" + str(line_marker_type) + ") line marker type not found. Try calling add first.")
-				raise EXCEPTION("See previous error message")
 			return TestReporter.ERROR_LINE_MARKER_ID_NOT_FOUND_ERROR
 
 	def get_line_marker_sub_type_id(self, sub_type, display_error=True):
@@ -523,7 +522,6 @@ class TestReporter(My_SQL):
 		else:
 			if display_error:
 				self._error_macro("("+str(sub_type) + ") line marker sub type not found. Try calling add first.")
-				raise EXCEPTION("See previous error message")
 			return TestReporter.ERROR_LINE_MARKER_SUB_ID_NOT_FOUND_ERROR
 
 	def add_line_marker_type(self, line_marker_type, comment=None):
@@ -2151,7 +2149,6 @@ class TestReporter(My_SQL):
 		if self.common_check():
 
 			if self.look_for_exists_already:
-				print "\t\t\t\t\t\t\t GETTTING LINE MARKER ID"
 				line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
 			else:
 				line_marker_id = TestReporter.ERROR_NOT_FOUND_ERROR
