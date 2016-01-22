@@ -63,15 +63,13 @@ class My_SQL(object):
 		else:
 			return False
 
-	def _error_macro(self, msg, verbosity=0, frameinfo=None, exception=False):
+	def _error_macro(self, msg, verbosity=0, frameinfo=None):
 		self.error = msg
 
 		if frameinfo is None:
 			frameinfo =  getframeinfo(stack()[1][0])
-		if exception:
-			self.log.out(self.error, EXCEPTION, v=verbosity, mask=self.mask, frameinfo=frameinfo)
-		else:
-			self.log.out(self.error, ERROR, v=verbosity, mask=self.mask, frameinfo=frameinfo)
+
+		self.log.out(self.error, ERROR, v=verbosity, mask=self.mask, frameinfo=frameinfo)
 
 	def get_log(self):
 		return self.log

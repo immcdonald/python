@@ -56,6 +56,7 @@ class TestReporter(My_SQL):
 	'''
 	def init(self):
 		super(TestReporter, self).init()
+		self.look_for_exists_already = True
 		self.reset_project_root()
 		self.line_marker_dict = {}
 		self.line_marker_sub_type_dict={}
@@ -76,6 +77,7 @@ class TestReporter(My_SQL):
 		N/A
 	'''
 	def __init__(self, host, usr, passwd, db_name, log=None, commit_on_close=False, mask=None):
+
 		self.init()
 		super(TestReporter, self).__init__(host, usr, passwd, db_name, log, commit_on_close, mask)
 		self.pre_check = True
@@ -98,6 +100,20 @@ class TestReporter(My_SQL):
 			rc = self.load_line_marker_sub_types()
 
 		return rc
+
+	def disable_pre_check(self):
+		if self.look_for_exists_already:
+			self.look_for_exists_already = False
+			print("Add precheck is now disabled")
+		else:
+			print("Add precheck was already disabled")
+
+	def enable_pre_check(self):
+		if self.look_for_exists_already:
+			print("Add precheck was already enabled.")
+		else:
+			self.look_for_exists_already = True
+			print("Add precheck is now enabled.")
 
 	def check_ftp_path(self, host, user_name, password, path):
 		ftp = my_ftp(host, user_name, password, log=self.get_log())
@@ -497,7 +513,8 @@ class TestReporter(My_SQL):
 			return self.line_marker_dict[line_marker_type]
 		else:
 			if display_error:
-				self._error_macro("(" + str(line_marker_type) + ") line marker type not found. Try calling add first.", True)
+				self._error_macro("(" + str(line_marker_type) + ") line marker type not found. Try calling add first.")
+				raise EXCEPTION("See previous error message")
 			return TestReporter.ERROR_LINE_MARKER_ID_NOT_FOUND_ERROR
 
 	def get_line_marker_sub_type_id(self, sub_type, display_error=True):
@@ -505,7 +522,8 @@ class TestReporter(My_SQL):
 			return self.line_marker_sub_type_dict[sub_type]
 		else:
 			if display_error:
-				self._error_macro("("+str(sub_type) + ") line marker sub type not found. Try calling add first.", True)
+				self._error_macro("("+str(sub_type) + ") line marker sub type not found. Try calling add first.")
+				raise EXCEPTION("See previous error message")
 			return TestReporter.ERROR_LINE_MARKER_SUB_ID_NOT_FOUND_ERROR
 
 	def add_line_marker_type(self, line_marker_type, comment=None):
@@ -861,7 +879,14 @@ class TestReporter(My_SQL):
 
 
 	def add_variant_exec(self, target, arch, variant, time=None, comment=None):
-		variant_exec_id = self.get_variant_exec_id(target, arch, variant, display_error=False)
+
+		if self.look_for_exists_already:
+			variant_exec_id = self.get_variant_exec_id(target, arch, variant, display_error=False)
+		else:
+			if self.common_check(project_root=True, project_child=True, exec_id=True):
+				variant_exec_id = TestReporter.ERROR_NOT_FOUND_ERROR
+			else:
+				variant_exec_id = TestReporter.ERROR_NOT_READY_ERROR
 
 		if variant_exec_id != TestReporter.ERROR_NOT_FOUND_ERROR:
 			self.reset_variant_exec_id()
@@ -1101,7 +1126,13 @@ class TestReporter(My_SQL):
 			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_bug_exec(self, line_marker_id, recorder_type, unique_ref, comment=None):
-		bug_exec_id = self.get_bug_exec_id(line_marker_id, recorder_type, unique_ref, display_error=False)
+		if self.look_for_exists_already:
+			bug_exec_id = self.get_bug_exec_id(line_marker_id, recorder_type, unique_ref, display_error=False)
+		else:
+			if self.common_check():
+				bug_exec_id = TestReporter.ERROR_NOT_FOUND_ERROR
+			else:
+				bug_exec_id = TestReporter.ERROR_NOT_READY_ERROR
 
 		if bug_exec_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			project_bug_id = self.get_project_bug_id(recorder_type, unique_ref)
@@ -1847,7 +1878,14 @@ class TestReporter(My_SQL):
 
 		if os.path.exists(full_attachment_src_path):
 			if self.common_check(project_root=True, project_child=True):
-				attachment_id = self.get_attachment_id(full_attachment_src_path, display_error=False)
+
+				if self.look_for_exists_already:
+					attachment_id = self.get_attachment_id(full_attachment_src_path, display_error=False)
+				else:
+					if self.common_check(project_root=True, project_child=True):
+						attachment_id = TestReporter.ERROR_NOT_FOUND_ERROR
+					else:
+						attachment_id = ERROR_NOT_READY_ERROR
 
 				if attachment_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 					attachment_type_id = self.get_attachment_type_id(attachment_type)
@@ -2059,7 +2097,7 @@ class TestReporter(My_SQL):
 
 	def get_line_marker_id(self, attachment_id, marker_type, start_line, end_line=None, sub_type="general", display_error=True):
 		if self.common_check():
-			marker_type_id = self.get_line_marker_type_id(marker_type,  True)
+			marker_type_id = self.get_line_marker_type_id(marker_type)
 
 			if marker_type_id > 0:
 
@@ -2111,7 +2149,12 @@ class TestReporter(My_SQL):
 
 	def add_line_marker(self, attachment_id, marker_type, start_line, end_line=None, test_exec_id=None, sub_type="general", comment=None):
 		if self.common_check():
-			line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
+
+			if self.look_for_exists_already:
+				line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
+			else:
+				line_marker_id = TestReporter.ERROR_NOT_FOUND_ERROR
+
 			if line_marker_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 				marker_type_id = self.get_line_marker_type_id(marker_type)
 				if marker_type_id > 0:
@@ -2209,7 +2252,14 @@ class TestReporter(My_SQL):
 			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_test_exec(self, result, test_suite_name, test_exec_path, test_name, test_params, exec_time=None, extra_time=None, revision_string=None, mem_before=None, mem_after=None, comment=None):
-		test_exec_id = self.get_test_exec_id(result, test_suite_name, test_exec_path, test_name, test_params, revision_string, display_error=None)
+
+		if self.look_for_exists_already:
+			test_exec_id = self.get_test_exec_id(result, test_suite_name, test_exec_path, test_name, test_params, revision_string, display_error=None)
+		else:
+			if self.common_check(project_root=True, project_child=True, exec_id=True, variant_exec_id=True):
+				test_exec_id = TestReporter.ERROR_NOT_FOUND_ERROR
+			else:
+				test_exec_id = TestReporter.ERROR_NOT_READY_ERROR
 
 		if test_exec_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			result_id = self.get_tag_result_id(result)
@@ -2368,8 +2418,14 @@ class TestReporter(My_SQL):
 			self._error_macro("Conversion of value from X to float failed")
 			return -1
 
+		if self.look_for_exists_already:
+			test_metric_id = self.get_test_metric_id(line_marker_id, value, unit, display_error=False)
+		else:
+			if self.common_check():
+				test_metric_id = TestReporter.ERROR_NOT_FOUND_ERROR
+			else:
+				test_metric_id = TestReporter.ERROR_NOT_READY_ERROR
 
-		test_metric_id = self.get_test_metric_id(line_marker_id, value, unit, display_error=False)
 
 		if test_metric_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			fields = []
@@ -2429,7 +2485,14 @@ class TestReporter(My_SQL):
 			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_crash_exec(self, line_marker_id, crash_type, known_crash_id=None):
-		crash_exec_id = self.get_crash_exec_id(line_marker_id, crash_type, display_error=False)
+
+		if self.look_for_exists_already:
+			crash_exec_id = self.get_crash_exec_id(line_marker_id, crash_type, display_error=False)
+		else:
+			if self.common_check():
+				crash_exec_id = TestReporter.ERROR_NOT_FOUND_ERROR
+			else:
+				crash_exec_id = TestReporter.ERROR_NOT_READY_ERROR
 
 		if crash_exec_id == TestReporter.ERROR_NOT_FOUND_ERROR:
 			crash_type_id = self.get_crash_type_id(crash_type)
