@@ -24,7 +24,9 @@ scan_enum = {"NOTHING": 0,
 # 6 - Show all output lines for log file
 # 5 - Show lines that were not processed by the parser for the log file
 
-test_point_prefix = ["METRIC",
+
+test_point_prefix = [
+					# METRIC: is purposely keep out of this list and handled seperately.
 					 "START",
 					 "STOP",
 					 "POINT",
@@ -51,16 +53,18 @@ arch_type_file_path_breaks = ["tests",
 							]
 
 expected_sub_strings = ["(timeout) where is the STOP message?",
-					    "Assertion failed",
-					    "program crashed",
-					    "premature exit",
-					    "no pass",
-					    "no point",
-					    "kernel crash",
-					    "test not found",
-					    "never started",
-					    "kernel crash kdump",
-					    "No such file or directory"]
+						"(timeout) kermit not responsive",
+						"Assertion failed",
+						"program crashed",
+						"premature exit",
+						"no pass",
+						"no point",
+						"kernel crash",
+						"test not found",
+						"never started",
+						"kernel crash kdump",
+						"No such file or directory",
+						"cannot transfer file to target"]
 
 valid_execution_types = ["daily", "weekend", "sanity"]
 
@@ -219,36 +223,93 @@ def add_project(args, log):
 		"sigsegv",
 		"sigill",
 		"sigbus",
+		"sigtrap",
 		"shutdown",
 		"kdump"
 	]
 
 	line_markers = [
-		"host_system",
-		"log_start_time_stamp",
+		"assertion_failure",
 		"boot",
 		"boot_failure",
-		"reboot",
-		"download",
-		"test_suite",
-		"test",
-		"sum",
-		"exec"
-		"stop",
-		"error",
-		"memory fault",
-		"ldd_fault",
-		"bad_transfer",
+		"buffer_overflow",
 		"bug_ref",
-		"sigsegv",
-		"sigill",
-		"sigbus",
-		"shutdown",
-		"kdump",
-		"stack_smashing",
+		"download",
+		"error",
+		"exec",
+		"execute",
+		"exec_format_error",
 		"failed_library_load",
+		"full_test",
+		"host_system",
+		"kdump",
+		"kermit_send",
+		"kernel_start",
+		"ldd_fault",
 		"log_end_time_stamp",
-		"assertion_failure"
+		"log_start_time_stamp",
+		"memory_fault",
+		"mem_proc",
+		"malloc_check_fail",
+		"metric",
+		"process_seg",
+		"reboot",
+		"send-class",
+		"shutdown",
+		"stack_smashing",
+		"stop",
+		"yoyo_log",
+		"yoyo_sum",
+		"test_suite",
+		"test_point",   # for none final test results
+		"timeout",
+
+		# Test ones are for final results only
+		"pass",
+		"fail",
+		"xpass",
+		"xfail",
+		"unresolved",
+		"untested",
+		"unsupported",
+		"error"
+	]
+
+	line_marker_sub_types = [
+		"Assertion failed",
+		"program crashed",
+		"premature exit",
+		"no pass",
+		"no point",
+		"bad transfer",
+		"kernel crash",
+		"test not found",
+		"never started",
+		"kernel crash kdump",
+		"No such file or directory",
+		"sigbus",
+		"sigill",
+		"sigsegv",
+		"sigtrap",
+		"timeout",
+		"start",
+		"stop",
+		"point",
+		"err",
+		"error",
+		"warn",
+		"boot",
+
+		# These are for none final test results
+		"start",
+		"stop",
+		"pass",
+		"fail",
+		"passx",
+		"failx",
+		"unres",
+		"untested",
+		"unsup"
 	]
 
 	if args["reporter"].check_ftp_path(args["ftp_host"], args["ftp_user_name"], args["ftp_password"], args["set_storage_path"]):
@@ -291,6 +352,10 @@ def add_project(args, log):
 						if args["reporter"].add_line_marker_type(line_marker) < 0:
 							return -1
 
+					for line_marker_sub_type in line_marker_sub_types:
+						if args["reporter"].add_line_marker_sub_type(line_marker_sub_type) < 0:
+							return -1
+
 					if args["reporter"].add_attachment_type("yoyo_log", "plain/text", "Yoyo Log File") < 0:
 						return -1
 
@@ -319,6 +384,10 @@ def add_project(args, log):
 						return -1
 
 					if args["reporter"].add_attachment_type("pid", "plain/text", "yoyo pid file") < 0:
+						return -1
+
+					# Create one test_suite as a catch all in case one is not defined.
+					if args["reporter"].add_test_suite("lost_and_found") < 0:
 						return -1
 
 					args["reporter"].commit()
@@ -597,7 +666,6 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 
 	# Use a list and index so that items stay in the order they are found
 	report["time_stamp_indexes"] = []
-	report["test_point_indexes"] = []
 	report["parsed_lines"] = []
 
 	with open(os.path.join(yoyo_sum_path, "yoyo.sum"), "Ur") as fp_in:
@@ -605,21 +673,29 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 		sum_file_data = fp_in.read().splitlines()
 		index = 0
 		size = len(sum_file_data)
+
+		none_error_counter = 0
 		while index < size:
 			if len(sum_file_data[index]) == 0:
 				index = index + 1
 				continue
 
-			no_match= True
+			no_match = True
 
 			result = line_regex["general_tst_pnt"].search(sum_file_data[index])
 			if result:
 				matches = result.groupdict()
+
 				if matches["testpnt"][:-2] in test_point_prefix:
+					if matches["testpnt"][:-2] == "ERROR":
+						temp_string = matches["the_rest"].replace("\\", "/")
+
+						if temp_string.find("/") == -1:
+							matches["the_rest"] = "/error/tests/error/error error:" + matches["the_rest"]
+					else:
+						none_error_counter = none_error_counter + 1
 
 					matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
-
-					report["test_point_indexes"].append(len(report["parsed_lines"]))
 					report["parsed_lines"] .append({"type": "TestPoint", "matches": matches, "start":  index, "end": index})
 					no_match = False
 
@@ -659,27 +735,29 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 
 			index = index + 1
 
-		if len(report["test_point_indexes"]) == 0:
-			result = line_regex["test_suite"].search("../../lost_and_found.exp ...")
-			if result:
-				matches = result.groupdict()
-				test_suite_name = matches["test_suite"]
-				test_suite_name = test_suite_name.replace("\\", "/")
-				pos = test_suite_name.rfind("/")
+	if none_error_counter == 0:
+		log.out("                                                            ADDING BOOTING ERROR BECAUSE OF SUM RESULTS!!!!!")
 
-				if pos > 0:
-					test_suite_name = test_suite_name[(pos+1):]
 
-				report["parsed_lines"].append({"type": "test_suite", "test_suite_name": test_suite_name, "matches": matches, "start":  -1, "end": -1})
+		result = line_regex["test_suite"].search("../../lost_and_found.exp ...")
+		if result:
+			matches = result.groupdict()
+
+			test_suite_name = matches["test_suite"]
+			test_suite_name = test_suite_name.replace("\\", "/")
+			pos = test_suite_name.rfind("/")
+
+			if pos > 0:
+				test_suite_name = test_suite_name[(pos+1):]
+
+			report["parsed_lines"].append({"type": "test_suite", "test_suite_name": test_suite_name, "matches": matches, "start":  index, "end": index})
 
 		result = line_regex["general_tst_pnt"].search("FAIL: /home/tests/non/test/bad_boot")
 		if result:
 			matches = result.groupdict()
 			if matches["testpnt"][:-2] in test_point_prefix:
 				matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
-				report["test_point_indexes"].append(len(report["parsed_lines"]))
 				report["parsed_lines"].append({"type": "TestPoint", "matches": matches, "start":  -1, "end": -1})
-
 	return report
 
 def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
@@ -751,6 +829,7 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 		max_lines = len(yoyo_file_data)
 
 		b_extra_debug = False
+		none_error_counter = 0
 
 		while index < max_lines:
 
@@ -907,6 +986,11 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 						if matches["testpnt"][:-2] in test_point_prefix:
 							final_flag = False
 
+							if matches["testpnt"][:-2] == "ERROR":
+								temp_string = matches["the_rest"].replace("\\", "/")
+								if temp_string.find("/") == -1:
+									matches["the_rest"] = "/error/tests/error/error:" + matches["the_rest"]
+
 							# Certain test point keys are not final results
 							if matches["testpnt"][:-2] != "START" and  matches["testpnt"][:-2] != "STOP" and matches["testpnt"][:-2] != "NOTE" and matches["testpnt"][:-2] != "BOOT" and matches["testpnt"][:-2] != "boot" and matches["testpnt"][:-2] != "POINT":
 								# The diffference between a final testpoint and a result test point can be very small.
@@ -916,11 +1000,12 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 										if sum_regex["matches"]["testpnt"] == matches["testpnt"]:
 											the_rest = truncate_test_line(args, log, matches["the_rest"])
 											if sum_regex["matches"]["the_rest"] == the_rest:
+												if matches["testpnt"] != "ERROR: ":
+													none_error_counter = none_error_counter + 1
 												matches["the_rest"] = the_rest
 												final_flag = True
 												break
 
-							report["test_point_indexes"].append(len(report["parsed_lines"]))
 							report["parsed_lines"] .append({"type": "TestPoint", "final_flag": final_flag, "test_suite_name":	last_test_suite, "matches": matches, "start":  index, "end": index})
 							no_match = False
 					elif key == "bug_ref":
@@ -943,29 +1028,27 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 				log.out(yoyo_file_data[index], DEBUG, v=8)
 			index = index + 1
 
+	if none_error_counter == 0:
+		log.out("                                                            ADDING BOOTING ERROR BECAUSE OF LOG RESULTS!!!!!")
 
-		# if no test where found that this was likely a bad boot..
-		# so create a full test so it gets tracked.
-		if len(report["test_point_indexes"]) == 0:
-			result = line_regex["test_suite"].search("../../lost_and_found.exp ...")
-			if result:
-				matches = result.groupdict()
-				test_suite_name = matches["test_suite"]
-				test_suite_name = test_suite_name.replace("\\", "/")
-				pos = test_suite_name.rfind("/")
+		result = line_regex["test_suite"].search("../../lost_and_found.exp ...")
+		if result:
+			matches = result.groupdict()
+			test_suite_name = matches["test_suite"]
+			test_suite_name = test_suite_name.replace("\\", "/")
+			pos = test_suite_name.rfind("/")
 
-				if pos > 0:
-					test_suite_name = test_suite_name[(pos+1):]
+			if pos > 0:
+				test_suite_name = test_suite_name[(pos+1):]
 
-				report["parsed_lines"].append({"type": "test_suite", "test_suite_name": test_suite_name, "matches": matches, "start":  -1, "end": -1})
+			report["parsed_lines"].append({"type": "test_suite", "test_suite_name": test_suite_name, "matches": matches, "start":  -1, "end": -1})
 
 		result = line_regex["general_tst_pnt"].search("FAIL: /home/tests/non/test/bad_boot")
 		if result:
 			matches = result.groupdict()
 			if matches["testpnt"][:-2] in test_point_prefix:
 				matches["the_rest"] = truncate_test_line(args, log, matches["the_rest"])
-				report["test_point_indexes"].append(len(report["parsed_lines"]))
-				report["parsed_lines"].append({"type": "TestPoint", "final_flag": True, "matches": matches, "start":  -1, "end": -1})
+				report["parsed_lines"].append({"type": "TestPoint", "final_flag": True,  "matches": matches, "start":  -1, "end": -1})
 
 	return report
 
@@ -976,10 +1059,13 @@ def print_list(log, the_list, pre_fix=""):
 
 def get_subtype(args, log, search_string):
 	# Lets not look for : with in quotes on the command line.
+
 	double_qoute_pos = search_string.rfind('"')
 	single_qoute_pos = search_string.rfind("'")
 
 	max_quote = max(double_qoute_pos, single_qoute_pos)
+
+	#blahblah/test param:kdumper.0000
 
 	if max_quote > 0:
 		temp = search_string[(max_quote +1):]
@@ -987,31 +1073,35 @@ def get_subtype(args, log, search_string):
 		temp = search_string
 		max_quote = 0
 
-	pos = temp.rfind(":")
+	splitter_position = temp.rfind(":")
 
-	if pos > 0:
-		sub_string = temp[pos+1:].strip()
+	if splitter_position > 0:
+		sub_string = temp[splitter_position+1:].strip()
 
-		# looking now for kernel crash kdump.00000
-		pos = sub_string.rfind(".")
+		# Looking now for kernel crash kdump.00000
+		period_pos = sub_string.rfind(".")
 
-		if pos > 0:
-			sub_string = sub_string[0:pos]
+		if period_pos > 0:
+			sub_string = sub_string[0:period_pos]
 
 		if sub_string in expected_sub_strings:
 			if sub_string == "(timeout) where is the STOP message?":
-				return "timeout", search_string[:max_quote+pos]
+				return "timeout", search_string[:max_quote+splitter_position]
+			elif sub_string == "(timeout) kermit not responsive":
+				return "bad transfer", search_string[:max_quote+splitter_position]
+			elif sub_string == "cannot transfer file to target":
+				return "bad transfer", search_string[:max_quote+splitter_position]
 			else:
-				return sub_string, search_string[:max_quote+pos]
+				return sub_string, search_string[:max_quote+splitter_position]
 		else:
-			log.out("(" + sub_string + " found after ':', but is not a recognised sub type value) [" + search_string + "]", EXCEPTION)
-			return None, search_string
+			log.out("(" + sub_string + ") found after ':', but is not a recognised sub type value) [" + search_string + "]", EXCEPTION)
+			return None, search_string[:max_quote+splitter_position]
 	else:
 		return None, search_string
 
 
 def init_test_structure():
-	return {"test_path": None, "test_name": None, "test_params": None, "test_suite": None, "indexes":[], "last_log_match": scan_enum["NOTHING"], "revision": None}
+	return {"test_path": None, "test_name": None, "test_params": None, "test_suite": None, "log_parse_line_indexes":[], "last_log_match": scan_enum["NOTHING"], "exec_time": -1, "download_time": -1,"log_start":-1, "log_end":-1, "revision": None, "mem_before":-1, "mem_after":-1}
 
 def is_new_test(args, logs, last_match, current_match):
 	if last_match == scan_enum["DOWNLOAD_START"]:
@@ -1023,6 +1113,8 @@ def is_new_test(args, logs, last_match, current_match):
 	if last_match == scan_enum["SEND_TEST"]:
 		if current_match == scan_enum["DOWNLOAD_START"]:
 			return True
+		if current_match == scan_enum["SEND_TEST"]:
+			return True
 		else:
 			return False
 
@@ -1030,6 +1122,8 @@ def is_new_test(args, logs, last_match, current_match):
 		if current_match == scan_enum["DOWNLOAD_START"]:
 			return True
 		elif current_match == scan_enum["SEND_TEST"]:
+			return True
+		elif current_match == scan_enum["DOWNLOAD_STOP"]:
 			return True
 		else:
 			return False
@@ -1041,6 +1135,8 @@ def is_new_test(args, logs, last_match, current_match):
 		elif current_match == scan_enum["SEND_TEST"]:
 			return True
 		elif current_match == scan_enum["DOWNLOAD_STOP"]:
+			return True
+		elif current_match == scan_enum["EXEC_START"]:
 			return True
 		else:
 			return False
@@ -1066,6 +1162,12 @@ def is_new_test(args, logs, last_match, current_match):
 			return True
 		elif current_match == scan_enum["EXEC_START"]:
 			return True
+		elif current_match == scan_enum["EXEC_STOP"]:
+			return True
+
+		# The STOP and FINAL testpoint are some times interchanged in the log so do not start a new test if there order is wrong.
+
+
 		else:
 			return False
 
@@ -1081,6 +1183,11 @@ def is_new_test(args, logs, last_match, current_match):
 		elif current_match == scan_enum["EXEC_STOP"]:
 			return True
 		elif current_match == scan_enum["FREE_FOR_ALL"]:
+			return True
+
+		# The STOP and FINAL testpoint are some times interchanged in the log so do not start a new test if there order is wrong.
+
+		elif current_match == scan_enum["FINAL"]:
 			return True
 		else:
 			return False
@@ -1100,6 +1207,8 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 	kdump_regex = re.compile("^kdump.(?P<index>\d{5,10})\.elf.gz$")
 	kdump_index_regex = re.compile("^kdump.(?P<index>\d{5,10})$")
+	test_point_regex = re.compile("(?P<testpnt>" + generate_regex_prefix() + ")(?P<the_rest>.*)")
+
 
 	last_test_suite = "lost_and_found"
 
@@ -1108,10 +1217,12 @@ def process_tests(args, log, sum_results, log_results, variant):
 	submit_dict["tests"] = []
 	submit_dict["test_suites"] = []
 
+	start_time = None
+	end_time = None
 	user_name = None
 
 	if variant[-1] == "/":
-		variant  = variant[0:-1]
+		variant = variant[0:-1]
 
 	variant_parts = variant.split("/")
 
@@ -1129,7 +1240,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 		if list_length == 1:
 			data = sum_results["parsed_lines"][sum_results["time_stamp_indexes"][0]]
 			if user_name == None:
-				user_name = data["matches"]["use_name"]
+				user_name = data["matches"]["user_name"]
 
 		elif list_length == 2:
 			data_1 = sum_results["parsed_lines"][sum_results["time_stamp_indexes"][0]]
@@ -1194,6 +1305,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 				submit_dict["sum_host_index"] = index
 
 		elif regex_data["type"] == "TestPoint":
+
 			if regex_data["matches"]["testpnt"] != "boot: " and  regex_data["matches"]["testpnt"] != "BOOT: " and regex_data["matches"]["testpnt"] != "NOTE: " and regex_data["matches"]["testpnt"] != "POINT: ":
 				regex_data["matches"]["the_rest"] = regex_data["matches"]["the_rest"].replace("\\", "/")
 
@@ -1220,6 +1332,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 				if submit_dict["tests"][test_index]["test_params"] is None and test_params is not None:
 					submit_dict["tests"][test_index]["test_params"] = test_params
 
+
 				submit_dict["tests"][test_index]["sum_index"] = index
 
 		elif regex_data["type"] ==	"user_time_stamp":
@@ -1231,40 +1344,70 @@ def process_tests(args, log, sum_results, log_results, variant):
 		index = index + 1
 
 
-	# ========================================================
-	# ========================================================
+	# We used yoyo.sum log to create a list of results and tests to sumbit.
+	# Now we need to look at yoyo.log and add extra information.
 
 
-	log_test_index = 0
+	# This index tracks where we are in the submit list index
+	# Start at -1 since no matches have been found yet.
+	sumbit_test_index = -1
 	index = 0
+
+	last_mem_proc = -1
+
 	max_index = len(log_results["parsed_lines"])
+
+	# Loop over the yoyo.log lines that have been parsed.
+
 	while index < max_index:
 		regex_data = log_results["parsed_lines"][index]
 
+		# check to see if this current parsed  line is a test suite line.
 		if regex_data["type"] == "test_suite" or regex_data["type"] == "test_suite_2":
 			last_test_suite = regex_data["matches"]["test_suite"]
 
+		# check to see if the current parsed line is a testpoint line.
 		elif regex_data["type"] == "TestPoint":
+
+			# check to see if this is a general test point line or a final result test point line.
 			if regex_data["final_flag"]:
+
 				regex_data["matches"]["the_rest"] = regex_data["matches"]["the_rest"].replace("\\", "/")
 
+				# Break up the line if it is int he format of <TEST POINT KEY>: <test path>/<test name> <test params>:<sub type information>
 				sub_type, full_test_path = get_subtype(args, log, regex_data["matches"]["the_rest"])
 
 				if sub_type is None:
 					sub_type = "general"
 
+				regex_data["sub_type"] = sub_type
+
  				test_path, test_name, test_params = get_test_parts(full_test_path)
 
- 				if submit_dict["tests"][log_test_index]["test_name"] == test_name and submit_dict["tests"][log_test_index]["test_path"] == test_path and submit_dict["tests"][log_test_index]["test_params"] == test_params:
- 					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["FINAL"]) is False:
-						submit_dict["tests"][log_test_index]["log_index"] = index
-						submit_dict["tests"][log_test_index]["indexes"].append(index)
+ 				if submit_dict["tests"][sumbit_test_index]["test_name"] == test_name and submit_dict["tests"][sumbit_test_index]["test_path"] == test_path and submit_dict["tests"][sumbit_test_index]["test_params"] == test_params:
+
+ 					# check to see if this is a new test or part of one we are working on.
+ 					if is_new_test(args, log, submit_dict["tests"][sumbit_test_index]["last_log_match"], scan_enum["FINAL"]) is False:
+
+						# Keep track of where we find the last line
+						submit_dict["tests"][sumbit_test_index]["log_index"] = index
+						submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+						submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 			else:
-				submit_dict["tests"][log_test_index]["indexes"].append(index)
+				# This is a general test point so just note it.
+				if sumbit_test_index > 0:
+					submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+					submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
 
 		elif regex_data["type"] == "bug_ref":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "process_seg":
+
 			# Sometimes we will have multiple process segments in a row that are the same type
 			for offset in range(index+1, max_index):
 				regex_data_2 = log_results["parsed_lines"][offset]
@@ -1275,134 +1418,212 @@ def process_tests(args, log, sum_results, log_results, variant):
 						index = offset
 				else:
 					break
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "download":
+
 			test_path, test_name, test_params = get_test_parts(regex_data["matches"]["test_path"])
 
 			b_new_test = False
-
-			if submit_dict["tests"][log_test_index]["test_name"] == test_name and submit_dict["tests"][log_test_index]["test_path"] == test_path and submit_dict["tests"][log_test_index]["test_params"] == test_params:
+			if submit_dict["tests"][sumbit_test_index]["test_name"] == test_name and submit_dict["tests"][sumbit_test_index]["test_path"] == test_path and submit_dict["tests"][sumbit_test_index]["test_params"] == test_params:
 				if regex_data["matches"]["mode"] == 'Start':
-					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["DOWNLOAD_START"]):
+					if is_new_test(args, log, submit_dict["tests"][sumbit_test_index]["last_log_match"], scan_enum["DOWNLOAD_START"]):
 						b_new_test = True
 				else:
-					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["DOWNLOAD_STOP"]):
+					if is_new_test(args, log, submit_dict["tests"][sumbit_test_index]["last_log_match"], scan_enum["DOWNLOAD_STOP"]):
 						b_new_test = True
 			else:
 				b_new_test = True
 
 			if b_new_test:
-				next_match = find_next_match_index(submit_dict["tests"], log_test_index, test_path, test_name, test_params)
+				# The current log_results["parsed_lines"][index] appears to be a new test..
+				# So look in the submit_dict["tests"] and try and find a test that matches it.
+				submit_test_index = find_next_match_index(submit_dict["tests"], sumbit_test_index, test_path, test_name, test_params)
 
-				if next_match >= 0:
-					log_test_index = next_match
+				if submit_test_index >= 0:
+					# move out
+					sumbit_test_index = submit_test_index
+					submit_dict["tests"][sumbit_test_index]["log_start"] = regex_data["start"]
 				else:
-
 					if test_params:
 						log.out("No match could be found for " + test_path + " " + test_name + " " + test_params, EXCEPTION)
 					else:
 						log.out("No match could be found for " + test_path + " " + test_name, EXCEPTION)
 
 			if regex_data["matches"]["mode"] == 'Start':
-				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["DOWNLOAD_START"]
-				submit_dict["tests"][log_test_index]["d_start_time"] = regex_data["date"]
+				submit_dict["tests"][sumbit_test_index]["last_log_match"] = scan_enum["DOWNLOAD_START"]
+				submit_dict["tests"][sumbit_test_index]["d_start_time"] = regex_data["date"]
 			else:
-				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["DOWNLOAD_STOP"]
-				if "d_start_time" in submit_dict["tests"][log_test_index]:
-					submit_dict["tests"][log_test_index]["download_time"] = (regex_data["date"] - submit_dict["tests"][log_test_index]["d_start_time"]).total_seconds()
-					del submit_dict["tests"][log_test_index]["d_start_time"]
+				submit_dict["tests"][sumbit_test_index]["last_log_match"] = scan_enum["DOWNLOAD_STOP"]
+				if "d_start_time" in submit_dict["tests"][sumbit_test_index]:
+					submit_dict["tests"][sumbit_test_index]["download_time"] = (regex_data["date"] - submit_dict["tests"][sumbit_test_index]["d_start_time"]).total_seconds()
+					del submit_dict["tests"][sumbit_test_index]["d_start_time"]
 
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
 
 		elif regex_data["type"] == "execute":
 			test_path, test_name, test_params = get_test_parts(regex_data["matches"]["test_path"])
 
 			b_new_test = False
 
-			if submit_dict["tests"][log_test_index]["test_name"] == test_name and submit_dict["tests"][log_test_index]["test_path"] == test_path and submit_dict["tests"][log_test_index]["test_params"] == test_params:
+			if submit_dict["tests"][sumbit_test_index]["test_name"] == test_name and submit_dict["tests"][sumbit_test_index]["test_path"] == test_path and submit_dict["tests"][sumbit_test_index]["test_params"] == test_params:
 				if regex_data["matches"]["mode"] == 'Start':
-					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["EXEC_START"]):
+					if is_new_test(args, log, submit_dict["tests"][sumbit_test_index]["last_log_match"], scan_enum["EXEC_START"]):
 						b_new_test = True
 				else:
-					if is_new_test(args, log, submit_dict["tests"][log_test_index]["last_log_match"], scan_enum["EXEC_STOP"]):
+					if is_new_test(args, log, submit_dict["tests"][sumbit_test_index]["last_log_match"], scan_enum["EXEC_STOP"]):
 						b_new_test = True
 			else:
 				b_new_test = True
 
 			if b_new_test:
-				next_match = find_next_match_index(submit_dict["tests"], log_test_index, test_path, test_name, test_params)
+				submit_test_index = find_next_match_index(submit_dict["tests"], sumbit_test_index, test_path, test_name, test_params)
 
-				if next_match >= 0:
-					log_test_index = next_match
+				if submit_test_index >= 0:
+					sumbit_test_index = submit_test_index
+					submit_dict["tests"][sumbit_test_index]["log_start"] = regex_data["start"]
+
 				else:
-					print pformat(submit_dict["tests"][log_test_index])
-					print pformat(submit_dict["tests"][log_test_index+1])
 					if test_params:
 						log.out("No match could be found for " + test_path + " " + test_name + " " + test_params, EXCEPTION)
 					else:
 						log.out("No match could be found for " + test_path + " " + test_name, EXCEPTION)
 
 			if regex_data["matches"]["mode"] == 'Start':
-				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["EXEC_START"]
-				submit_dict["tests"][log_test_index]["e_start_time"] = regex_data["date"]
+				submit_dict["tests"][sumbit_test_index]["last_log_match"] = scan_enum["EXEC_START"]
+				submit_dict["tests"][sumbit_test_index]["e_start_time"] = regex_data["date"]
 			else:
-				submit_dict["tests"][log_test_index]["last_log_match"] = scan_enum["EXEC_STOP"]
+				submit_dict["tests"][sumbit_test_index]["last_log_match"] = scan_enum["EXEC_STOP"]
 
-				if "e_start_time" in submit_dict["tests"][log_test_index]:
-					submit_dict["tests"][log_test_index]["exec_time"] = (regex_data["date"] - submit_dict["tests"][log_test_index]["e_start_time"]).total_seconds()
-					del submit_dict["tests"][log_test_index]["e_start_time"]
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+				if "e_start_time" in submit_dict["tests"][sumbit_test_index]:
+					submit_dict["tests"][sumbit_test_index]["exec_time"] = (regex_data["date"] - submit_dict["tests"][sumbit_test_index]["e_start_time"]).total_seconds()
+					del submit_dict["tests"][sumbit_test_index]["e_start_time"]
+
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 
 		elif regex_data["type"] == "kernel_start":
+
 			# see if we can determine the end line for this kernel start..
 			for offset in range(index + 1, max_index):
 				local_regex = log_results["parsed_lines"][offset]
 				if local_regex["type"] != "shutdown" and local_regex["type"] != "TestPoint"  and local_regex["type"] != "kdump":
 					regex_data["end"] = local_regex["start"] -1
 					break
+
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "kdump":
 			# see if we can determine the end line for this kernel start..
 			for offset in range(index + 1, max_index):
 				local_regex = log_results["parsed_lines"][offset]
+				regex_data["end"] = local_regex["start"] -1
+
 				if local_regex["type"] != "shutdown" and local_regex["type"] != "TestPoint":
-					regex_data["end"] = local_regex["start"] -1
 					break
 
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "shutdown":
-			# see if we can determine the end line for this kernel start..
+			# see if we can determine the end line for this shutdown..
 			for offset in range(index + 1, max_index):
 				local_regex = log_results["parsed_lines"][offset]
+				regex_data["end"] = local_regex["start"] -1
 				if local_regex["type"] != "TestPoint":
-					regex_data["end"] = local_regex["start"] -1
 					break
+
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "reboot":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "mem_proc":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+
+			if last_mem_proc > 0:
+				submit_dict["tests"][sumbit_test_index]["mem_before"] = last_mem_proc
+
+			mem_proc = -1
+			try:
+				mem_proc = int(regex_data["matches"]["proc_memory"])
+			except:
+				mem_proc = -1
+
+			if mem_proc > 0:
+				submit_dict["tests"][sumbit_test_index]["mem_after"] = mem_proc
+
+			last_mem_proc = mem_proc
+
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
 		elif regex_data["type"] == "kermit_send":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "exec":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "metric":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "buffer_overflow":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "memory_fault":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "assertion_failure":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "send-class":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "exec_format_error":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] == "malloc_check_fail":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
+
 		elif regex_data["type"] ==	"user_time_stamp":
 			pass
 		elif regex_data["type"] ==	"host":
 			pass
 		elif regex_data["type"] ==	"stack_smashing":
-			submit_dict["tests"][log_test_index]["indexes"].append(index)
+			if sumbit_test_index > 0:
+				submit_dict["tests"][sumbit_test_index]["log_parse_line_indexes"].append(index)
+				submit_dict["tests"][sumbit_test_index]["log_end"] = regex_data["end"]
 		else:
 			log.out(regex_data["type"] + " is not handled.........................", DEBUG, v=1)
 			#print pformat(log_results["parsed_lines"][index])
@@ -1410,7 +1631,14 @@ def process_tests(args, log, sum_results, log_results, variant):
 		index = index + 1
 
 
-	print pformat(submit_dict)
+	# print "=" * 80
+	# print " SUMBIT DIC AFTER PROCESSING SUM AND LOG"
+	# print "=" * 80
+
+
+	# print pformat(submit_dict)
+
+
 
 	if args["reporter"].connect():
 
@@ -1425,16 +1653,23 @@ def process_tests(args, log, sum_results, log_results, variant):
 						rc = 1
 					else:
 						rc = -1
+
+		# Set the use name
 		if rc > 0:
 			if user_name:
 				rc = report.set_user_name(user_name)
 
+		# Select the project the use name
 		if rc > 0:
 			rc = report.select_project_root(args["project"])
 
+		# Select the child project
 		if rc > 0:
 			rc = report.select_project_child(args["child"])
 
+		# Figure out if this is a daily or weekend regression from the
+		# general file.
+		# Use a set exec ID or get a new one
 		if rc > 0:
 			if args["exec_id"] <= 0:
 				if "general_file_info" in args:
@@ -1446,17 +1681,16 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 							if pos != -1:
 								exec_type = "daily"
-
-							pos = args["general_file_info"]["info"]["description"].find("weekend")
-
-							if pos != -1:
+							else:
 								exec_type = "weekend"
 
 							if exec_type:
-								args["exec_id"] = report.register_exec(exec_type)
+								args["exec_id"] = report.register_exec(exec_type, comment=args["general_file_info"]["info"]["description"])
 
 								if args["exec_id"] <= 0:
 									log.out(str(args["exec_id"]) + " returned as the exec id", ERROR)
+								else:
+									report.disable_pre_check()
 
 							else:
 								log.out("Unable to determine execution type.", ERROR)
@@ -1469,9 +1703,16 @@ def process_tests(args, log, sum_results, log_results, variant):
 						rc = -1
 				else:
 					args["exec_id"] = report.register_exec("weekend")
+					report.disable_pre_check()
 			else:
 				rc = report.set_exec_id(args["exec_id"])
+				# precheck is enabled by default. So if we startup and have an exec id it should be on already
+				# if insteasd the first time we import a variant we would use the regist the exec id. Then for the next
+				# variant we would use the exec we already register and hit this point. But we don't want to enable precheck here.
 
+
+
+		# see if we have source information in the general file.
 		if rc > 0:
 			log.out("Execute ID: " + str(args["exec_id"]))
 
@@ -1486,7 +1727,11 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 					if rc <= 0:
 						log.out("Adding src has failed.", ERROR)
+			else:
+				log.out("TODO: GET SOURCE INFOMATION FROM NONE GENERAL FILE SOURCE!!!", ERROR)
+				rc = -1
 
+		# Make sure that if the variant is not .smp that it is .uni
 		if rc > 0:
 			smp_pos = submit_dict["variant"].find("smp")
 			uni_pos = submit_dict["variant"].find("uni")
@@ -1510,25 +1755,30 @@ def process_tests(args, log, sum_results, log_results, variant):
 			else:
 				log.out("Adding variant root failed.", ERROR)
 
-
+		# Write all the test suites we are going to use, to the database.
 		if rc > 0:
 			if 'test_suites' in submit_dict:
 				# add test suites
+				log.out("Import Test Suites....", DEBUG, v=5)
 				for test_suite in submit_dict["test_suites"]:
 					rc = report.add_test_suite(test_suite)
 
 					if rc <= 0:
 						break
 
+		# Keep track of the sumbit id for the yoyo.log and yoyo.sum files
 		yoyo_log_id = -1
 		yoyo_sum_id = -1
 
+		# Write the files that are in the current variant directory to the database and storage.
 		if rc > 0:
+			log.out("Import Files....", DEBUG, v=5)
 			for item in os.listdir(args["full_root"]):
 				file_name = os.path.join(args["full_root"], item)
 				if os.path.isfile(file_name):
 					if item == "yoyo.log":
 						rc  = report.add_attachment("yoyo_log", file_name)
+
 						if rc > 0:
 							yoyo_log_id = rc
 					elif item == "yoyo.sum":
@@ -1559,90 +1809,347 @@ def process_tests(args, log, sum_results, log_results, variant):
 					print "Attachments Failed!!!!!!!!!!!!!!!!!"
 					break
 
+
+
+		if yoyo_log_id <= 0:
+			log.out("yoyo.log database id was less then zero", ERROR)
+			rc = -1
+
+		if yoyo_sum_id <= 0:
+			log.out("yoyo.sum database id was less then zero", ERROR)
+			rc = -1
+
+		# Now we need to write the actual test results to the database.
+		# Then we should right any line markers for intersting lines in the yoyo.log
 		if rc > 0:
+			log.out("Import Sum and Log Info Data ....", DEBUG, v=5)
+
+			# Go over all the tests that are in the submit test list.
 			for test in submit_dict["tests"]:
+				test_root_id  = -1
 				test_exec_id = -1
-				sum_index = test["sum_index"]
-				sum_line = sum_results["parsed_lines"][sum_index]
-				test_result = sum_line["matches"]["testpnt"][:-2]
-
 				exec_time = None
+				extra_time = None
 
-				if "exec_time" in test:
-					exec_time = test["exec_time"]
+				log.out("\tImport %s - %s %s ...." % (test["test_suite"], os.path.join(test["test_path"], test["test_name"]), test["test_params"]), DEBUG, v=5)
 
-				download_time = None
+				# First we need to get a Test id to assocaite all this data too.
 
-				if "download_time" in test:
-					download_time = test["download_time"]
-
+				# So start out by making sure the current test revision is in the database.
 				rc = report.add_test_revision(test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"])
 
 				if rc > 0:
-					test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=exec_time, extra_time=download_time)
+					# The test result should be stored in the sum file parsed line so get to that by:
+					if test["sum_index"] > 0:
+						sum_index = test["sum_index"]
+						sum_line = sum_results["parsed_lines"][sum_index]
+						test_result = sum_line["matches"]["testpnt"][:-2]
+
+						# Check to make sure this test root has been added.
+						# keep the test root id as we may need it later when looking for known crashes of a test.
+						test_root_id = report.add_test_root(test["test_path"], test["test_name"],  test["test_params"])
+
+						if test_root_id > 0:
+							test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=test["exec_time"], extra_time=test["download_time"], mem_before=test["mem_before"], mem_after=test["mem_after"])
+
+					else:
+						log.out("sum index was unexpectedly not greater then 0", ERROR)
+
 
 				if test_exec_id > 0:
-					if yoyo_sum_id > 0:
-						# Add line marker for sum...
-						rc = report.add_line_marker(yoyo_sum_id, "sum", sum_line["start"], end_line=sum_line["end"], test_exec_id=test_exec_id, sub_type=test["sub_type"])
-				else:
-					rc = test_exec_id
 
-				if rc > 0:
-					if yoyo_log_id > 0:
-						# add other sum log info, line markers, crash deeds and things..
-						for log_index in test["indexes"]:
-							log_regex = log_results["parsed_lines"][log_index];
-							print log_regex["type"]
+					# Write out the position of this tests final result in the yoyo.sum file.
+					sum_index = test["sum_index"]
+					sum_line = sum_results["parsed_lines"][sum_index]
+					rc = report.add_line_marker(yoyo_sum_id, "yoyo_sum", sum_line["start"], end_line=sum_line["end"], test_exec_id=test_exec_id, sub_type=test["sub_type"])
 
-							if log_regex["type"] == "download":
-								rc = report.add_line_marker(yoyo_log_id, "download", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+					if rc > 0:
+						# Write out the entire test range
+						rc = report.add_line_marker(yoyo_log_id, "full_test", test["log_start"], end_line=test["log_end"], test_exec_id=test_exec_id, sub_type=test["sub_type"])
 
-							elif log_regex["type"] == "reboot":
-								rc = report.add_line_marker(yoyo_log_id, "reboot", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+					if rc > 0:
+						# Look at the log_parse_line_indexes and write key information to the file.
+						for parsed_log_index in test["log_parse_line_indexes"]:
+							log_regex = log_results["parsed_lines"][parsed_log_index]
+
+
+							if log_regex["type"] == "TestPoint":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+
+								if log_regex["final_flag"]:
+									rc = report.add_line_marker(yoyo_log_id, "yoyo_log", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=log_regex["sub_type"])
+								else:
+									if args["test_point_level"] == 1:
+										# Don't line mark NOTE
+										if log_regex["matches"]["testpnt"] != "NOTE: ":
+											line_type = log_regex["matches"]["testpnt"][:-2].lower()
+											rc = report.add_line_marker(yoyo_log_id, "test_point", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=line_type)
+									elif args["test_point_level"] == 2:
+											line_type = log_regex["matches"]["testpnt"][:-2].lower()
+											rc = report.add_line_marker(yoyo_log_id, "test_point", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=line_type)
+									else:
+										# Don't import any test point lines except for the final
+										pass
+
+
+							elif log_regex["type"] == "process_seg":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+
+								# add the process seg line marker...
+								line_marker = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=log_regex["matches"]["type"].lower())
+
+								if line_marker > 0:
+									known_crash_id = None
+
+									# Get the known crashes for this test and this crash type.
+									known_crashes_rows = report.get_known_crashes_for_test(test_root_id, log_regex["matches"]["type"].lower())
+
+									if known_crashes_rows:
+
+										if isinstance(known_crashes, list):
+											# Read from the log file the process data.
+											with open(os.path.join(variant, "yoyo.log"),"Ur") as fp_in:
+
+												# Load with out new lines
+												lines = fp_in.read().splitlines()
+
+												# We want some lines before and after the crash part.. in order to match against..
+												count = 0
+												for line_index in range(log_regex["end"], max_lines):
+													if len(lines[line_index]) > 1:
+														count = count + 1
+
+														# look to see if we have hit a testpoint line
+														result = test_point_regex.search(lines[line_index])
+
+														if result:
+															matches = result.groupdict()
+															if matches["testpnt"] != "NOTE: ":
+																break
+
+													# check to see if we have gone ahead ten lines
+													if count >= 10:
+														break
+
+												lines = lines[:line_index + 1]
+
+												count = 0
+												for line_index in range(log_regex["start"], 0, -1):
+													if len(lines[line_index]) > 1:
+														count = count + 1
+
+													if count >= 3:
+														break
+
+												lines = lines[line_index:]
+
+
+												# Removing any white space from the start or end of the lines
+												# Remove any empty lines
+												temp_lines = []
+												for line in lines:
+													line = line.strip()
+													if len(line) > 0:
+														temp_lines.append(line)
+
+												lines = temp_lines
+
+												max_lines = len(lines)
+
+												text_block = "".join(lines)
+
+											# compare lines to known crashes
+											for known_crash_row in known_crashes_rows:
+												# Index 1 should be the regex string pattern, index 0 should be the table id for the pattern.
+
+												# We want to remove new_lines from the pattern
+												regex_pattern_lines = known_crash_row[1].splitlines()
+
+												# remove any extra preceeding and endind white space from each line
+												# remove any empty lines.
+												temp_lines = []
+												for line in regex_pattern_lines:
+													line = line.strip()
+													if len(line) > 0:
+														temp_lines.append(line)
+
+												regex_pattern_lines = temp_lines
+
+												# Compile the regex pattern
+												regex = re.compile("".join(regex_pattern_lines))
+												result = regex.search(text_block)
+
+												if result:
+													known_crash_id = known_crash_row[0]
+													break
+
+									rc = report.add_crash_exec(line_marker, log_regex["matches"]["type"].lower(), known_crash_id)
+								else:
+									rc = line_marker
+
+
+							elif log_regex["type"] == "download":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "kermit_send":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "execute":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "exec":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "mem_proc":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "mem_proc":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "metric":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+								if rc > 0:
+									log_regex = log_results["parsed_lines"][parsed_log_index]
+									rc = report.add_test_metric(rc, log_regex["matches"]["value"], log_regex["matches"]["units"], log_regex["matches"]["desc"])
 
 							elif log_regex["type"] == "bug_ref":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 
 								log_regex["matches"]["bug_type"] = log_regex["matches"]["bug_type"].lower()
 								if log_regex["matches"]["bug_type"] == "jira":
 									log_regex["matches"]["bug_type"] = "ji"
 
-								# Make sure the bug root is added
+								# Make sure that the bug root exists
 								rc = report.add_bug_root(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
-								print "bug root", rc
 
 								# Make sure the project bug is added
 								if rc > 0:
 									rc = report.add_project_bug(log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
-									print "bug project", rc
 
-
-								# Add the line that bug occured one
+								# Now track where it was seen within the log file.
 								if rc > 0:
 									rc = report.add_line_marker(yoyo_log_id, "bug_ref", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
-									print "line marker", rc
 
-								# track that the bug occured during this execution.
+								# track that the bug occured during this execution and use the log marker above.
 								if rc > 0:
 									rc = report.add_bug_exec(rc, log_regex["matches"]["bug_type"], log_regex["matches"]["value"])
-									print "bug exec", rc
+							elif log_regex["type"] == "kdump":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 
+								# add the kdump line marker...
+								line_marker = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+								if line_marker > 0:
+
+									kdump_file_name = "kdump."+str(log_regex["matches"]["index"])
+									full_attached_path = os.path.join(variant, kdump_file_name)
+
+									# get the attachment id for this index file.
+									kdump_index_id = report.get_attachment_id(full_attached_path)
+
+									if kdump_index_id > 0:
+										# Open the local kdump index file
+											with open(full_attached_path,"Ur") as fp_in:
+												# read in with new lines
+												lines = fp_in.readlines()
+
+											kdump_line_index = 0
+											max_lines = len(lines)
+											shutdown_found_line_index  = -1
+
+											for kdump_line_index in range(0, len(lines)):
+												# scan for the shutdown message
+												if lines[kdump_line_index].find("Shutdown[") != -1:
+													shutdown_found_line_index = kdump_line_index
+													break
+
+											if shutdown_found_line_index != -1:
+												rc = report.add_line_marker(kdump_index_id, 'shutdown', shutdown_found_line_index, end_line=max_lines, test_exec_id=test_exec_id)
+
+												log.out("TODO: Compare the shutdown and GDB stuff to known crash patterns and update if this is known")
+									else:
+										log.out("Failed to find attachment id for kdump." + str(log_regex["matches"]["index"]), ERROR)
+								else:
+									rc = line_marker;
+							elif log_regex["type"] == "shutdown":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, 'shutdown',  log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+								log.out("TODO: Compare the shutdown known crash patterns and update if this is known")
+
+							elif log_regex["type"] == "kernel_start":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "assertion_failure":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "buffer_overflow":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "memory_fault":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "malloc_check_fail":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "reboot":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "exec_format_error":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "ldd_fault":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "send-class":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "to_man_retries":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+							elif log_regex["type"] == "stack_smashing":
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
+								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							else:
-								log.out(str(log_regex["type"]) + " was not handled", ERROR)
+								log.out("-------------------------------- " + str(log_regex["type"]) + " --------------------------------", DEBUG, v=3)
 
-							if rc < 0:
-								print "Exciting add log details loop!!!!"
+							if rc <= 0:
+								log.out("An error (" + str(rc) +") occurred while processing " + log_regex["type"] + " exiting the line marker loop" , ERROR)
 								break
+				else:
+					rc = -1
 
 				if rc <= 0:
-					print "Exciting adding test details loop";
+					if test["test_params"]:
+						log.out("An error (" + str(rc) +") occurred while processing " + test["test_path"] + "/" + test["test_name"] + " " + test["test_params"] + " exiting the test processing loop" , ERROR)
+					else:
+						log.out("An error (" + str(rc) +") occurred while processing " + test["test_path"] + "/" + test["test_name"]+ " exiting the test processing loop" , ERROR)
 					break
+
 
 		args["reporter"].commit()
 		args["reporter"].close_connection()
 
-		print rc, "=" * 80
+	# print rc, "=" * 80
 
 
 def process_variants(args, log, fp, recovery_data):
@@ -1695,7 +2202,7 @@ def process_variants(args, log, fp, recovery_data):
 
 	line_regex["kermit_send"] = re.compile('C-Kermit>send\s+(?P<path>.+)/(?P<test_name>.+)')
 
-	line_regex["metric"] = re.compile('^(?P<desc>.+)\sVALUE:\s(?P<value>.+)\sUNITS:\s(?P<units>.+)$')
+	line_regex["metric"] = re.compile('METRIC: (?P<desc>.+)\sVALUE:\s(?P<value>.+)\sUNITS:\s(?P<units>.+)$')
 
 	line_regex["bug_ref"] = re.compile('(?P<bug_type>jira|JIRA|JI|PR|ji|pr)[_|:]*\s*(?P<value>\d{5,10})')
 
@@ -1827,9 +2334,14 @@ def main(argv=None):
 
 	parser.add_argument('-input', '--input',
 						help='')
+	parser.add_argument('-test_point_level', '--test_point_level', default=0,
+						help='')
 
 	parser.add_argument('-set_storage_path', '--set_storage_path',
 						default="/media/BackUp/regression_data/logs",
+						help='')
+
+	parser.add_argument('-gdb_tools_path', '--gdb_tools_path',
 						help='')
 
 	parser.add_argument('-schema', '--schema',
