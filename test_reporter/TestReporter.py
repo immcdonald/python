@@ -24,6 +24,7 @@ class TestReporter(My_SQL):
 	ERROR_PROJECT_NOT_FOUND_ERROR = -6
 	ERROR_NOT_READY_ERROR=-7
 	ERROR_TEST_ID_NOT_FOUND=-8
+	ERROR_LINE_INDEXING=-9
 
 
 	def reset_variant_exec_id(self):
@@ -2159,6 +2160,10 @@ class TestReporter(My_SQL):
 					marker_sub_type_id = self.get_line_marker_sub_type_id(sub_type)
 
 					if marker_sub_type_id > 0:
+						if end_line:
+							if (start_line > end_line)
+								log.error("Start line value (" + str(start_line) + ") must be <= end line value (" + str(end_line) + ")")
+								return TestReporter.ERROR_LINE_INDEXING
 
 						fields = []
 						data = []
