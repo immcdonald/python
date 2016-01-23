@@ -803,7 +803,7 @@ def main(argv):
 		
 		args.font_handle = pygame.font.Font(None, args.cmd_font)
 		args.clock_font_handle = pygame.font.Font(args.clock_font, args.clock_font_size)
-		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
+		screen = pygame.display.set_mode((args.width, args.height), pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.FULLSCREEN)
 
 		args.debug_time_of_day_offset = 60 * 60 * 6
 
