@@ -2148,7 +2148,6 @@ class TestReporter(My_SQL):
 
 	def add_line_marker(self, attachment_id, marker_type, start_line, end_line=None, test_exec_id=None, sub_type="general", comment=None):
 		if self.common_check():
-
 			if self.look_for_exists_already:
 				line_marker_id = self.get_line_marker_id(attachment_id, marker_type, start_line, end_line, display_error=False)
 			else:
@@ -2161,8 +2160,10 @@ class TestReporter(My_SQL):
 
 					if marker_sub_type_id > 0:
 						if end_line:
-							if (start_line > end_line)
-								log.error("Start line value (" + str(start_line) + ") must be <= end line value (" + str(end_line) + ")")
+							if start_line > end_line:
+								print marker_type, sub_type
+
+								self._error_macro("Start line value (" + str(start_line) + ") must be <= end line value (" + str(end_line) + ")")
 								return TestReporter.ERROR_LINE_INDEXING
 
 						fields = []

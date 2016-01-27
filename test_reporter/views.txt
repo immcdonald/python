@@ -32,8 +32,18 @@ SELECT test_revision.test_revision_id, test_revision.fk_test_root_id, view_test_
 
 ====================
 view_test_exec
-===================
+====================
 SELECT test_exec.test_exec_id, result_tag.name as result_tag_name, test_exec.fk_variant_exec_id, view_variant_exec.target, view_variant_exec.arch, view_variant_exec.variant, view_variant_exec.exec_time_secs as variant_exec_time, view_variant_exec.comment as vaiant_comment, view_variant_exec.created as variant_created, view_variant_exec.hide_enum, test_exec.fk_test_suite_root_id, test_suite_root.name as test_suite, test_exec.fk_test_revision_id,  view_test_revision.fk_test_root_id, view_test_revision.fk_project_child_id, view_test_revision.fk_project_root_id, view_test_revision.project_name, view_test_revision.project_comment, view_test_revision.child_name, view_test_revision.child_comment, view_test_revision.attach_path, view_test_revision.ftp_host, view_test_revision.ftp_user_name, view_test_revision.ftp_password, view_test_revision.exec_path, view_test_revision.test_name, view_test_revision.params, view_test_revision.test_root_created, view_test_revision.test_root_html_json_style, view_test_revision.src_path, view_test_revision.unique_ref, view_test_revision.test_rev_comment, view_test_revision.test_rev_created, test_exec.fk_result_tag_id, test_exec.fk_exec_abort_id, test_exec.exec_time_secs, test_exec.extra_time_secs, test_exec.mem_before, test_exec.mem_after FROM test_exec, view_test_revision, view_variant_exec, test_suite_root, result_tag WHERE test_exec.fk_test_suite_root_id=test_suite_root.test_suite_root_id and test_exec.fk_test_revision_id=view_test_revision.test_revision_id and test_exec.fk_variant_exec_id=view_variant_exec.variant_exec_id and test_exec.fk_result_tag_id = result_tag.result_tag_id;
+
+
+===============================
+view_line_marker_with_exec_id
+===============================
+SELECT line_marker.line_marker_id, attachment.fk_exec_id, line_marker.fk_attachment_id, line_marker.fk_line_marker_type_id, line_marker.fk_line_marker_sub_type_id, line_marker.fk_test_exec_id, line_marker.start, line_marker.end, line_marker.comment, line_marker.created FROM line_marker, attachment WHERE line_marker.fk_attachment_id=attachment.attachment_id;
+
+
+
+
 
 
 
