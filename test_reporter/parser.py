@@ -1476,7 +1476,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 							log.out("No match could be found for " + test_path + " " + test_name, EXCEPTION)
 					else:
 
-						fake_sum = {'end':-1, "start":-1, "type":"TestPoint", "matches": {'testpnt': "UNRESOLVED", 'the_rest': regex_data["matches"]["test_path"]} }
+						fake_sum = {'end':-1, "start":-1, "type":"TestPoint", "matches": {'testpnt': "UNRESOLVED: ", 'the_rest': regex_data["matches"]["test_path"]} }
 
 						sum_results["parsed_lines"].append(fake_sum)
 						submit_structure = init_test_structure()
