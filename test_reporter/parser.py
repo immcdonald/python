@@ -2115,7 +2115,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 								line_marker_id = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 								if line_marker_id > 0:
-									crash_exec_id = report.add_crash_exec(line_marker_id, log_regex["matches"]["type"].lower(), None)
+									crash_exec_id = report.add_crash_exec(line_marker_id, log_regex["type"], None)
 
 									if crash_exec_id > 0:
 										kdump_file_name = "kdump."+str(log_regex["matches"]["index"])
@@ -2144,7 +2144,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 													shutdown_line_marker_id = report.add_line_marker(kdump_index_id, 'shutdown', shutdown_found_line_index, end_line=max_lines, test_exec_id=test_exec_id)
 
 													if shutdown_line_marker_id > 0:
-														shutdown_crash_exec_id = report.add_crash_exec(shutdown_line_marker_id, log_regex["matches"]["type"].lower(), None)
+														shutdown_crash_exec_id = report.add_crash_exec(shutdown_line_marker_id, 'shutdown', None)
 														if shutdown_crash_exec_id > 0:
 															log.out("TODO: Compare the shutdown and GDB stuff to known crash patterns and update if this is known")
 														else:
@@ -2176,7 +2176,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 								line_marker_id = report.add_line_marker(yoyo_log_id, log_regex["type"],  log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 								if line_marker_id > 0:
-									crash_exec_id = report.add_crash_exec(line_marker_id, log_regex["matches"]["type"].lower(), None)
+									crash_exec_id = report.add_crash_exec(line_marker_id,log_regex["type"], None)
 									if crash_exec_id:
 										pass
 									else:
