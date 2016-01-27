@@ -661,6 +661,15 @@ def truncate_test_line(args, log, test_line):
 				test_line = test_line[1:]
 	return test_line.strip()
 
+def truncate_test_suite(test_suite):
+	temp = test_suite.replace("\\", "/")
+	pos = temp.rfind("/")
+
+	if pos > 0:
+		return temp[(pos+1):]
+	else:
+		return None
+
 def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 	report = {}
 
@@ -713,15 +722,13 @@ def process_yoyo_sum(args, log, yoyo_sum_path, line_regex):
 				if result:
 					matches = result.groupdict()
 
-					test_suite_name = matches["test_suite"]
-					test_suite_name = test_suite_name.replace("\\", "/")
-					pos = test_suite_name.rfind("/")
+					test_suite_name = truncate_test_suite(matches["test_suite"])
 
-					if pos > 0:
-						test_suite_name = test_suite_name[(pos+1):]
-
-					report["parsed_lines"].append({"type": "test_suite", "test_suite_name": test_suite_name, "matches": matches, "start":  index, "end": index})
-					no_match = False
+					if test_suite_name:
+						report["parsed_lines"].append({"type": "test_suite", "test_suite_name": test_suite_name, "matches": matches, "start":  index, "end": index})
+						no_match = False
+					else:
+						log.out("Truncating the test suit string (" + matches["test_suite"] + ") has failed", EXCEPTION)
 
 			if no_match:
 				result = line_regex["host"].search(sum_file_data[index])
@@ -892,33 +899,29 @@ def process_yoyo_log(args, log, yoyo_sum_path, line_regex, sum_data):
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
 						break
-					elif key == "test_suite":
-						test_suite_name = matches["test_suite"]
-						test_suite_name = test_suite_name.replace("\\", "/")
-						pos = test_suite_name.rfind("/")
+					elif key == "test_suite" :
+						test_suite_name = truncate_test_suite(matches["test_suite"])
 
-						if pos > 0:
-							test_suite_name = test_suite_name[(pos+1):].strip()
-						last_test_suite = test_suite_name
+						if test_suite_name:
+							report["parsed_lines"].append({"type": key, "test_suite": test_suite_name, "matches": matches ,"start":  index, "end": index })
 
-						report["parsed_lines"].append({"type": key, "test_suite": test_suite_name, "matches": matches ,"start":  index, "end": index })
+							no_match = False
+							break
+						else:
+							log.out("Truncation of test suite string (" + matches["test_suite"] + ") has failed", EXCEPTION)
 
-						no_match = False
-						break
 					elif key == "test_suite_2":
 
-						test_suite_name = matches["test_suite"]
-						test_suite_name = test_suite_name.replace("\\", "/")
-						pos = test_suite_name.rfind("/")
+						test_suite_name = truncate_test_suite(matches["test_suite"])
 
-						if pos > 0:
-							test_suite_name = test_suite_name[(pos+1):].strip()
+						if test_suite_name:
+							report["parsed_lines"].append({"type": key, "test_suite": test_suite_name, "matches": matches ,"start":  index, "end": index })
 
-						last_test_suite = test_suite_name
+							no_match = False
+							break
+						else:
+							log.out("Truncation of test suite string (" + matches["test_suite"] + ") has failed", EXCEPTION)
 
-						report["parsed_lines"].append({"type": key, "test_suite_name":test_suite_name ,"matches": matches ,"start":  index, "end": index })
-						no_match = False
-						break
 					elif key == "reboot":
 						report["parsed_lines"].append({"type": key, "matches": matches ,"start":  index, "end": index })
 						no_match = False
@@ -1301,6 +1304,8 @@ def process_tests(args, log, sum_results, log_results, variant):
 			last_test_suite = regex_data["test_suite_name"]
 			submit_dict["test_suites"].append(last_test_suite)
 
+
+
 		elif regex_data["type"] == "host":
 			if "sum_host_index" not in  submit_dict:
 				submit_dict["sum_host_index"] = index
@@ -1476,19 +1481,25 @@ def process_tests(args, log, sum_results, log_results, variant):
 							log.out("No match could be found for " + test_path + " " + test_name, EXCEPTION)
 					else:
 
-						fake_sum = {'end':-1, "start":-1, "type":"TestPoint", "matches": {'testpnt': "UNRESOLVED: ", 'the_rest': regex_data["matches"]["test_path"]} }
+						end_line = -1
+
+						if len(sum_results["parsed_lines"]) > 0:
+							end_line = sum_results["parsed_lines"][-1]["end"]
+
+						fake_sum = {'end':end_line, "start":-1, "type":"TestPoint", "matches": {'testpnt': "UNRESOLVED: ", 'the_rest': regex_data["matches"]["test_path"]} }
 
 						sum_results["parsed_lines"].append(fake_sum)
+
 						submit_structure = init_test_structure()
 						submit_structure["test_path"] = test_path
 						submit_structure["test_name"] = test_name
 						submit_structure["test_params"] = test_params
-						submit_structure["sum_index"] = len(sum_results)-1
+						submit_structure["sum_index"] = len(sum_results["parsed_lines"])-1
 						submit_structure["log_start"] = regex_data["start"]
-						submit_structure["test_suite"] = last_test_suite
+						submit_structure["sub_type"] = "premature exit"
+						submit_structure["test_suite"] = truncate_test_suite(last_test_suite)
 
 						submit_dict["tests"].append(submit_structure)
-
 						submit_test_index = list_lenght
 
 			if regex_data["matches"]["mode"] == 'Start':
@@ -1541,20 +1552,25 @@ def process_tests(args, log, sum_results, log_results, variant):
 						else:
 							log.out("No match could be found for " + test_path + " " + test_name, EXCEPTION)
 					else:
+						end_line = -1
 
-						fake_sum = {'end':-1, "start":-1, "type":"TestPoint", "matches": {'testpnt': "UNRESOLVED", 'the_rest': regex_data["matches"]["test_path"]} }
+						if len(sum_results["parsed_lines"]) > 0:
+							end_line = sum_results["parsed_lines"][-1]["end"]
+
+						fake_sum = {'end':end_line, "start":-1, "type":"TestPoint", "matches": {'testpnt': "UNRESOLVED: ", 'the_rest': regex_data["matches"]["test_path"]} }
 
 						sum_results["parsed_lines"].append(fake_sum)
+
 						submit_structure = init_test_structure()
 						submit_structure["test_path"] = test_path
 						submit_structure["test_name"] = test_name
 						submit_structure["test_params"] = test_params
-						submit_structure["sum_index"] = len(sum_results)-1
+						submit_structure["sum_index"] = len(sum_results["parsed_lines"])-1
 						submit_structure["log_start"] = regex_data["start"]
-						submit_structure["test_suite"] = last_test_suite
+						submit_structure["sub_type"] = "premature exit"
 
+						submit_structure["test_suite"] = truncate_test_suite(last_test_suite)
 						submit_dict["tests"].append(submit_structure)
-
 						submit_test_index = list_lenght
 
 			if regex_data["matches"]["mode"] == 'Start':
@@ -1819,8 +1835,9 @@ def process_tests(args, log, sum_results, log_results, variant):
 		if rc > 0:
 			if 'test_suites' in submit_dict:
 				# add test suites
-				log.out("Import Test Suites....", DEBUG, v=5)
+
 				for test_suite in submit_dict["test_suites"]:
+					log.out("Import Test Suite (" +  test_suite + ").... ", DEBUG, v=5)
 					rc = report.add_test_suite(test_suite)
 
 					if rc <= 0:
@@ -1901,13 +1918,19 @@ def process_tests(args, log, sum_results, log_results, variant):
 				if rc > 0:
 					# The test result should be stored in the sum file parsed line so get to that by:
 					if test["sum_index"] > 0:
+
 						sum_index = test["sum_index"]
 						sum_line = sum_results["parsed_lines"][sum_index]
+
+						print pformat(sum_line)
+
 						test_result = sum_line["matches"]["testpnt"][:-2]
 
 						# Check to make sure this test root has been added.
 						# keep the test root id as we may need it later when looking for known crashes of a test.
 						test_root_id = report.add_test_root(test["test_path"], test["test_name"],  test["test_params"])
+
+						print "TS:", test["test_suite"]
 
 						if test_root_id > 0:
 							test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=test["exec_time"], extra_time=test["download_time"], mem_before=test["mem_before"], mem_after=test["mem_after"])
