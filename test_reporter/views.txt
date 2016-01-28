@@ -41,6 +41,13 @@ view_line_marker_with_exec_id
 ===============================
 SELECT line_marker.line_marker_id, attachment.fk_exec_id, line_marker.fk_attachment_id, line_marker.fk_line_marker_type_id, line_marker.fk_line_marker_sub_type_id, line_marker.fk_test_exec_id, line_marker.start, line_marker.end, line_marker.comment, line_marker.created FROM line_marker, attachment WHERE line_marker.fk_attachment_id=attachment.attachment_id;
 
+====================================
+Combine crash views and line markers
+====================================
+SELECT line_marker_id, crash_exec_id, fk_attachment_id, fk_line_marker_type_id, fk_line_marker_sub_type_id, fk_test_exec_id, start, end, comment, created, fk_crash_type_id, fk_crash_known_id FROM line_marker, crash_exec WHERE crash_exec.fk_line_marker_id=line_marker.line_marker_id
+
++++++++++++++++++++++++++++++++++++
+
 
 
 

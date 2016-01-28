@@ -62,14 +62,14 @@ if (isset($_GET["project"])) {
 						$sub_types[$sub_type_data["line_marker_sub_type_id"]] = $sub_type_data["name"];
 					}
 
-
 					// Now get line marker lines that have crash types
-					if ($hide_known_crashes){
-						$query = 'SELECT line_marker_id, fk_attachment_id, fk_line_marker_type_id, fk_line_marker_sub_type_id, fk_test_exec_id, start, end FROM view_line_marker_with_exec_id, crash_exec WHERE crash_exec.known_crash_id IS NULL and crash_exec.fk_line_marker_id = view_line_marker_with_exec_id.line_marker_id and fk_exec_id='.$_GET["exec"].' and ('.$crash_line_marker_type_string.') ORDER BY line_marker_id;';
+					if ($hide_known_crashes=="yes"){
+						echo "Hiding known Crashes";
+						$query = 'SELECT line_marker_id, fk_crash_known_id, fk_attachment_id, fk_line_marker_type_id, fk_line_marker_sub_type_id, fk_test_exec_id, start, end FROM view_line_marker_with_exec_id, crash_exec WHERE crash_exec.known_crash_id IS NULL and crash_exec.fk_line_marker_id = view_line_marker_with_exec_id.line_marker_id and fk_exec_id='.$_GET["exec"].' and ('.$crash_line_marker_type_string.') ORDER BY line_marker_id;';
 					}
 					else
-					{
-						$query = 'SELECT line_marker_id, fk_attachment_id, fk_line_marker_type_id, fk_line_marker_sub_type_id, fk_test_exec_id, start, end FROM view_line_marker_with_exec_id, crash_exec WHERE crash_exec.fk_line_marker_id = view_line_marker_with_exec_id.line_marker_id and fk_exec_id='.$_GET["exec"].' and ('.$crash_line_marker_type_string.') ORDER BY line_marker_id;';
+					{	echo "should give all crashes...";
+						$query = 'SELECT line_marker_id, fk_crash_known_id, fk_attachment_id, fk_line_marker_type_id, fk_line_marker_sub_type_id, fk_test_exec_id, start, end FROM view_line_marker_with_exec_id, crash_exec WHERE crash_exec.fk_line_marker_id = view_line_marker_with_exec_id.line_marker_id and fk_exec_id='.$_GET["exec"].' and ('.$crash_line_marker_type_string.') ORDER BY line_marker_id;';
 					}
 
 					$crash_result = sql_query($sql_handle, $query, $error);
@@ -122,6 +122,10 @@ if (isset($_GET["project"])) {
 						echo "Result";
 						echo '</th>';
 
+						echo '<th>';
+						echo "Known Crash ID";
+						echo '</th>';
+
 						echo '</tr>';
 
 						foreach($line_marker_rows as $line_marker_row ){
@@ -134,7 +138,7 @@ if (isset($_GET["project"])) {
 								$test_data = $test_data_result->fetchall();
 
 								echo '<td>';
-								echo '<a href="crash_view.php?project='.$_GET["project"].'&exec='.$_GET["exec"].'&lm='.$line_marker_row["line_marker_id"].'&attach_id='.$line_marker_row["fk_attachment_id"].'&start='.$line_marker_row["start"].'&end='.$line_marker_row["end"].'&test_id='.$line_marker_row["fk_test_exec_id"].'&type='.$line_marker_id_to_string[$line_marker_row["fk_line_marker_type_id"]].'&sub='.$sub_types[$line_marker_row["fk_line_marker_sub_type_id"]].'&target='.$test_data[0]["target"].'&arch='.$test_data[0]["arch"].'&variant='.$test_data[0]["variant"].'&suite='.$test_data[0]["test_suite"].'&exec_path='.$test_data[0]["exec_path"].'&test_name='.$test_data[0]["test_name"].'&params='.$test_data[0]["params"].'&result='.$test_data[0]["result_tag_name"].'&test_suite_root_id='.$test_data[0]["fk_test_suite_root_id"].'&test_root+id='.$test_data[0]["fk_test_root_id"].'&known_crash_id=-1" >'.$line_marker_row["line_marker_id"].'</a>';
+								echo '<a href="crash_view.php?project='.$_GET["project"].'&exec='.$_GET["exec"].'&lm_id='.$line_marker_row["line_marker_id"].'&attach_id='.$line_marker_row["fk_attachment_id"].'&start='.$line_marker_row["start"].'&end='.$line_marker_row["end"].'&test_exec_id='.$line_marker_row["fk_test_exec_id"].'&lm_type='.$line_marker_id_to_string[$line_marker_row["fk_line_marker_type_id"]].'&lm_type_id='.$line_marker_row["fk_line_marker_type_id"].'&sub_type='.$sub_types[$line_marker_row["fk_line_marker_sub_type_id"]].'&sub_type_id='.$line_marker_row["fk_line_marker_sub_type_id"].'&target='.$test_data[0]["target"].'&arch='.$test_data[0]["arch"].'&variant='.$test_data[0]["variant"].'&suite='.$test_data[0]["test_suite"].'&exec_path='.$test_data[0]["exec_path"].'&test_name='.$test_data[0]["test_name"].'&params='.$test_data[0]["params"].'&result='.$test_data[0]["result_tag_name"].'&test_suite_root_id='.$test_data[0]["fk_test_suite_root_id"].'&test_root_id='.$test_data[0]["fk_test_root_id"].'&crash_known_id='.$line_marker_row["fk_crash_known_id"].'" >'.$line_marker_row["line_marker_id"].'</a>';
 								echo '</td>';
 
 								echo '<td>';
@@ -145,6 +149,7 @@ if (isset($_GET["project"])) {
 								else{
 									echo $line_marker_id_to_string[$line_marker_row["fk_line_marker_type_id"]];
 								}
+
 								echo '</td>';
 								echo '<td>';
 								echo $test_data[0]["target"];
@@ -176,6 +181,10 @@ if (isset($_GET["project"])) {
 
 								echo '<td>';
 								echo $test_data[0]["result_tag_name"];
+								echo '</td>';
+
+								echo '<td>';
+								echo $line_marker_row["fk_crash_known_id"];
 								echo '</td>';
 								echo '</tr>';
 

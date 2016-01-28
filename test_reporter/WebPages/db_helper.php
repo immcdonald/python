@@ -33,7 +33,7 @@ function field_length_check(&$error, $field_name, $string, $min=0, $max=65535) {
 	return $rc;
 }
 
-function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_data=NULL){
+function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_data=NULL, $where_string=NULL){
 	$rc = ERROR_GENERAL;
 	$out_rows = array();
 
@@ -136,7 +136,13 @@ function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_d
 				$query = $query." WHERE ".$where;
 			}
 
-			//echo $query."<BR>";
+			if ($where_string != NULL) {
+				if (strlen($where_string)> 0){
+					$query = $query. " and (".$where_string.")";
+				}
+			}
+
+			echo $query."<BR>";
 
 			$result =  sql_query($sql_handle, $query, $error);
 
@@ -149,6 +155,7 @@ function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_d
 				$error = $query." :<BR>".$error;
 				$rc = ERROR_MYSQL;
 			}
+
 		} // end of if ($rc == OK)
 	}
 
@@ -444,68 +451,38 @@ function add_project_bug(&$error, $sql_handle, $reporter_type, $unique_ref, $pro
 		}
 
 	}
+	return $rc;
+}
 
+function get_master_core(&$error, $sql_handle, &$rows,  $where_string=NULL) {
+	$rc = ERROR_GENERAL;
+
+	$rows = array();
+
+	$tables = array("line_marker", "crash_exec", "test_exec", "variant_exec", "exec", "test_revision");
+
+	$select = array("line_marker_id", "crash_exec_id", "fk_attachment_id as attachment_id",
+				 "fk_line_marker_type_id as line_marker_type_id",
+				 "fk_line_marker_sub_type_id as line_marker_sub_type_id", "start", "end",
+				 "fk_crash_type_id as crash_type_id", "fk_crash_known_id as crash_known_id",
+				 "test_exec_id", "fk_result_tag_id as result_tag_id", "test_exec.fk_exec_abort_id as test_exec_abort_id",
+				 "variant_exec_id", "variant_exec.fk_exec_abort_id as variant_exec_abort_id", "test_revision_id", "test_revision.fk_test_root_id as test_root_id", );
+
+	$where = array("crash_exec.fk_line_marker_id"=>"line_marker.line_marker_id",
+				   "line_marker.fk_test_exec_id"=>"test_exec.test_exec_id",
+				   "test_exec.fk_variant_exec_id"=>"variant_exec.variant_exec_id",
+				   "test_exec.fk_test_revision_id" => "test_revision.test_revision_id",
+				   "variant_exec.fk_exec_id"=>"exec.exec_id"
+				   );
+
+	$rc = select($error, $sql_handle, $rows, $tables , $select, $where, $where_string);
+
+	echo '<textarea cols="200" rows="20">';
+	var_dump($rows);
+	echo "</textarea>";
 
 	return $rc;
 }
 
-/*
-function get_bug_exec_info(&$error, $sql_handle, &$rows, $report_type, $unique_ref, $project_child_id) {
-	#first get the project bug info
-	$rc = get_project_bug_info($error, $sql_handle, $rows, $report_type, $unique_reg, $project_child_id);
-	if ($rc == OK) {
-
-		if (count($rows) > 0) {
-			$project_bug_id = $rows[0]["project_bug_id"];
-
-			$select = array("*");
-			$tables = array("bug_root", "project_bug", "bug_exec");
-			$where = array("project_bug.fk_bug_root_id"=>"bug_root.bug_root_id",
-						   "bug_exec.fk_project_bug_id"=>"project_bug.project_bug_id",
-			 			   "recorder_enum"=>$reporter_type,
-			 			   "unique_ref"=>$unique_ref);
-
-			$rc = select($error, $sql_handle, $rows, $tables , $select, $where);
-
-		}
-		else{
-			# The project_bug level does not exist so therefor the bug exec level can not exist.. So return ok, and empty rows
-			$rows = array();
-		}
-	}
-
-	return $rc;
-}
-
-
-function add_exec_bug(&$error, $sql_handle, $reporter_type,  $unique_ref, $project_child_id, $exec_id, $summary=NULL, $comment=NULL, $added_by="other") {
-	# First check and see if we have the project level bug, creates it if doesn't.
-	$project_bug_id = add_project_bug($error, $sql_handle, $reporter_type, $unique_ref, $project_bug_id, $summary, $comment, $added_by)
-
-	if ($project_bug_id > 0){
-		// now check and see if the exec bug already exists
-		$rows = array();
-		$rc = get_bug_exec_info()
-	}
-	else{
-		$rc = $project_bug_id;
-	}
-
-	return $rc;
-}
-*/
-
-
-/*
-$sql_handle = get_sql_handle($db_path, "project_db", $db_user_name, $db_password, $error);
-
-$rows = array();
-$rc = get_crash_type_id($error, $sql_handle, 1,"sigill");
-echo "RC: ".$rc."<BR>";
-echo "Error: ".$error."<BR>";
-echo "<textarea>";
-print_r($rows);
-echo "</textarea>";
-*/
 
 ?>

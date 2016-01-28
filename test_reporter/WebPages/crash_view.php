@@ -10,7 +10,7 @@ if (isset($_GET["reporter_type"]) == FALSE){
 	$_GET["reporter_type"] = "ji";
 }
 
-$expected_get_keys = array( "project", "exec", "lm", "attach_id", "start", "end", "test_id", "type", "sub", "target", "arch", "variant", "suite", "exec_path", "test_name", "params", "result", "test_suite_root_id", "test_root_id", "known_crash_id");
+$expected_get_keys = array( "project", "exec", "lm_id", "attach_id", "start", "end", "test_exec_id", "lm_type", "lm_type_id", "sub_type", "sub_type_id", "target", "arch", "variant", "suite", "exec_path", "test_name", "params", "result", "test_suite_root_id", "test_root_id", "crash_known_id");
 
 $ok = True;
 foreach($expected_get_keys as $key){
@@ -62,6 +62,12 @@ if ($ok) {
 	$sql_handle = get_sql_handle($db_path, "project_db", $db_user_name, $db_password, $error);
 
 	if ($sql_handle != NULL) {
+
+		$rows = array();
+		echo get_master_core($error, $sql_handle, $rows, "test_revision.fk_test_root_id=".$_GET["test_root_id"]);
+
+		echo "<BR>".$error."<BR>";
+
 		# Get the "Full test" line type id
 		$query = 'SELECT line_marker_type_id from line_marker_type WHERE name="full_test"';
 
@@ -72,7 +78,7 @@ if ($ok) {
 			$full_test_id = $full_test_rows[0]["line_marker_type_id"];
 
 			# Lets get the log output for this test.
-			$query = 'SELECT fk_attachment_id, start, end FROM line_marker WHERE fk_test_exec_id='.$_GET["test_id"].' and fk_line_marker_type_id='.$full_test_id;
+			$query = 'SELECT fk_attachment_id, start, end FROM line_marker WHERE fk_test_exec_id='.$_GET["test_exec_id"].' and fk_line_marker_type_id='.$full_test_id;
 
 			$full_test_log_result = sql_query($sql_handle, $query, $error);
 
@@ -112,7 +118,7 @@ if ($ok) {
 				$max_log_lines = count($test_log_lines);
 
 				# check to see what type of crash this is and then process it accordingly.
-				if ($_GET["type"] == "process_seg"){
+				if ($_GET["lm_type"] == "process_seg"){
 					// The fist display line will be at index 0, but the relative database line is at $rows[0]["start"];
 					$relative_offset_converion = $rows[0]["start"];
 
@@ -340,8 +346,17 @@ if ($ok) {
 											$result = sql_query($sql_handle, $query, $error);
 
 											if ($result){
-												/* do nothing */
-												echo "SUBMIT!!!!!!!!!!<<BR>";
+
+												/*
+													Now look for other instances of this test (test_root_id) within this child project.. That have a crash that has a known crash id of NULL.
+													And compare them to this regex.
+												*/
+
+												$query = 'SELECT * FROM crash_exec, line_marker WHERE ';
+
+
+
+
 											}
 											else{
 												echo $query."<BR>".$error."<BR>";

@@ -2010,14 +2010,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 														if len(lines[line_index]) > 1:
 															count = count + 1
 
-															# look to see if we have hit a testpoint line
-															result = test_point_regex.search(lines[line_index])
-
-															if result:
-																matches = result.groupdict()
-																if matches["testpnt"] != "NOTE: ":
-																	break
-
 														# check to see if we have gone ahead ten lines
 														if count >= 10:
 															break
@@ -2033,7 +2025,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 															break
 
 													lines = lines[line_index:]
-
 
 													# Removing any white space from the start or end of the lines
 													# Remove any empty lines

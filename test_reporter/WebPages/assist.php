@@ -1,7 +1,124 @@
 <?php
-include_once("../../common.php");
 $schema_name="qa_db";
 ini_set('memory_limit', '4000M');
+
+$db_user_name = "root";
+$db_password = "q1!w2@e3#";
+$db_path = "localhost";
+
+function get_sql_handle($db_path, $db_shema, $db_user_name, $db_password, &$error){
+	$conn = NULL;
+
+	try{
+		$conn = new PDO('mysql:host='.$db_path.';dbname='.$db_shema, $db_user_name, $db_password);
+	}
+	catch(PDOException $e) {
+		$conn = NULL;
+		$error = 'ERROR: ' . $e->getMessage();
+	}
+
+	if ($conn != NULL)
+        {
+		try{
+			$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		}
+		catch(PDOException $e) {
+			$error = 'ERROR: ' . $e->getMessage();
+		}
+	}
+	return $conn;
+}
+
+function sql_query($sql_handle, $query, &$error) {
+	$stmt = NULL;
+	try{
+		$stmt = $sql_handle->prepare($query);
+	}
+	catch(PDOException $e) {
+		$stmt = NULL;
+		$error = 'ERROR: ' . $e->getMessage();
+	}
+
+	if ($stmt != NULL){
+		try{
+			$stmt->execute();
+		}
+		catch(PDOException $e) {
+			$stmt = NULL;
+			$error = 'ERROR: ' . $e->getMessage();
+		}
+	}
+	return $stmt;
+}
+
+
+function q(&$error, $sql_handle, $query_str, &$values=NULL) {
+	if ($values != NULL){
+		if (is_array($values) === FALSE){
+			$errors = 'The values parameter must be passed in the form of an array or NULL';
+			return NULL;
+		}
+	}
+
+	if (strlen($query_str) > 2){
+		$query = $sql_handle->prepare($query_str);
+		if ($query) {
+
+			$query->execute($values);
+			if ($query){
+				return $query;
+			}
+			else{
+				$error = $sql_handle->errorInfo();
+				$error = $query_str.":<BR>".$error[2];
+				return NULL;
+			}
+		}
+		else{
+			$error = $sql_handle->errorInfo();
+			$error = $query_str.":<BR>".$error[2];
+			return NULL;
+		}
+	}
+	else{
+		$error = "The query string is to short.";
+		return NULL;
+	}
+}
+
+
+function gen_head($page_title, $css_file_path){
+ 	echo "<!DOCTYPE html><html><head>";
+ 	echo '<title>'.$page_title.'</title>';
+	echo '<link rel="stylesheet" type="text/css" href="'.$css_file_path.'">';
+	echo '</head><body>';
+}
+
+function gen_footer(){
+	echo "</body>";
+	echo "<footer>";
+	echo "<hr>";
+	$data = shell_exec('uptime');
+	$uptime = explode(' up ', $data);
+	$uptime = explode(',', $uptime[1]);
+	$uptime = $uptime[0].', '.$uptime[1];
+
+	echo ('Current server uptime: '.$uptime.'<BR>');
+
+	$disk_space = number_format(disk_free_space("/")/1024.00, 0 ,".",$thousands_sep = "," );
+	echo "Disk Space Available (/): ".$disk_space." MiB <BR>";
+
+	$disk_space = number_format(disk_free_space("/media/BackUp")/1024.00, 0 ,".",$thousands_sep = "," );
+	echo "Disk Space Available (USB drive): ".$disk_space." MiB <BR>";
+
+	$load_avg = sys_getloadavg();
+	echo "CPU load avg for the last minute: ".($load_avg[0])." &middot; Last 5 minutes: ".($load_avg[1])." &middot; Last 15 minutes: ".($load_avg[2])." <BR>";
+	echo "</footer>";
+	echo "</html>";
+}
+
+
+
 
 function secs_to_h($secs)
 {
