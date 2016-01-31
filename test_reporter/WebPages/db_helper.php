@@ -1,6 +1,7 @@
 <?php
 include_once("assist.php");
 $error = NULL;
+$show_query = False;
 
 define("OK", 0);
 define("ERROR_GENERAL", -1);
@@ -37,7 +38,14 @@ function get_sql_handle($db_path, $db_shema, $db_user_name, $db_password, &$erro
 }
 
 function sql_query($sql_handle, $query, &$error) {
+	global $show_query;
+
 	$stmt = NULL;
+
+	if ($show_query){
+		echo $query."<BR>";
+	}
+
 	try{
 		$stmt = $sql_handle->prepare($query);
 	}
@@ -95,6 +103,7 @@ function q(&$error, $sql_handle, $query_str, &$values=NULL) {
 
 
 function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_data=NULL, $where_string=NULL){
+
 	$rc = ERROR_GENERAL;
 	$out_rows = array();
 
@@ -203,8 +212,6 @@ function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_d
 				}
 			}
 
-			//echo $query."<BR>";
-
 			$result =  sql_query($sql_handle, $query, $error);
 
 			if ($result){
@@ -300,6 +307,57 @@ function get_root_projects(&$error, $sql_handle, &$rows) {
 	$rc = select($error, $sql_handle, $rows, "project_root", "*");
 	return $rc;
 }
+
+function get_crash_known_with_bug_info(&$error, $sql_handle, &$rows, $where_array, $where_string=NULL){
+	# remember not all known crashes will have bugs, if the crash was intentional.
+
+	$rc = OK;
+	$rows  = array();	
+	$select = array("crash_known_id", "fk_crash_type_id", "fk_test_root_id","fk_test_suite_root_id",
+		           "fk_project_bug_id", "type_enum", "resolved", "UNCOMPRESS(regex) as regex", "comment", "created", "html_style_json");
+
+	$tables = array("crash_known");
+
+	$rc =  select($error, $sql_handle, $rows, $tables, $select, $where_array, $where_string);
+
+	if ($rc == OK){
+		foreach($rows as &$row){
+			if ($row["fk_project_bug_id"] != NULL){
+				$sub_rows = array();
+				$tables = array("project_bug", "bug_root");
+				
+				$where = array("project_bug.project_bug_id"=>$row["fk_project_bug_id"],
+							   "project_bug.fk_bug_root_id"=>"bug_root.bug_root_id");
+				
+				$select = array("bug_root_id", "recorder_enum", "unique_ref", "summary", "triaged_enum", "resolved_enum", "added_enum");
+				
+				$rc =  select($error, $sql_handle, $sub_rows, $tables, $select, $where);
+
+				if ($rc == OK){
+					$row["bug_root_id"] = $sub_rows[0]["bug_root_id"];	
+					$row["recorder_enum"] = $sub_rows[0]["recorder_enum"];	
+					$row["unique_ref"] = $sub_rows[0]["unique_ref"];	
+					$row["summary"] = $sub_rows[0]["summary"];	
+					$row["triaged_enum"] = $sub_rows[0]["triaged_enum"];	
+					$row["resolved_enum"] = $sub_rows[0]["resolved_enum"];	
+					$row["added_enum"] = $sub_rows[0]["added_enum"];																					
+				} 
+			}
+			else{
+					$row["bug_root_id"] = NULL;
+					$row["recorder_enum"] = NULL;
+					$row["unique_ref"] =NULL;
+					$row["summary"] = NULL;
+					$row["triaged_enum"] = NULL;	
+					$row["resolved_enum"] =NULL;
+					$row["added_enum"] =NULL;
+			}
+
+		}
+	}
+	return $rc;
+}
+
 
 function get_variant_exec_id_from_test_exec_id(&$error, $sql_handle,  $test_exec_id, &$variant_exec_id) {
 	$rc = OK;

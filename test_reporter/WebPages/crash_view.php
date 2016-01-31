@@ -65,16 +65,16 @@ if ($rc == OK) {
 			echo "<h3></center>";
 
 			$marked_lines = array();
-			$marked_lines[0] = array("start"=> 14438, "end"=>14445, "mark"=>"=");
+			/*$marked_lines[0] = array("start"=> 14438, "end"=>14445, "mark"=>"=");
 			$marked_lines[1] = array("start"=> 14433, "end"=>14450, "mark"=>">");
-
+	*/
 
 			$line_count = count($test_profile["log"]["file_data"]["lines"]);
 
 			$line_count = min($line_count, 30);
 
 			marked_lines_show($test_profile["log"]["file_data"]["lines"], "Test Log", $marked_lines, $line_count, 140, $show_numbers, TRUE);
-
+			echo "TODO: Put download for partial and full log here link here.";
 
 			if (array_key_exists("header", $test_profile["crash"])){
 				show(implode("\n", $test_profile["crash"]["header"]),"GDB Header", $line_count, 140, TRUE);
@@ -109,7 +109,9 @@ if ($rc == OK) {
 			$readonly = False;
 			$crash_known_id = array();
 			$regex = array();
-
+			$type_enum = array();
+			$reporter_enum = array();
+			$bug_reporter_unique_ref=array();
 
 			$crash_known_id[0] = $_GET["crash_known_id"];
 
@@ -121,36 +123,66 @@ if ($rc == OK) {
 
 			if (isset($_GET["regex"])){
 				$regex[0] = $_GET["regex"];
+				$type_enum[0] = $_GET["type_enum"];
+				$reporter_enum[0] =  $_GET["reporter_enum"];
+				$bug_reporter_unique_ref[0] = $_GET["unique_ref"];
 			}
-			else{
-				$regex[0] = $test_profile["crash"]["regex"];
-			}
-			
+			else {
+				if (intval($_GET["crash_known_id"])> 0) {
 
+					$rows = array();
+					$where = array(	"crash_known_id"=> $_GET["crash_known_id"]);
+
+					$rc = get_crash_known_with_bug_info($error, $sql_handle, $rows, $where);
+
+					show($rows);
+					
+					if ($rc == OK) {
+
+
+						$regex[0] = $rows[0]["regex"];
+						$type_enum[0] = $rows[0]["type_enum"];
+						$reporter_enum[0] = $rows[0]["recorder_enum"];
+						$bug_reporter_unique_ref[0] = $rows[0]["unique_ref"];
+					}
+				}
+				else{
+					$regex[0] = $test_profile["crash"]["regex"];
+				}
+			}
+
+	
 			$type = $_GET["lm_type"];
 
 			if ($_GET["lm_type"] == "process_seg") {
 				$type = $_GET["sub_type"];
 			}
 
-
 			$crash_type_id = get_crash_type_id($error, $sql_handle, $_GET["project"], $type);
 
 			if ($crash_type_id > 0) {
+
 				/* Query the database and see if there are any other crash regex of this type for this test */
-				$tables = array("crash_known");
+				$rows = array();
+				$where = array("fk_crash_type_id"=> intval($crash_type_id),
+							   "fk_test_root_id" => intval($_GET["test_root_id"]));
+				
+				$where_string = NULL;
 
-				$where = array("fk_crash_type_id"=>$crash_type_id,
-							   "fk_test_root_id" => $_GET["test_root_id"]);
+				if (intval($_GET["crash_known_id"])> 0) {
+					$where_string ="crash_known_id!=".$_GET["crash_known_id"];
+				}
 
-				$select = array("crash_known_id", "type_enum", "fk_project_bug_id", "UNCOMPRESS(regex) as regex");
+				$rc = get_crash_known_with_bug_info($error, $sql_handle, $rows, $where, $where_string);
 
-				$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
-
-				if ($rc == OK) {
+				if ($rc == OK)
+				{
 					foreach($rows as $row){
 						$regex[count($regex)] = $row["regex"];
 						$crash_known_id[count($crash_known_id)] =  $row["crash_known_id"];
+						$type_enum[count($type_enum)] = $row["type_enum"];
+						$reporter_enum[count($reporter_enum)] = $row["recorder_enum"];
+						$bug_reporter_unique_ref[count($bug_reporter_unique_ref)] = $row["unique_ref"];
 					}
 				}
 			}
@@ -188,7 +220,7 @@ if ($rc == OK) {
 				
 				echo '<label>Crash Type: <label><select name="type_enum">';			
 				foreach($type_enums as $value){
-					if ($value == $type_enum){
+					if ($value == $type_enum[$regex_index]){
 						echo '<option value="'.$value.'" selected>'.$value."</option>";
 					}
 					else{
@@ -203,7 +235,7 @@ if ($rc == OK) {
 				echo '<td align="center" >';
 				echo '<label>Reporter Type: <label><select name="reporter_enum">';
 				foreach($recorder_enums as $value){
-					if ($value == $reporter_enum){
+					if ($value == $reporter_enum[$regex_index]){
 						echo '<option value="'.$value.'" selected>'.$value."</option>";
 					}
 					else{
@@ -215,7 +247,7 @@ if ($rc == OK) {
 
 				echo '<td align="center" >';
 				if ($bug_reporter_unique_ref != NULL) {
-					echo '<label>Unique Ref: </label><input type=text name="bug_reporter_unique_ref" value="'.$bug_reporter_unique_ref.'" >';
+					echo '<label>Unique Ref: </label><input type=text name="bug_reporter_unique_ref" value="'.$bug_reporter_unique_ref[$regex_index].'" >';
 				}
 				else{
 					echo '<label>Unique Ref: </label><input type=text name="bug_reporter_unique_ref">';
