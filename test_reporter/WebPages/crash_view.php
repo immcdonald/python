@@ -63,6 +63,27 @@ if ($rc == OK) {
 
 			marked_lines_show($test_profile["log"]["file_data"]["lines"], "Test Log", $marked_lines, $line_count, 140, $show_numbers, TRUE);
 
+
+			if (array_key_exists("header", $test_profile["crash"])){
+				show(implode("\n", $test_profile["crash"]["header"]),"GDB Header", $line_count, 140, TRUE);
+			}
+
+			if (array_key_exists("back_trace", $test_profile["crash"])){
+				show(implode("\n", $test_profile["crash"]["back_trace"]),"GDB Header", $line_count, 140, TRUE);
+			}
+
+			if (array_key_exists("back_trace", $test_profile["crash"])){
+				show(implode("\n", $test_profile["crash"]["back_trace"]),"Back Trace", $line_count, 140, TRUE);
+			}
+			
+			if (array_key_exists("info_reg_data", $test_profile["crash"])){
+				show(implode("\n", $test_profile["crash"]["info_reg_data"]),"Back Trace", $line_count, 140, TRUE);
+			}
+			
+			if (array_key_exists("display", $test_profile["crash"])){
+				show(implode("\n", $test_profile["crash"]["display"]),"Back Trace", $line_count, 140, TRUE);
+			}
+
 			$line_count = min(count($test_profile["crash"]["lines"]), 10);
 
 			show(implode("\n", $test_profile["crash"]["lines"]),"Crash Profile", $line_count, 140, TRUE);
