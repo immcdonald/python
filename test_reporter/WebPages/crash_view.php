@@ -102,111 +102,184 @@ if ($rc == OK) {
 
 			show($crash_profile_lines,"Crash Profile", $line_count, 140, TRUE);
 
+
+			/*
+				Regex box control variables
+			*/
+			$readonly = False;
+			$crash_known_id = array();
+			$regex = array();
+
+
+			$crash_known_id[0] = $_GET["crash_known_id"];
+
+
+			$regex_index = 0;
+			/*	
+				End of control variables.
+			*/
+
 			if (isset($_GET["regex"])){
-				$regex = $_GET["regex"];
+				$regex[0] = $_GET["regex"];
 			}
 			else{
-				$regex = $test_profile["crash"]["regex"];
+				$regex[0] = $test_profile["crash"]["regex"];
 			}
-
-			echo "TODO: If the crash type is known then get the regex data, bug info from the DATABASE";
-
-
-			echo '<form>';
-			dup_get_input_for_form();
 			
-			echo "<center><strong>Regex Profile</strong></center>";
-		
-			echo '<table align="center" width=50%>';
-			echo '<tr>';
 
-			echo '<td align="center" >';
-			$type_enums = array("error", "generated");
-			
-			echo '<label>Crash Type: <label><select name="type_enum">';			
-			foreach($type_enums as $value){
-				if ($value == $type_enum){
-					echo '<option value="'.$value.'" selected>'.$value."</option>";
-				}
-				else{
-					echo '<option value="'.$value.'" >'.$value."</option>";
-				}
+			$type = $_GET["lm_type"];
+
+			if ($_GET["lm_type"] == "process_seg") {
+				$type = $_GET["sub_type"];
 			}
-			echo '</select>';
-			echo '</td>';
 
-			$recorder_enums = array("pr", "ji");
 
-			echo '<td align="center" >';
-			echo '<label>Reporter Type: <label><select name="reporter_enum">';
-			foreach($recorder_enums as $value){
-				if ($value == $reporter_enum){
-					echo '<option value="'.$value.'" selected>'.$value."</option>";
+			$crash_type_id = get_crash_type_id($error, $sql_handle, $_GET["project"], $type);
+
+			if ($crash_type_id > 0) {
+				/* Query the database and see if there are any other crash regex of this type for this test */
+				$tables = array("crash_known");
+
+				$where = array("fk_crash_type_id"=>$crash_type_id,
+							   "fk_test_root_id" => $_GET["test_root_id"]);
+
+				$select = array("crash_known_id", "type_enum", "fk_project_bug_id", "UNCOMPRESS(regex) as regex");
+
+				$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
+
+				if ($rc == OK) {
+					foreach($rows as $row){
+						$regex[count($regex)] = $row["regex"];
+						$crash_known_id[count($crash_known_id)] =  $row["crash_known_id"];
+					}
 				}
-				else{
-					echo '<option value="'.$value.'" >'.$value."</option>";
-				}
-			}
-			echo '</select>';
-			echo '</td >';
-
-			echo '<td align="center" >';
-			if ($bug_reporter_unique_ref != NULL) {
-				echo '<label>Unique Ref: </label><input type=text name="bug_reporter_unique_ref" value="'.$bug_reporter_unique_ref.'" >';
 			}
 			else{
-				echo '<label>Unique Ref: </label><input type=text name="bug_reporter_unique_ref">';
+				$rc = $crash_type_id;
 			}
-			echo '</td>';
-			echo '</tr>';
-			echo '</table>';
-			echo '<center><textarea name="regex" cols=140 rows='.$line_count.' >';
-			
-			echo $regex;
-			echo '</textarea></center>';
 
-			echo '<table align="center" width="20%">';
-			echo '<tr>';
-			
-			echo '<td align="center">';
-			echo '<input type="submit" name="submit" value="Test Change" >';
-			echo '</td>';
-			
-		
 
-			if (check_regex($regex, $crash_profile_lines, $error)) {
-				echo '<td align="center">';
-				echo "Match";
+			if ($rc == OK) {
+				
+				$max_regex_index = count($regex);
+				if (isset($_GET["regex_index"])){
+					if ($_GET["regex_index"] < $max_regex_index){
+						$regex_index = $_GET["regex_index"];
+					}
+				}
+
+				if ($regex_index > 0) {
+					$readonly = True;
+				}
+
+				echo '<form>';
+				dup_get_input_for_form(array("crash_known_id"));
+
+				echo '<input type="hidden" name="known_crash_id" value='.$crash_known_id[$regex_index].' >';
+				echo '<input type="hidden" name="regex_index" value='.$regex_index.' >';				
+
+				echo "<center><strong>Regex Profile (".($regex_index+1)." of ".$max_regex_index.")</strong></center>";
+			
+				echo '<table align="center" width=50%>';
+				echo '<tr>';
+
+				echo '<td align="center" >';
+				$type_enums = array("error", "generated");
+				
+				echo '<label>Crash Type: <label><select name="type_enum">';			
+				foreach($type_enums as $value){
+					if ($value == $type_enum){
+						echo '<option value="'.$value.'" selected>'.$value."</option>";
+					}
+					else{
+						echo '<option value="'.$value.'" >'.$value."</option>";
+					}
+				}
+				echo '</select>';
 				echo '</td>';
 
+				$recorder_enums = array("pr", "ji");
 
-				if (intval($_GET["crash_known_id"])> 0) {
-					echo '<td align="center">';
-					echo '<input type="submit" name="submit" value="Update" >';
-					echo '</td>';
+				echo '<td align="center" >';
+				echo '<label>Reporter Type: <label><select name="reporter_enum">';
+				foreach($recorder_enums as $value){
+					if ($value == $reporter_enum){
+						echo '<option value="'.$value.'" selected>'.$value."</option>";
+					}
+					else{
+						echo '<option value="'.$value.'" >'.$value."</option>";
+					}
 				}
-				else {			
+				echo '</select>';
+				echo '</td >';
+
+				echo '<td align="center" >';
+				if ($bug_reporter_unique_ref != NULL) {
+					echo '<label>Unique Ref: </label><input type=text name="bug_reporter_unique_ref" value="'.$bug_reporter_unique_ref.'" >';
+				}
+				else{
+					echo '<label>Unique Ref: </label><input type=text name="bug_reporter_unique_ref">';
+				}
+				echo '</td>';
+				echo '</tr>';
+				echo '</table>';
+
+				if ($readonly){
+					echo '<center><textarea name="regex" cols=140 rows='.$line_count.' readonly>';
+				}
+				else {
+					echo '<center><textarea name="regex" cols=140 rows='.$line_count.' >';
+				}
+
+				echo $regex[$regex_index];
+				
+				echo '</textarea></center>';
+
+				echo '<table align="center" width="20%">';
+				echo '<tr>';
+				
+				echo '<td align="center">';
+				echo '<input type="submit" name="submit" value="Test Change" >';
+				echo '</td>';
+				
+			
+
+				if (check_regex($regex[$regex_index], $crash_profile_lines, $error)) {
 					echo '<td align="center">';
-					echo '<input type="submit" name="submit" value="Apply" >';
+					echo "Match";
 					echo '</td>';
-				}						
+
+
+					if (intval($_GET["crash_known_id"])> 0) {
+						echo '<td align="center">';
+						echo '<input type="submit" name="submit" value="Update" >';
+						echo '</td>';
+					}
+					else {			
+						echo '<td align="center">';
+						echo '<input type="submit" name="submit" value="Apply" >';
+						echo '</td>';
+					}						
+				}
+				else{
+					echo '<td>';				
+					echo "No Match";
+					echo '</td>';
+
+					echo '<td align="center">';
+					echo '&nbsp';
+					echo '</td>';								
+				}
+
+
+				echo '</tr>';
+
+				echo '</table>';
+				echo '</form>';
 			}
 			else{
-				echo '<td>';				
-				echo "No Match";
-				echo '</td>';
-
-				echo '<td align="center">';
-				echo '&nbsp';
-				echo '</td>';								
+				echo $error;
 			}
-
-
-			echo '</tr>';
-
-			echo '</table>';
-			echo '</form>';
-
 		}
 		else{
 			echo $error;
@@ -437,6 +510,60 @@ function generate_kdump_crash_profile(&$error, $sql_handle, &$log_lines, &$crash
 	return $rc;
 }
 
+function generate_process_seg_crash_profile(&$error, $sql_handle, &$log_lines, &$crash_profile) {
+	$rc = OK;
+	$crash_profile["lines"] = array();
+	$crash_profile["regex"] = array();
+	
+	$max_log_lines = count($log_lines);
+
+	# Now scan back from the crash position to the first none empty line.
+	for($scan_index = $crash_profile["line_marker_info"]["start"]-1; $scan_index > 0; $scan_index --){
+		if (strlen($log_lines[$scan_index]) > 0) {
+			break;
+		}
+	}
+
+	$crash_profile["mod_start"] = $scan_index;
+
+	# Now scan forward from the crash position to the first none empty line.
+	for($scan_index = $crash_profile["line_marker_info"]["start"]+1; $scan_index < $max_log_lines; $scan_index ++) {
+		if (strlen($log_lines[$scan_index]) > 0) {
+			break;
+		}
+	}
+		$crash_profile["mod_end"]  = $scan_index;
+
+	$temp = array_splice($log_lines, $crash_profile["mod_start"] - key($log_lines), (($crash_profile["mod_end"]+1) - $crash_profile["mod_start"]));
+
+	$counter = $crash_profile["mod_start"];
+	$crash_profile["lines"] = array();
+
+	foreach($temp as $line){
+		if (strlen(trim($line)) > 0) {
+			$crash_profile["lines"][$counter] = $line;
+		}
+		$counter++;
+	}
+
+	$crash_profile["regex"] = preg_quote(implode("\n",$crash_profile["lines"]));
+	$crash_profile["regex"] = preg_replace("/\\\<TS\\\>.*\\\<\\/TS\\\>/", "\<TS\>.*\<\/TS\>", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/\\\<BS\\\>.*\\\<\\/BS\\\>/", "\<BS\>.*\<\/BS\>", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/Process \d{5,25}/", "Process \\d+", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/pid \d{5,25}/", "pid \\d+", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/code\\\=\d+/", "code\=\d+", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/fltno\\\=\d+/", "fltno\=\d+", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/ref\\\=[\da-f]+/", "ref\=[\da-f]+", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/mapaddr\\\=[\da-f]+/", "mapaddr\=[\da-f]+", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/ip\\\=[\da-f]+/", "ip\=[\da-f]+", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/[\da-f]{16,16}/", "[\da-f]+", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/\\:\d+/", ":\d+", $crash_profile["regex"]);
+	$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);
+
+
+	return $rc;
+}
+
 function get_line_marker_info_and_crash_profile(&$error, $sql_handle, $lm_id, &$crash_profile, $log_profile=NULL) {
 
 	$rc = OK;
@@ -457,52 +584,8 @@ function get_line_marker_info_and_crash_profile(&$error, $sql_handle, $lm_id, &$
 
 	if ($rc == OK) {
 
-		$max_log_lines = count($log_profile["file_data"]["lines"]);
-
 		if ($crash_profile["line_marker_info"]["line_marker_type"] == "process_seg") {
-
-			# Now scan back from the crash position to the first none empty line.
-			for($scan_index = $crash_profile["line_marker_info"]["start"]-1; $scan_index > 0; $scan_index --){
-				if (strlen($log_profile["file_data"]["lines"][$scan_index]) > 0) {
-					break;
-				}
-			}
-
-			$crash_profile["mod_start"] = $scan_index;
-
-			# Now scan forward from the crash position to the first none empty line.
-			for($scan_index = $crash_profile["line_marker_info"]["start"]+1; $scan_index < $max_log_lines; $scan_index ++) {
-				if (strlen($log_profile["file_data"]["lines"][$scan_index]) > 0) {
-					break;
-				}
-			}
-				$crash_profile["mod_end"]  = $scan_index;
-
-			$temp = array_splice($log_profile["file_data"]["lines"], $crash_profile["mod_start"] - key($log_profile["file_data"]["lines"]), (($crash_profile["mod_end"]+1) - $crash_profile["mod_start"]));
-
-			$counter = $crash_profile["mod_start"];
-			$crash_profile["lines"] = array();
-
-			foreach($temp as $line){
-				if (strlen(trim($line)) > 0) {
-					$crash_profile["lines"][$counter] = $line;
-				}
-				$counter++;
-			}
-
-			$crash_profile["regex"] = preg_quote(implode("\n",$crash_profile["lines"]));
-			$crash_profile["regex"] = preg_replace("/\\\<TS\\\>.*\\\<\\/TS\\\>/", "\<TS\>.*\<\/TS\>", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/\\\<BS\\\>.*\\\<\\/BS\\\>/", "\<BS\>.*\<\/BS\>", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/Process \d{5,25}/", "Process \\d+", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/pid \d{5,25}/", "pid \\d+", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/code\\\=\d+/", "code\=\d+", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/fltno\\\=\d+/", "fltno\=\d+", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/ref\\\=[\da-f]+/", "ref\=[\da-f]+", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/mapaddr\\\=[\da-f]+/", "mapaddr\=[\da-f]+", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/ip\\\=[\da-f]+/", "ip\=[\da-f]+", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/[\da-f]{16,16}/", "[\da-f]+", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/\\:\d+/", ":\d+", $crash_profile["regex"]);
-			$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);
+			$rc = generate_process_seg_crash_profile($error, $sql_handle, $log_profile["file_data"]["lines"], $crash_profile);
 		}
 		else if ($crash_profile["line_marker_info"]["line_marker_type"] == "kdump") {
 			$rc =  generate_kdump_crash_profile($error, $sql_handle, $log_profile["file_data"]["lines"], $crash_profile);			
