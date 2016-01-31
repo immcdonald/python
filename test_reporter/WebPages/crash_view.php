@@ -33,6 +33,18 @@ if (isset($_GET["sl"])) {
 	$show_numbers = ' | ';
 }
 
+if (isset($_GET["type_enum"])){
+	$type_enum = $_GET["type_enum"];
+}
+
+if (isset($_GET["reporter_enum"])){
+	$reporter_enum = $_GET["reporter_enum"];
+}
+
+if (isset($_GET["bug_reporter_unique_ref"])){
+	$bug_reporter_unique_ref = $_GET["bug_reporter_unique_ref"];
+}
+
 if ($rc == OK) {
 
 	$sql_handle = get_sql_handle($db_path, "project_db", $db_user_name, $db_password, $error);
@@ -86,9 +98,114 @@ if ($rc == OK) {
 
 			$line_count = min(count($test_profile["crash"]["lines"]), 10);
 
-			show(implode("\n", $test_profile["crash"]["lines"]),"Crash Profile", $line_count, 140, TRUE);
+			$crash_profile_lines = implode("\n", $test_profile["crash"]["lines"]);
 
-			show($test_profile["crash"]["regex"],"Regex Profile", $line_count, 140, False);
+			show($crash_profile_lines,"Crash Profile", $line_count, 140, TRUE);
+
+			if (isset($_GET["regex"])){
+				$regex = $_GET["regex"];
+			}
+			else{
+				$regex = $test_profile["crash"]["regex"];
+			}
+
+			echo "TODO: If the crash type is known then get the regex data, bug info from the DATABASE";
+
+
+			echo '<form>';
+			dup_get_input_for_form();
+			
+			echo "<center><strong>Regex Profile</strong></center>";
+		
+			echo '<table align="center" width=50%>';
+			echo '<tr>';
+
+			echo '<td align="center" >';
+			$type_enums = array("error", "generated");
+			
+			echo '<label>Crash Type: <label><select name="type_enum">';			
+			foreach($type_enums as $value){
+				if ($value == $type_enum){
+					echo '<option value="'.$value.'" selected>'.$value."</option>";
+				}
+				else{
+					echo '<option value="'.$value.'" >'.$value."</option>";
+				}
+			}
+			echo '</select>';
+			echo '</td>';
+
+			$recorder_enums = array("pr", "ji");
+
+			echo '<td align="center" >';
+			echo '<label>Reporter Type: <label><select name="reporter_enum">';
+			foreach($recorder_enums as $value){
+				if ($value == $reporter_enum){
+					echo '<option value="'.$value.'" selected>'.$value."</option>";
+				}
+				else{
+					echo '<option value="'.$value.'" >'.$value."</option>";
+				}
+			}
+			echo '</select>';
+			echo '</td >';
+
+			echo '<td align="center" >';
+			if ($bug_reporter_unique_ref != NULL) {
+				echo '<label>Unique Ref: </label><input type=text name="bug_reporter_unique_ref" value="'.$bug_reporter_unique_ref.'" >';
+			}
+			else{
+				echo '<label>Unique Ref: </label><input type=text name="bug_reporter_unique_ref">';
+			}
+			echo '</td>';
+			echo '</tr>';
+			echo '</table>';
+			echo '<center><textarea name="regex" cols=140 rows='.$line_count.' >';
+			
+			echo $regex;
+			echo '</textarea></center>';
+
+			echo '<table align="center" width="20%">';
+			echo '<tr>';
+			
+			echo '<td align="center">';
+			echo '<input type="submit" name="submit" value="Test Change" >';
+			echo '</td>';
+			
+		
+
+			if (check_regex($regex, $crash_profile_lines, $error)) {
+				echo '<td align="center">';
+				echo "Match";
+				echo '</td>';
+
+
+				if (intval($_GET["crash_known_id"])> 0) {
+					echo '<td align="center">';
+					echo '<input type="submit" name="submit" value="Update" >';
+					echo '</td>';
+				}
+				else {			
+					echo '<td align="center">';
+					echo '<input type="submit" name="submit" value="Apply" >';
+					echo '</td>';
+				}						
+			}
+			else{
+				echo '<td>';				
+				echo "No Match";
+				echo '</td>';
+
+				echo '<td align="center">';
+				echo '&nbsp';
+				echo '</td>';								
+			}
+
+
+			echo '</tr>';
+
+			echo '</table>';
+			echo '</form>';
 
 		}
 		else{
