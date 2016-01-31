@@ -1,5 +1,7 @@
 <?php
 include_once("assist.php");
+include_once("help_log_display.php");
+include_once("db_helper.php");
 gen_head("Regression Runs", "style.css");
 $error = NULL;
 

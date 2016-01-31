@@ -8,30 +8,91 @@ define("ERROR_NOT_FOUND", -2);
 define("ERROR_MYSQL", -3);
 define("ERROR_INVALID_PARAM", -4);
 define("ERROR_VALUE_EXISTS", -5);
+define("ERROR_BAD_COUNT", -6);
 
-function field_length_check(&$error, $field_name, $string, $min=0, $max=65535) {
-	$rc = ERROR_GENERAL;
+/* ============================================================================================================
+ Some Basic MSQL wrappers
+==============================================================================================================*/
+function get_sql_handle($db_path, $db_shema, $db_user_name, $db_password, &$error){
+	$conn = NULL;
 
-	if (is_string($string) == False){
-		$string = (string) $string;
+	try{
+		$conn = new PDO('mysql:host='.$db_path.';dbname='.$db_shema, $db_user_name, $db_password);
+	}
+	catch(PDOException $e) {
+		$conn = NULL;
+		$error = 'ERROR: ' . $e->getMessage();
 	}
 
-	if (strlen($string) > $min){
-		if (strlen($string) <  $max) {
-			$rc = OK;
+	if ($conn != NULL)
+        {
+		try{
+			$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		}
+		catch(PDOException $e) {
+			$error = 'ERROR: ' . $e->getMessage();
+		}
+	}
+	return $conn;
+}
+
+function sql_query($sql_handle, $query, &$error) {
+	$stmt = NULL;
+	try{
+		$stmt = $sql_handle->prepare($query);
+	}
+	catch(PDOException $e) {
+		$stmt = NULL;
+		$error = 'ERROR: ' . $e->getMessage();
+	}
+
+	if ($stmt != NULL){
+		try{
+			$stmt->execute();
+		}
+		catch(PDOException $e) {
+			$stmt = NULL;
+			$error = 'ERROR: ' . $e->getMessage();
+		}
+	}
+	return $stmt;
+}
+
+
+function q(&$error, $sql_handle, $query_str, &$values=NULL) {
+	if ($values != NULL){
+		if (is_array($values) === FALSE){
+			$errors = 'The values parameter must be passed in the form of an array or NULL';
+			return NULL;
+		}
+	}
+
+	if (strlen($query_str) > 2){
+		$query = $sql_handle->prepare($query_str);
+		if ($query) {
+
+			$query->execute($values);
+			if ($query){
+				return $query;
+			}
+			else{
+				$error = $sql_handle->errorInfo();
+				$error = $query_str.":<BR>".$error[2];
+				return NULL;
+			}
 		}
 		else{
-			$rc = ERROR_INVALID_PARAM;
-			$error = "Error: The ".$field_name." value must be less then ".$max;
+			$error = $sql_handle->errorInfo();
+			$error = $query_str.":<BR>".$error[2];
+			return NULL;
 		}
 	}
 	else{
-		$rc = ERROR_INVALID_PARAM;
-		$error = "Error: The ".$field_name." value must be greater then ".$min;
+		$error = "The query string is to short.";
+		return NULL;
 	}
-
-	return $rc;
 }
+
 
 function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_data=NULL, $where_string=NULL){
 	$rc = ERROR_GENERAL;
@@ -142,7 +203,7 @@ function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_d
 				}
 			}
 
-			echo $query."<BR>";
+			//echo $query."<BR>";
 
 			$result =  sql_query($sql_handle, $query, $error);
 
@@ -231,8 +292,39 @@ function insert(&$error, $sql_handle, $table, $insert_dict, $check=False) {
 	return $rc;
 }
 
+
+/* ============================================================================================================
+ Some queries to help pull information from the database.
+==============================================================================================================*/
 function get_root_projects(&$error, $sql_handle, &$rows) {
 	$rc = select($error, $sql_handle, $rows, "project_root", "*");
+	return $rc;
+}
+
+function get_variant_exec_id_from_test_exec_id(&$error, $sql_handle,  $test_exec_id, &$variant_exec_id) {
+	$rc = OK;
+	$rows  = array();
+	$select = array("fk_variant_exec_id");
+	$tables = array("test_exec");
+	$where = array("test_exec_id"=> $test_exec_id);
+
+	$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
+
+	if ($rc ==OK){
+		$count = count($rows);
+
+		if ($count == 0){
+			$rc = ERROR_NOT_FOUND;
+			$error = __FUNCTION__.":".__LINE__."Yeiled no records for test_exec_id:".$test_exec_id;
+		}
+		else if ($count == 1) {
+			$variant_exec_id = $rows[0]["fk_variant_exec_id"];
+		}
+		else{
+			$rc = ERROR_BAD_COUNT;
+			$error = __FUNCTION__.":".__LINE__." Returned to many records:".$count." for test_exec_id".$test_exec_id;		
+		}
+	}
 	return $rc;
 }
 
@@ -257,12 +349,13 @@ function get_crash_types(&$error, $sql_handle, &$rows, $project_child_id){
 	$rc = ERROR_GENERAL;
 	$tables = array("crash_type");
 	$where = array("fk_project_child_id"=>$project_child_id);
-	$get = array("crash_type_id");
+	$get = array("crash_type_id", "name");
 
 	$rc = select($error, $sql_handle, $rows, $tables, $get, $where);
 
 	return $rc;
 }
+
 
 function get_crash_type_id(&$error, $sql_handle, $project_child_id, $crash_type) {
 	$rc = ERROR_GENERAL;
@@ -285,7 +378,7 @@ function get_crash_type_id(&$error, $sql_handle, $project_child_id, $crash_type)
 			}
 			else if (count($rows) > 1){
 				$rc = $rowsp[0]["crash_type_id"];
-				echo "Warning: (get_crash_type_id) more then one row was returned for ".$crash_type." on project ".$project_child_id."<BR>";
+				$error = "Warning: (get_crash_type_id) more then one row was returned for ".$crash_type." on project ".$project_child_id."<BR>";
 			}
 			else{
 				$rc = ERROR_NOT_FOUND;
@@ -335,6 +428,192 @@ function get_bug_root_id(&$error, $sql_handle, $reporter_type, $unique_ref) {
 	}
 	return $rc;
 }
+
+/*=====================================================================================================
+LINE MARKER FUNCTIONS
+=======================================================================================================*/
+function get_line_marker_type_id_from_string(&$error, $sql_handle, $line_marker_type){
+	$rc = ERROR_GENERAL;
+	$rows = array();
+	$tables = array("line_marker_type");
+	$where = array("name"=>$line_marker_type);
+	$select = array("line_marker_type_id");
+
+	$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
+
+	if ($rc == OK) {
+		if (count($rows) == 1){
+			$rc = $rows[0]["line_marker_type_id"];
+		}
+		else if (count($rows) == 0){
+			$rc = ERROR_NOT_FOUND;
+			$error = "(get_line_marker_type_id_from_string) [".$line_marker_type."] not found.";
+
+		}
+		else{
+			$rc =ERROR_BAD_COUNT;
+			$error = "(get_line_marker_type_id_from_string) expected a count of 1 but instead got: ".count($rows);
+		}
+	}
+	
+	return $rc;
+}
+function get_line_marker_info_for_type(&$error, $sql_handle, &$line_marker_info, $test_exec_id, $line_marker_type){
+	
+	$line_marker_type_id = get_line_marker_type_id_from_string($error, $sql_handle, $line_marker_type);
+
+	if ($line_marker_type_id > 0) {
+		$rows = array();
+
+		$tables = array("line_marker");
+		$where = array("fk_line_marker_type_id"=> intval($line_marker_type_id), "fk_test_exec_id"=> intval($test_exec_id));
+		$select = array("*");
+
+		$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
+
+		if ($rc == OK) {
+			$count = count($rows);
+
+			if ($count == 0){
+				$rc = ERROR_NOT_FOUND;
+				$error = __FUNCTION__.":".__LINE__." Yeiled no records.";
+			}
+			else if ($count == 1) {
+				$line_marker_info = $rows[0];
+			}
+			else{
+				$rc = ERROR_BAD_COUNT;
+				$error = __FUNCTION__.":".__LINE__." Returned to many records:".$count;		
+			}
+		}
+	}
+	else{
+		$rc = $line_marker_type_id;
+	}
+
+	return $rc;
+}
+
+function get_info_for_line_marker_id(&$error, $sql_handle, &$row, $lm_id){
+	$select = array("line_marker_id", "fk_attachment_id", "line_marker_type_id", 
+					"line_marker_sub_type_id", "fk_test_exec_id", "start", "end",
+					"line_marker.comment as line_marker_comment", 
+					"line_marker.created as line_marker_created",
+					"line_marker_type.name as line_marker_type",
+					"line_marker_sub_type.name as line_marker_sub_type",					
+					);
+	
+	$tables = array("line_marker", "line_marker_type", "line_marker_sub_type");
+
+	$where = array("line_marker.fk_line_marker_type_id"=>"line_marker_type.line_marker_type_id",
+				   "line_marker.fk_line_marker_sub_type_id"=>"line_marker_sub_type.line_marker_sub_type_id",
+				   "line_marker.line_marker_id"=> $lm_id);
+
+	$rows = array();
+
+	$rc = select($error, $sql_handle, $rows, $tables , $select, $where);
+
+
+	if ($rc == OK){
+		$count = count($rows);
+
+		if ($count == 0){
+			$rc = ERROR_NOT_FOUND;
+			$error = __FUNCTION__.":".__LINE__." ".$lm_id." yeilded no records.";
+		}
+		else if ($count == 1) {
+			$row = $rows[0];
+		}
+		else{
+			$rc = ERROR_BAD_COUNT;
+			$error = __FUNCTION__.":".__LINE__." ".$lm_id." returned to many records:".$count;		
+		}
+	}
+	return $rc;
+}
+
+function get_master_core(&$error, $sql_handle, &$rows,  $where_string=NULL) {
+	$rc = ERROR_GENERAL;
+
+	$rows = array();
+
+	$tables = array("line_marker", "crash_exec", "test_exec", "variant_exec", "exec", "test_revision");
+
+	$select = array("line_marker_id", "crash_exec_id", "fk_attachment_id as attachment_id",
+				 "fk_line_marker_type_id as line_marker_type_id",
+				 "fk_line_marker_sub_type_id as line_marker_sub_type_id", "start", "end",
+				 "fk_crash_type_id as crash_type_id", "fk_crash_known_id as crash_known_id",
+				 "test_exec_id", "fk_result_tag_id as result_tag_id", "test_exec.fk_exec_abort_id as test_exec_abort_id",
+				 "variant_exec_id", "variant_exec.fk_exec_abort_id as variant_exec_abort_id", "test_revision_id", "test_revision.fk_test_root_id as test_root_id", );
+
+	$where = array("crash_exec.fk_line_marker_id"=>"line_marker.line_marker_id",
+				   "line_marker.fk_test_exec_id"=>"test_exec.test_exec_id",
+				   "test_exec.fk_variant_exec_id"=>"variant_exec.variant_exec_id",
+				   "test_exec.fk_test_revision_id" => "test_revision.test_revision_id",
+				   "variant_exec.fk_exec_id"=>"exec.exec_id",
+				   "variant_exec.fk_variant_root_id"=>"variant_root.variant_root_id",
+				   "variant_root.fk_target_id" => "target.target_id",
+				   "variant_root.fk_arch_id"=> "arch.arch_id"
+				   );
+
+	$rc = select($error, $sql_handle, $rows, $tables , $select, $where, $where_string);
+
+	return $rc;
+}
+
+function get_select_master_core(&$error, $sql_handle, &$rows,  $select_list, $where_string=NULL){
+	$rc = ERROR_GENERAL;
+
+
+	if (is_array($select_list) == False){
+
+		if (is_string($select_list)){
+			$pos = strpos($select_list, ",");
+
+			if ($pos === FALSE) {	
+				$select_list = array($select_list);					
+			}
+			else{
+				$select_list = explode(",", $select_list);
+
+				foreach($select_list as &$item){
+					$item = trim($item);
+				}
+			}
+		}
+		else{
+			$error= "dup_get_input was passed in a type that it does not support.";
+			$rc = ERROR_INVALID_PARAM;
+		}
+	}
+
+
+	if (count($select_list) <= 0){
+		$error = "Length of select list can not be zero";
+		$rc = ERROR_INVALID_PARAM;
+	}
+
+	$rows = array();
+
+	$tables = array("line_marker", "crash_exec", "test_exec", "variant_exec", "exec", "test_revision", "variant_root", "target", "arch");
+
+	$where = array("crash_exec.fk_line_marker_id"=>"line_marker.line_marker_id",
+				   "line_marker.fk_test_exec_id"=>"test_exec.test_exec_id",
+				   "test_exec.fk_variant_exec_id"=>"variant_exec.variant_exec_id",
+				   "test_exec.fk_test_revision_id" => "test_revision.test_revision_id",
+				   "variant_exec.fk_exec_id"=>"exec.exec_id",
+				   "variant_exec.fk_variant_root_id"=>"variant_root.variant_root_id",
+				   "variant_root.fk_target_id" => "target.target_id",
+				   "variant_root.fk_arch_id"=> "arch.arch_id"
+				   );
+
+	$rc = select($error, $sql_handle, $rows, $tables , $select_list, $where, $where_string);
+
+	return $rc;
+}
+
+
+
 
 function add_bug_root(&$error, $sql_handle, $reporter_type, $unique_ref, $summary=NULL, $comment=NULL) {
 	$rc = ERROR_GENERAL;
@@ -454,35 +733,221 @@ function add_project_bug(&$error, $sql_handle, $reporter_type, $unique_ref, $pro
 	return $rc;
 }
 
-function get_master_core(&$error, $sql_handle, &$rows,  $where_string=NULL) {
-	$rc = ERROR_GENERAL;
+
+/* ============================================================================================================
+Attachment helpers
+==============================================================================================================*/
+
+// File name here means no extension or path
+function get_file_information_for_file_name_and_variant_id(&$error, $sql_handle, &$file_info, $variant_exec_id, $base_file_name, $src_ext=NULL) {
+	$rc = OK;
+
+	$select = array("storage_rel_path", "base_file_name", "src_ext", "storage_ext","attach_path");
+	$tables = array("attachment", "project_child");
+
+	$where = array("attachment.fk_project_child_id"=>"project_child.project_child_id",
+					"fk_variant_exec_id"=>$variant_exec_id,
+					"base_file_name"=>$base_file_name);
+
+	if ($src_ext != NULL){
+		$where["src_ext"] = $src_ext;
+	}
 
 	$rows = array();
 
-	$tables = array("line_marker", "crash_exec", "test_exec", "variant_exec", "exec", "test_revision");
+	$rc = select($error, $sql_handle, $rows, $tables , $select, $where);
 
-	$select = array("line_marker_id", "crash_exec_id", "fk_attachment_id as attachment_id",
-				 "fk_line_marker_type_id as line_marker_type_id",
-				 "fk_line_marker_sub_type_id as line_marker_sub_type_id", "start", "end",
-				 "fk_crash_type_id as crash_type_id", "fk_crash_known_id as crash_known_id",
-				 "test_exec_id", "fk_result_tag_id as result_tag_id", "test_exec.fk_exec_abort_id as test_exec_abort_id",
-				 "variant_exec_id", "variant_exec.fk_exec_abort_id as variant_exec_abort_id", "test_revision_id", "test_revision.fk_test_root_id as test_root_id", );
+	if ($rc == OK){
+		$count = count($rows);
 
-	$where = array("crash_exec.fk_line_marker_id"=>"line_marker.line_marker_id",
-				   "line_marker.fk_test_exec_id"=>"test_exec.test_exec_id",
-				   "test_exec.fk_variant_exec_id"=>"variant_exec.variant_exec_id",
-				   "test_exec.fk_test_revision_id" => "test_revision.test_revision_id",
-				   "variant_exec.fk_exec_id"=>"exec.exec_id"
-				   );
+		if ($count == 1){
+			$file_info = $rows[0];
 
-	$rc = select($error, $sql_handle, $rows, $tables , $select, $where, $where_string);
+			$ext = $file_info["storage_ext"];
 
-	echo '<textarea cols="200" rows="20">';
-	var_dump($rows);
-	echo "</textarea>";
+			if ($file_info["src_ext"] != $file_info["storage_ext"]){
+				$ext = $file_info["src_ext"].$file_info["storage_ext"];
+			}
+			$file_info["full_path"] = $file_info["attach_path"]."/".$file_info["storage_rel_path"]."/".$file_info["base_file_name"].$ext;
+		}
+		else{
+			$rc = ERROR_BAD_COUNT;
+			$error = __FUNCTION__.":".__LINE__." Expected a row count of 1 instead got:".$count." for variant_exec_id: ".$variant_exec_id." and base file name: ".$base_file_name;
+		}
+	}
+}
+
+
+function get_symbol_file_info_for_variant_exec_id(&$error, $sql_handle, &$file_info, $variant_exec_id){
+	$rc = OK;
+
+	$select = array("storage_rel_path", "base_file_name", "src_ext", "storage_ext","attach_path");
+	$tables = array("attachment", "project_child");
+
+	$where = array("attachment.fk_project_child_id"=>"project_child.project_child_id",
+					"fk_variant_exec_id"=>$variant_exec_id,
+					"src_ext"=>".sym");
+
+	$rows = array();
+
+	$rc = select($error, $sql_handle, $rows, $tables , $select, $where);
+
+	if ($rc == OK){
+		$count = count($rows);
+
+		if ($count == 1){
+			$file_info = $rows[0];
+
+			$ext = $file_info["storage_ext"];
+
+			if ($file_info["src_ext"] != $file_info["storage_ext"]){
+				$ext = $file_info["src_ext"].$file_info["storage_ext"];
+			}
+			$file_info["full_path"] = $file_info["attach_path"]."/".$file_info["storage_rel_path"]."/".$file_info["base_file_name"].$ext;
+		}
+		else{
+			$rc = ERROR_BAD_COUNT;
+			$error = __FUNCTION__.":".__LINE__." Expected a row count of 1 instead got:".$count." for variant_exec_id: ".$variant_exec_id;
+		}
+	}
+}
+
+
+function get_file_info_for_attachment_id(&$error, $sql_handle, &$file_info, $attachment_id) {
+	$rc = OK;
+
+	$select = array("storage_rel_path", "base_file_name", "src_ext", "storage_ext","attach_path");
+	$tables = array("attachment", "project_child");
+
+	$where = array("attachment.fk_project_child_id"=>"project_child.project_child_id",
+					"attachment_id"=>$attachment_id);
+	$rows = array();
+
+	$rc = select($error, $sql_handle, $rows, $tables , $select, $where);
+
+	if ($rc == OK){
+		$count = count($rows);
+
+		if ($count == 1){
+			$file_info = $rows[0];
+
+			$ext = $file_info["storage_ext"];
+
+			if ($file_info["src_ext"] != $file_info["storage_ext"]){
+				$ext = $file_info["src_ext"].$file_info["storage_ext"];
+			}
+			$file_info["full_path"] = $file_info["attach_path"]."/".$file_info["storage_rel_path"]."/".$file_info["base_file_name"].$ext;
+		}
+		else{
+			$rc = ERROR_BAD_COUNT;
+			$error = __FUNCTION__.":".__LINE__." Expected a row count of 1 instead got:".$count." for attachment_id ".$attachment_id;
+		}
+	}
+}
+
+
+function get_file_info_w_lines_for_attachment_id(&$error, $sql_handle, &$file_info, $attachment_id, &$start_line=0 ,&$end_line=-1) {
+	$rc = OK;
+
+	if ($start_line < 0){
+		$start_line = 0;
+	}
+
+	$file_info = array();
+	$file_info["storage"] = array();
+
+	$rc = get_file_info_for_attachment_id($error, $sql_handle, $file_info["storage"], $attachment_id);
+
+	if ($rc == OK) {
+		$file_data = "";
+
+		if ($file_info["storage"]["storage_ext"] == ".gz"){
+			$file = gzopen($file_info["storage"]["full_path"], 'rb');
+
+			$buffer = "";
+
+			while(!gzeof($file)){
+				$buffer = gzread($file, 4096);
+				$file_data = $file_data.$buffer;
+			}
+		}
+		else{
+			$file_data = file_get_contents($file_info["storage"]["full_path"]);
+		}
+
+		#Explode on the new lines which are \n. Note: The logs were put in the database using python and read in using the python univeral read mode.
+		#So these lines should only have a \n. So no other stripping is required.
+		$file_data = explode("\n",$file_data);
+		
+		$max_lines = count($file_data);
+
+		if ($max_lines == 0)
+		{
+			$file_data[0] = "The file is empty!\n";
+			$max_lines = 1;
+		}
+
+		if ($start_line+1 >= $max_lines){
+			$start_line = $max_lines -1;
+		}
+
+		if ($end_line+1 >= $max_lines){
+			$end_line = $max_lines -1;
+		}
+
+		if ($end_line < 0){
+			$end_line = $max_lines -1;
+		}
+
+		$file_data = array_slice($file_data, $start_line, ($end_line+1)-$start_line);
+
+		$file_info["lines"] = array();
+
+		$line_index = $start_line;
+		
+		foreach($file_data as &$lines) {
+			$file_info["lines"][$line_index] = $lines;
+			$line_index ++;
+		}
+	}
+	return $rc;
+}
+
+function get_file_info_for_line_marker_id(&$error, $sql_handle, &$file_info, $line_marker_id, &$start_line=0, &$end_line=-1) {
+	$rc = OK;
+
+	$select = array("*");
+	$tables = array("line_marker");
+	$where = array("line_marker_id" => $line_marker_id);
+	
+	$rows = array();
+
+	$rc = select($error, $sql_handle, $rows, $tables , $select, $where);
+
+	if ($rc == OK) {
+		$count = count($rows);
+
+		if ($count == 1) {
+			$row = $rows[0];
+
+			$rc = get_file_info_w_lines_for_attachment_id($error, $sql_handle, $file_info, $row["fk_attachment_id"], $start_line, $end_line);
+
+		}
+		else{
+			$rc = ERROR_BAD_COUNT;
+			$error = __FUNCTION__.":".__LINE__." Expected a row count of 1 instead got:".$count." for line_marker_id: ".$attachment_id;	
+		}
+	}
 
 	return $rc;
 }
+
+
+function get_kdump_data(){
+
+
+}
+
 
 
 ?>

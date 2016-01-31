@@ -2,7 +2,12 @@
 include_once("assist.php");
 $error = NULL;
 
-function get_text_line_array_for_line_marker($sql_handle, $line_marker_id, &$start_line, &$end_line, &$error) {
+
+
+
+
+
+function get_text_line_array_for_line_marker(&$error, $sql_handle, $line_marker_id, &$start_line, &$end_line) {
 	$file_data = NULL;
 
 	$query = 'SELECT * FROM line_marker WHERE line_marker_id = '.$line_marker_id;
@@ -32,7 +37,6 @@ function get_text_line_array_for_line_marker($sql_handle, $line_marker_id, &$sta
 		if ($start > $end){
 			$start = $end;
 		}
-
 
 		$query = 'SELECT storage_rel_path, base_file_name, src_ext, storage_ext, attach_path FROM attachment, project_child WHERE attachment.fk_project_child_id = project_child.project_child_id and attachment_id='.$rows[0]["fk_attachment_id"];
 
@@ -65,12 +69,7 @@ function get_text_line_array_for_line_marker($sql_handle, $line_marker_id, &$sta
 			}
 
 			$file_data = explode("\n",$file_data);
-
-			// Script the log lines for new lines
-			foreach($file_data as &$lines) {
-				$lines = str_replace("\r", "", $lines);
-			}
-
+			
 			$max_lines = count($file_data);
 
 			if ($start > $max_lines){
@@ -81,7 +80,19 @@ function get_text_line_array_for_line_marker($sql_handle, $line_marker_id, &$sta
 				$end = $max_lines - 1;
 			}
 
-			return array_slice($file_data, $start, ($end+1)-$start);
+			$file_data = array_slice($file_data, $start, ($end+1)-$start);
+
+			$temp = array();
+
+			$line_index = $start;
+			
+			// strip the log lines for new lines
+			foreach($file_data as &$lines) {
+				$temp[$line_index] = str_replace("\r", "", $lines);
+				$line_index ++;
+			}
+
+			return $temp;
 		}
 	}
 

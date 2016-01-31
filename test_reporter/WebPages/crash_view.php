@@ -3,27 +3,444 @@ include_once("assist.php");
 include_once("help_log_display.php");
 include_once("db_helper.php");
 
-gen_head("Crash View", "style.css");
 $error = NULL;
+$rc = OK;
+$type_enum = "error";
+$reporter_enum = "ji";
+$bug_reporter_unique_ref = NULL;
+$regex_profile = NULL;
+$show_numbers = False;
 
-if (isset($_GET["reporter_type"]) == FALSE){
-	$_GET["reporter_type"] = "ji";
-}
+//echo get_keys_as_string($_GET);
 
-$expected_get_keys = array( "project", "exec", "lm_id", "attach_id", "start", "end", "test_exec_id", "lm_type", "lm_type_id", "sub_type", "sub_type_id", "target", "arch", "variant", "suite", "exec_path", "test_name", "params", "result", "test_suite_root_id", "test_root_id", "crash_known_id");
+$expected_get_keys = array("arch", "attach_id", "crash_known_id", "end", "exec", "exec_path", "lm_id", "lm_type",
+						   "lm_type_id", "params", "project", "result", "start", "sub_type", "sub_type_id", "suite",
+						   "target", "test_exec_id", "test_name", "test_root_id", "test_suite_root_id", "variant");
 
-$ok = True;
+
+
 foreach($expected_get_keys as $key){
 
 	if (isset($_GET[$key]) == False){
-		$ok = False;
+		$rc = ERROR_INVALID_PARAM;
 		echo $key." is missing from the URL";
 	}
 }
 
+gen_head("Proj: ".$_GET["project"]."Reg: ".$_GET["exec"]." LM: ".$_GET["lm_id"], "style.css");
+
+if (isset($_GET["sl"])) {
+	$show_numbers = ' | ';
+}
+
+if ($rc == OK) {
+
+	$sql_handle = get_sql_handle($db_path, "project_db", $db_user_name, $db_password, $error);
+
+	if ($sql_handle != NULL) {
+
+		$test_profile = array();
+		$rc =  get_log_and_crash_profile($error, $sql_handle, $_GET["lm_id"], $test_profile);
+
+		if ($rc == OK) {
+
+			echo "<center><h3>".$_GET["target"]."-".$_GET["arch"]."-".$_GET["variant"]." --- ".$_GET["exec_path"]."/".$_GET["test_name"]."".$_GET["params"];
+
+			if (intval($_GET["crash_known_id"])> 0) {
+				echo " (Known Crash)";
+			}
+
+			echo "<h3></center>";
+
+			$marked_lines = array();
+			$marked_lines[0] = array("start"=> 14438, "end"=>14445, "mark"=>"=");
+			$marked_lines[1] = array("start"=> 14433, "end"=>14450, "mark"=>">");
+
+
+			$line_count = count($test_profile["log"]["file_data"]["lines"]);
+
+			$line_count = min($line_count, 30);
+
+			marked_lines_show($test_profile["log"]["file_data"]["lines"], "Test Log", $marked_lines, $line_count, 140, $show_numbers, TRUE);
+
+			$line_count = min(count($test_profile["crash"]["lines"]), 10);
+
+			show(implode("\n", $test_profile["crash"]["lines"]),"Crash Profile", $line_count, 140, TRUE);
+
+			show($test_profile["crash"]["regex"],"Regex Profile", $line_count, 140, False);
+
+		}
+		else{
+			echo $error;
+		}
+	}
+	else{
+		echo $error;
+	}
+}
+
+function generate_shutdown_crash_profile(&$error, &$log_lines, &$crash_profile, $start, &$end){
+	$rc = OK;
+	$crash_profile["lines"] = array();
+	$crash_profile["regex"] = array();
+	$max_lines = count($log_lines);
+
+
+	$crash_profile["lines"][$start] = $log_lines[$start];
+
+	for($index =  $start+1; $index < $max_lines; $index ++) {
+		$pos = strpos($log_lines[$index],'$URL');
+
+		if ($pos !== FALSE){
+			if ($pos == 0){
+				$crash_profile["lines"][$index] = $log_lines[$index];
+				break;
+			}
+		}
+	}
+
+	if ($rc == OK){
+		$crash_profile["regex"] = preg_quote(implode("\n",$crash_profile["lines"]));
+		$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);		
+	}
+
+	return $rc;
+}
+
+function generate_kdump_crash_profile(&$error, $sql_handle, &$log_lines, &$crash_profile) {
+	global $qnx_tool_path;
+	# first pull the kudmp information from the log file.
+	$kdump_lines = array_splice($log_lines, $crash_profile["line_marker_info"]["start"] - key($log_lines), ($crash_profile["line_marker_info"]["end"]) - $crash_profile["line_marker_info"]["start"]);
+
+	$output_matches = array();
+	preg_match("/<QADEBUG>kdumper\s+file\s+kdump.(\d+)\s+<BS>\s*.+\s*<\/BS><\/QADEBUG>/", $kdump_lines[0], $output_matches);
+
+	if (count($output_matches) == 2) {
+		$index = $output_matches[1];
+
+		$variant_exec_id = -1;
+
+		# Now we need to know what variant exec id this was created under.
+		$rc = get_variant_exec_id_from_test_exec_id($error, $sql_handle, $crash_profile["line_marker_info"]["fk_test_exec_id"], $variant_exec_id);
+
+		if ($rc == OK) {
+
+			$crash_profile["kdump_elf_info"] = array();
+			$rc = get_file_information_for_file_name_and_variant_id($error, $sql_handle, $crash_profile["kdump_elf_info"], $variant_exec_id, "kdump.".$index.".elf");
+
+			if ($rc == OK) {
+				$crash_profile["index_file"] = array();
+
+				$rc = get_file_information_for_file_name_and_variant_id($error, $sql_handle, $crash_profile["index_file"], $variant_exec_id, "kdump",".".$index);
+				if ($rc == OK) {
+
+					$crash_profile["symbol_info"] = array();
+					# Now get the attachment information for the symbol file.
+					$rc = get_symbol_file_info_for_variant_exec_id($error, $sql_handle, $crash_profile["symbol_info"], $variant_exec_id);
+
+					if ($rc == OK){
+						# now we need to gzunzip everything first..
+						if (gunzip($error, $crash_profile["kdump_elf_info"]["full_path"])) {
+							$elf_file_name = $crash_profile["kdump_elf_info"]["attach_path"]."/".$crash_profile["kdump_elf_info"]["storage_rel_path"]."/".$crash_profile["kdump_elf_info"]["base_file_name"];
+
+							if (gunzip($error, $crash_profile["symbol_info"]["full_path"])) {
+								$symbol_file_name = $crash_profile["symbol_info"]["attach_path"]."/".$crash_profile["symbol_info"]["storage_rel_path"]."/".$crash_profile["symbol_info"]["base_file_name"].$crash_profile["symbol_info"]["src_ext"];
+
+
+								$descriptorspec = array(
+										   0 => array("pipe", "r"),  // stdin is a pipe that the child will read from
+										   1 => array("pipe", "w"),  // stdout is a pipe that the child will write to
+										   2 => array("pipe", "r") // stderr is a file to write to
+										);
+
+								$cwd = $crash_profile["kdump_elf_info"]["attach_path"]."/".$crash_profile["kdump_elf_info"]["storage_rel_path"];
+								$env = array();
+
+								$cmd = $qnx_tool_path."/nto".$_GET["arch"]."-gdb ".$symbol_file_name;
+
+								$process = proc_open($cmd, $descriptorspec, $pipes, $cwd, $env);
+
+								if (is_resource($process)) {
+									// $pipes now looks like this:
+									// 0 => writeable handle connected to child stdin
+									// 1 => readable handle connected to child stdout
+									// Any error output will be appended to /tmp/error-output.txt
+									fwrite($pipes[0], "echo target remote | kdserver ".$elf_file_name."\\n\n");
+
+									fwrite($pipes[0], "target remote | kdserver ".$elf_file_name."\n");
+
+									fwrite($pipes[0], "echo [ian_is_totally_awesome_bt]\n");
+									fwrite($pipes[0], "echo bt\\n\n");
+									fwrite($pipes[0], "bt\n");
+									fwrite($pipes[0], "echo [/ian_is_totally_awesome_bt]\n");
+									fwrite($pipes[0], "echo [ian_is_totally_awesome_info_reg]\n");
+									fwrite($pipes[0], "echo info reg\\n\n");
+									fwrite($pipes[0], "info reg\n");
+									fwrite($pipes[0], "echo [/ian_is_totally_awesome_info_reg]\n");
+									fwrite($pipes[0], "echo [ian_is_totally_awesome_display]\n");
+									fwrite($pipes[0], "echo display /100i \$pc-0d40\\n\n");
+									fwrite($pipes[0], "display /100i \$pc-0d40\n");
+									fwrite($pipes[0], "echo [/ian_is_totally_awesome_display]\n");
+									fwrite($pipes[0], "quit\n");
+
+									fwrite($pipes[0], "y\n");
+									fclose($pipes[0]);
+
+									$data = stream_get_contents($pipes[1]);
+
+									fclose($pipes[1]);
+
+									// It is important that you close any pipes before calling
+									// proc_close in order to avoid a deadlock
+									$return_value = proc_close($process);
+
+									if ($return_value == 0) {
+										if (count(trim($data)) > 0) {
+											$pos = strrpos($data, "[/ian_is_totally_awesome_bt]");
+
+											$bt_data = substr($data, 0, $pos);
+
+											$pos = strpos($bt_data, "[ian_is_totally_awesome_bt]");
+
+											$crash_profile["header"] =  trim($cmd."\n".substr($bt_data, 0,  $pos ));
+
+											$crash_profile["back_trace"] = trim(substr($bt_data, $pos+strlen("[ian_is_totally_awesome_bt]"), strlen($bt_data)));
+
+											$pos = strrpos($data, "[/ian_is_totally_awesome_info_reg]");
+
+											$info_reg_data = substr($data, 0,  $pos);
+
+											$pos = strpos($info_reg_data, "[ian_is_totally_awesome_info_reg]");
+
+											$crash_profile["info_reg_data"] = trim(substr($info_reg_data, $pos + strlen("[ian_is_totally_awesome_info_reg]"), strlen($info_reg_data)));
+
+											$pos = strrpos($data, "[/ian_is_totally_awesome_display]");
+
+											$display = trim(substr($data, 0,  $pos));
+
+											$pos = strpos($display, "[ian_is_totally_awesome_display]");
+
+											$crash_profile["display"] = trim(substr($display, $pos + strlen("[ian_is_totally_awesome_display]"), strlen($display)));
+
+
+											$lines = explode("\n", $crash_profile["display"]);
+
+
+											$keep_lines = array();
+
+											$next_break = False;
+											$counter = 0;
+											foreach($lines as $line) {
+												$counter ++;
+
+												if ($counter < 4){
+													continue;
+												}
+
+												$line=trim($line);
+
+												if (strlen($line) == 0){
+													continue;
+												}
+
+												$pos = strpos($line, "=>");
+
+												if ($pos !== FALSE){
+													$pos = strpos($line, "<");
+													if ($pos !== FALSE){
+														$keep_lines[count($keep_lines)] = "=>".substr($line, $pos, strlen($line));
+														# some times the info we want is on the next line.. so don't break right away.
+														$next_break = True;
+													}
+												}
+												else{
+													$pos = strpos($line, "<");
+													if ($pos === FALSE){
+														$pos = 0;
+													}
+													$keep_lines[count($keep_lines)] = substr($line, $pos, strlen($line));
+
+													if ($next_break){
+														break;
+													}
+												}
+											}
+											$crash_profile["lines"] = $keep_lines;
+
+											$crash_profile["regex"] = preg_quote(implode("\n",$crash_profile["lines"]));
+										}
+										else{
+											$error = __FUNCTION__.":".__LINE__." GDB process returned no data.";
+											$rc = ERROR_GENERAL;
+										}
+									}
+									else{
+										$error = __FUNCTION__.":".__LINE__." gdb process returned ".$return_value;
+										$rc = ERROR_GENERAL;
+									}
+								}
+								else{
+									$rc = ERROR_GENERAL;
+									$error = __FUNCTION__.":".__LINE__." Failed to regex out kdump index from line: ".$kdump_lines[0];
+								}
+								unlink($symbol_file_name );
+							}
+							unlink($elf_file_name);
+						}
+					}
+				}
+			}
+		}
+	}
+	else {
+		$rc = ERROR_GENERAL;
+		$error = __FUNCTION__.":".__LINE__." Failed to regex out kdump index from line: ".$kdump_lines[0];
+	}
+	return $rc;
+}
+
+function get_line_marker_info_and_crash_profile(&$error, $sql_handle, $lm_id, &$crash_profile, $log_profile=NULL) {
+
+	$rc = OK;
+
+	# Get all the information we can from the lm_id we are passed.
+	# The lm_id we are passed points to the crash line marker, not the test line marker.
+	$crash_profile = array();
+	$crash_profile["line_marker_info"] = array();
+
+	$rc = get_info_for_line_marker_id($error, $sql_handle, 	$crash_profile["line_marker_info"], $lm_id);
+
+	if ($rc == OK) {
+		if ($log_profile == NULL){
+			$log_profile=array();
+			$rc = get_test_log_lines($error, $sql_handle, $_GET["test_exec_id"], $log_profile);
+		}
+	}
+
+	if ($rc == OK) {
+
+		$max_log_lines = count($log_profile["file_data"]["lines"]);
+
+		if ($crash_profile["line_marker_info"]["line_marker_type"] == "process_seg") {
+
+			# Now scan back from the crash position to the first none empty line.
+			for($scan_index = $crash_profile["line_marker_info"]["start"]-1; $scan_index > 0; $scan_index --){
+				if (strlen($log_profile["file_data"]["lines"][$scan_index]) > 0) {
+					break;
+				}
+			}
+
+			$crash_profile["mod_start"] = $scan_index;
+
+			# Now scan forward from the crash position to the first none empty line.
+			for($scan_index = $crash_profile["line_marker_info"]["start"]+1; $scan_index < $max_log_lines; $scan_index ++) {
+				if (strlen($log_profile["file_data"]["lines"][$scan_index]) > 0) {
+					break;
+				}
+			}
+				$crash_profile["mod_end"]  = $scan_index;
+
+			$temp = array_splice($log_profile["file_data"]["lines"], $crash_profile["mod_start"] - key($log_profile["file_data"]["lines"]), (($crash_profile["mod_end"]+1) - $crash_profile["mod_start"]));
+
+			$counter = $crash_profile["mod_start"];
+			$crash_profile["lines"] = array();
+
+			foreach($temp as $line){
+				if (strlen(trim($line)) > 0) {
+					$crash_profile["lines"][$counter] = $line;
+				}
+				$counter++;
+			}
+
+			$crash_profile["regex"] = preg_quote(implode("\n",$crash_profile["lines"]));
+			$crash_profile["regex"] = preg_replace("/\\\<TS\\\>.*\\\<\\/TS\\\>/", "\<TS\>.*\<\/TS\>", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/\\\<BS\\\>.*\\\<\\/BS\\\>/", "\<BS\>.*\<\/BS\>", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/Process \d{5,25}/", "Process \\d+", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/pid \d{5,25}/", "pid \\d+", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/code\\\=\d+/", "code\=\d+", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/fltno\\\=\d+/", "fltno\=\d+", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/ref\\\=[\da-f]+/", "ref\=[\da-f]+", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/mapaddr\\\=[\da-f]+/", "mapaddr\=[\da-f]+", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/ip\\\=[\da-f]+/", "ip\=[\da-f]+", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/[\da-f]{16,16}/", "[\da-f]+", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/\\:\d+/", ":\d+", $crash_profile["regex"]);
+			$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);
+		}
+		else if ($crash_profile["line_marker_info"]["line_marker_type"] == "kdump") {
+			$rc =  generate_kdump_crash_profile($error, $sql_handle, $log_profile["file_data"]["lines"], $crash_profile);			
+		}
+		else if ($crash_profile["line_marker_info"]["line_marker_type"] == "kernel_start") {
+			echo "TODO: GET KERNEL START PROFILE";
+		}
+		else if ($crash_profile["line_marker_info"]["line_marker_type"] == "shutdown") {
+
+			$crash_profile["lines"] = array();
+
+			# Somtimes the shutdown message appears in the main log and sometimes it appears in the kdump log.
+			# Check to see if the log attachment id and the shutdown attachment id are the same or differnt
+			if ($log_profile["line_marker_info"]["fk_attachment_id"] == $crash_profile["line_marker_info"]["fk_attachment_id"]){
+				
+				# They are in the same file.
+				$rc = generate_shutdown_crash_profile($error, $log_profile["lines"], $crash_profile,  $crash_profile["line_marker_info"]["start"], $crash_profile["line_marker_info"]["end"]);
+			}
+			else{
+				$kdump_index_file_info = array();
+
+				$rc = get_file_info_w_lines_for_attachment_id($error, $sql_handle, $kdump_index_file_info, $crash_profile["line_marker_info"]["fk_attachment_id"]);
+
+				if ($rc == OK){
+
+					$rc = generate_shutdown_crash_profile($error, $kdump_index_file_info["lines"], $crash_profile,  $crash_profile["line_marker_info"]["start"], $crash_profile["line_marker_info"]["end"]);
+				}
+			}
+		}
+		else{
+			$rc = ERROR_GENERAL;
+			$error = __FUNCTION__.":".__LINE__." Returned to many records:".$count;
+		}
+	}
+	return $rc;
+}
+
+
+function get_test_log_lines(&$error, $sql_handle, $test_exec_id,  &$test_log_profile){
+
+	$test_log_profile=array();
+	$test_log_profile["line_marker_info"] = array();
+	$test_log_profile["file_data"] = array();
+	$rc = get_line_marker_info_for_type($error, $sql_handle, $test_log_profile["line_marker_info"], $test_exec_id , "full_test");
+
+	if ($rc == OK) {
+		# Get the log lines, note that \r \n will be removed from these lines automatically.
+		$rc = get_file_info_w_lines_for_attachment_id($error, $sql_handle, $test_log_profile["file_data"],
+													  $test_log_profile["line_marker_info"]["fk_attachment_id"],
+													  $test_log_profile["line_marker_info"]["start"], $test_log_profile["line_marker_info"]["end"]);
+	}
+	return $rc;
+}
+
+
+# Pass the function the lm_id of the crash that we want to look at..
+# from it we can determine the full test log that has has the same test_id.
+function get_log_and_crash_profile(&$error, $sql_handle, $lm_id, &$test_profile){
+	# Start out by getting the test log.
+	# To get the test log we need to find the line_marker with a type set to test full
+	# for the passed test_exec_id.
+
+	$test_profile = array();
+	$test_profile["log"] = array();
+	$test_profile["crash"] = array();
+
+	$rc = get_test_log_lines($error, $sql_handle, $_GET["test_exec_id"], $test_profile["log"]);
+
+	if ($rc == OK) {
+		$rc = get_line_marker_info_and_crash_profile($error, $sql_handle, $lm_id, $test_profile["crash"]);
+	}
+
+	return $rc;
+}
+
 function check_regex($regex_profile, $crash_profile, &$error){
-
-
 	$delimiter_list = array('`','!', '@', '#', '$', '%', '^', '&', ',', '\'', ':', '/');
 	$delimiter = NULL;
 
@@ -56,346 +473,40 @@ function check_regex($regex_profile, $crash_profile, &$error){
 	return True;
 }
 
+function get_known_crash_info($sql_handle){
+	global $reporter_enum, $bug_reporter_unique_ref;
+	$rc = OK;
+	$rows = array();
 
-if ($ok) {
+	$tables = array("crash_known");
 
-	$sql_handle = get_sql_handle($db_path, "project_db", $db_user_name, $db_password, $error);
+	$where = array( "crash_known.crash_known_id"=>$_GET["crash_known_id"]);
 
-	if ($sql_handle != NULL) {
+	$select = array("type_enum", "fk_project_bug_id","UNCOMPRESS(regex) as regex");
 
-		$rows = array();
-		echo get_master_core($error, $sql_handle, $rows, "test_revision.fk_test_root_id=".$_GET["test_root_id"]);
+	$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
 
-		echo "<BR>".$error."<BR>";
+	if ($rc == OK){
+		$regex_profile = $rows[0]["regex"];
+		$type_enum = $rows[0]["type_enum"];
+		if (strlen($rows[0]["fk_project_bug_id"]) > 0){
 
-		# Get the "Full test" line type id
-		$query = 'SELECT line_marker_type_id from line_marker_type WHERE name="full_test"';
+			$tables = array("project_bug","bug_root");
+			$where = array( "project_bug_id"=>$rows[0]["fk_project_bug_id"],
+							"project_bug.fk_bug_root_id"=>"bug_root.bug_root_id"
+						  );
+			$select = array("recorder_enum", "unique_ref");
 
-		$full_test_result = sql_query($sql_handle, $query, $error);
+			$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
 
-		if ($full_test_result) {
-			$full_test_rows = $full_test_result->fetchall();
-			$full_test_id = $full_test_rows[0]["line_marker_type_id"];
-
-			# Lets get the log output for this test.
-			$query = 'SELECT fk_attachment_id, start, end FROM line_marker WHERE fk_test_exec_id='.$_GET["test_exec_id"].' and fk_line_marker_type_id='.$full_test_id;
-
-			$full_test_log_result = sql_query($sql_handle, $query, $error);
-
-			if ($full_test_log_result){
-
-				$rows = $full_test_log_result->fetchall();
-
-				$test_log_lines = get_text_line_array_for_line_marker($sql_handle, $rows[0]["fk_attachment_id"], $rows[0]["start"], $rows[0]["end"], $error );
-
-				// strip the log lines of new lines
-				foreach($test_log_lines as &$lines) {
-					$lines = str_replace("\n", "", $lines);
-					$lines = str_replace("\r", "", $lines);
-				}
-
-				if ($_GET["end"] > $rows[0]["end"]){
-					$_GET["end"] = $rows[0]["end"];
-				}
-
-				$show_rows = min(count($test_log_lines), 35);
-
-				echo '<center><textarea name="test_log" cols="200" rows="'.$show_rows.'">';
-
-				$index =  $rows[0]["start"];
-				foreach($test_log_lines as $line){
-
-					if (($index >=  $_GET["start"])  and ($index <=  $_GET["end"]))  {
-						echo $index.") =>".$line."\n";
-					}
-					else{
-						echo $index.") ".$line."\n";
-					}
-					$index  = $index  + 1;
-				}
-				echo "</textarea></center>";
-
-				$max_log_lines = count($test_log_lines);
-
-				# check to see what type of crash this is and then process it accordingly.
-				if ($_GET["lm_type"] == "process_seg"){
-					// The fist display line will be at index 0, but the relative database line is at $rows[0]["start"];
-					$relative_offset_converion = $rows[0]["start"];
-
-					if (isset($_GET["New"]) === False){
-						# Now scan back from the crash position to the first none empty line.
-						for($scan_index = ($_GET["start"] - $relative_offset_converion)-1; $scan_index > 0; $scan_index --){
-
-							if (strlen($test_log_lines[$scan_index]) > 0) {
-								break;
-							}
-						}
-
-						$_GET["start"] = $relative_offset_converion + $scan_index;
-
-						# Now scan forward from the crash position to the first none empty line.
-						for($scan_index = ($_GET["end"] - $relative_offset_converion)+1; $scan_index < $max_log_lines; $scan_index ++) {
-							if (strlen($test_log_lines[$scan_index]) > 0) {
-								break;
-							}
-						}
-
-						$_GET["end"] = $relative_offset_converion + $scan_index;
-					}
-
-					$temp_lines =  array_splice($test_log_lines,  ($_GET["start"]-$relative_offset_converion),  (($_GET["end"]-$relative_offset_converion)+1) - ($_GET["start"] - $relative_offset_converion));
-					$crash_pro_file_lines = array();
-					# remove any white space from the crash profile.
-					foreach($temp_lines as &$temp_line){
-						$temp_line = trim($temp_line);
-						if (strlen($temp_line)>0){
-							$crash_pro_file_lines[count($crash_pro_file_lines)]=$temp_line;
-						}
-					}
-
-					$show_rows = min(count($crash_pro_file_lines), 10);
-
-					$crash_profile = implode("\n",$crash_pro_file_lines);
-
-					echo "<center>Crash Profile</center>";
-					echo '<center><textarea cols="200" rows="'.$show_rows.'">';
-					echo $crash_profile;
-					echo "</textarea></center>";
-
-					if (isset($_GET["regex_profile"]) == FALSE) {
-
-						$regex_profile = preg_quote($crash_profile);
-						$regex_profile = preg_replace("/\\\<TS\\\>.*\\\<\\/TS\\\>/", "\<TS\>.*\<\/TS\>", $regex_profile);
-						$regex_profile = preg_replace("/\\\<BS\\\>.*\\\<\\/BS\\\>/", "\<BS\>.*\<\/BS\>", $regex_profile);
-						$regex_profile = preg_replace("/Process \d{5,25}/", "Process \\d+", $regex_profile);
-						$regex_profile = preg_replace("/pid \d{5,25}/", "pid \\d+", $regex_profile);
-						$regex_profile = preg_replace("/code\\\=\d+/", "code\=\d+", $regex_profile);
-						$regex_profile = preg_replace("/fltno\\\=\d+/", "fltno\=\d+", $regex_profile);
-						$regex_profile = preg_replace("/ref\\\=[\da-f]+/", "ref\=[\da-f]+", $regex_profile);
-						$regex_profile = preg_replace("/mapaddr\\\=[\da-f]+/", "mapaddr\=[\da-f]+", $regex_profile);
-						$regex_profile = preg_replace("/ip\\\=[\da-f]+/", "ip\=[\da-f]+", $regex_profile);
-						$regex_profile = preg_replace("/[\da-f]{16,16}/", "[\da-f]+", $regex_profile);
-						$regex_profile = preg_replace("/\\:\d+/", ":\d+", $regex_profile);
-						$regex_profile = preg_replace("/[[:blank:]]+/", "\s*", $regex_profile);
-					}
-					else{
-						$regex_profile = $_GET["regex_profile"];
-					}
-
-
-					# Query the database and see if we have any known crash dumps for this test already
-
-					echo "TODO-- PUT KNOWN CRASH HERE!!!<BR>";
-
-					echo '<form>';
-
-					foreach(array_keys($_GET) as $key){
-							echo '<input type=hidden name="'.$key.'" value="'.$_GET[$key].'" >';
-					}
-					echo "<center>New Regex Profile</center>";
-					echo '<center><textarea name="regex_profile" cols="200" rows="'.$show_rows.'">';
-					echo $regex_profile;
-					echo "</textarea></center>";
-
-					$status_types = array("error", "generated");
-
-					echo '<label>Crash orgin: </label><select name="status">';
-					foreach($status_types as $status_type){
-						if ($status_type == $_GET["status"]){
-							echo '<option value="'.$status_type.'" selected>'.$status_type."</option>";
-						}
-						else{
-							echo '<option value="'.$status_type.'" >'.$status_type."</option>";
-						}
-					}
-					echo '</select><BR>';
-
-					$reporter_types = array("pr", "ji");
-
-					echo '<label>Reporter Type: </label><select name="reporter">';
-					foreach($reporter_types as $reporter_type){
-						if ($reporter_type == $_GET["reporter_type"]){
-							echo '<option value="'.$reporter_type.'" selected>'.$reporter_type."</option>";
-						}
-						else{
-							echo '<option value="'.$reporter_type.'" >'.$reporter_type."</option>";
-						}
-					}
-					echo '</select><BR>';
-					if (isset($_GET["bug_reporter_unique_ref"])) {
-						echo '<input type=text name="bug_reporter_unique_ref" value="'.$_GET["bug_reporter_unique_ref"].'" >';
-					}
-					else{
-						echo '<input type=text name="bug_reporter_unique_ref">';
-					}
-
-					echo '<center><input type="submit" name="New" value="New" ></center>';
-					echo '</form>';
-				}
-
-				if (isset($_GET["New"])) {
-					echo "<HR>";
-
-					# check to see what type of crash this is and then process it accordingly.
-					if ($_GET["type"] == "process_seg") {
-
-						# first check to make sure the regex matches the profile.
-						$regex_profile = $_GET["regex_profile"];
-
-						if (check_regex($regex_profile, $crash_profile, $error)){
-
-							$OK = True;
-
-							# check to see if the user selected generated or error.
-							if ($_GET["status"] == "error") {
-								if (isset($_GET["bug_reporter_unique_ref"])){
-									if (strlen($_GET["bug_reporter_unique_ref"]) <= 0){
-										echo "Error: Bug reporter unique id missing.";
-										$OK = False;
-									}
-								}
-								else{
-									echo "Error: Crash orgin (error) mode selected but no bug id was provided.";
-									$OK=False;
-								}
-							}
-
-							if ($OK) {
-
-								$type = $_GET["type"];
-
-								if ($_GET["type"] == "process_seg") {
-									$type = $_GET["sub"];
-								}
-								echo "Type: ".$type."<BR>";
-								echo "Status: ".$_GET["status"]."<BR>";
-								echo "Reporter: ".$_GET["reporter"]."<BR>";
-
-								if (isset($_GET["bug_reporter_unique_ref"])){
-									echo "Unique Bug ID: ".$_GET["bug_reporter_unique_ref"]."<BR>";
-								}
-								else{
-									echo "Unique Bug ID: Not Set <BR>";
-									$_GET["bug_reporter_unique_ref"] = NULL;
-								}
-
-								echo "Test_suite_id: ".$_GET["test_suite_root_id"]."<BR>";
-								echo "test_root_id: ".$_GET["test_root_id"]."<BR>";
-
-								$crash_type_id = NULL;
-								$crash_known_id = NULL;
-								$reporter_id   = NULL;
-								$project_bug_id  = NULL;
-
-								# Start off by getting the crash type id
-								$rows = array();
-
-								$crash_type_id = get_crash_type_id($error, $sql_handle, $_GET["project"], $type);
-
-								if ($crash_type_id > 0) {
-
-									if ($_GET["bug_reporter_unique_ref"] != NULL) {
-										$project_bug_id = add_project_bug($error, $sql_handle, $_GET["reporter"], $_GET["bug_reporter_unique_ref"], $_GET["project"]);
-									}
-
-									# Checkk to see if this regex profile already exists.
-									if ($project_bug_id == NULL) {
-										$query = 'SELECT crash_known_id FROM crash_known WHERE fk_crash_type_id='.$crash_type_id.' and fk_test_root_id='.$_GET["test_root_id"].' and fk_test_suite_root_id='.$_GET["test_suite_root_id"].' and type_enum="'.$_GET["status"].'" and UNCOMPRESS(regex)="'.addslashes($regex_profile).'"';
-									}
-									else {
-										$query = 'SELECT crash_known_id FROM crash_known WHERE fk_project_bug_id='.$project_bug_id.' and fk_crash_type_id='.$crash_type_id.' and fk_test_root_id='.$_GET["test_root_id"].' and fk_test_suite_root_id='.$_GET["test_suite_root_id"].' and type_enum="'.$_GET["status"].'" and UNCOMPRESS(regex)="'.addslashes($regex_profile).'"';
-									}
-
-									$regex_query_result = $bug_result = sql_query($sql_handle, $query, $error);
-
-									if ($regex_query_result) {
-
-										$rows = $regex_query_result->fetchall();
-
-										if (count($rows) == 0) {
-
-											if ($project_bug_id == NULL) {
-												$query = 'INSERT INTO crash_known (fk_crash_type_id, fk_test_root_id, fk_test_suite_root_id, type_enum, regex, created) VALUES ('.$crash_type_id.', '.$_GET["test_root_id"].', '.$_GET["test_suite_root_id"].',"'.$_GET["status"].'", COMPRESS("'.addslashes($regex_profile).'"), NOW())';
-											}
-											else{
-												$query = 'INSERT INTO crash_known (fk_project_bug_id, fk_crash_type_id, fk_test_root_id, fk_test_suite_root_id, type_enum, regex, created) VALUES ('.$project_bug_id.','.$crash_type_id.', '.$_GET["test_root_id"].', '.$_GET["test_suite_root_id"].',"'.$_GET["status"].'", COMPRESS("'.addslashes($regex_profile).'"), NOW())';
-											}
-
-											$insert_result = sql_query($sql_handle, $query, $error);
-
-											if ($insert_result){
-												$crash_known_id = $sql_handle->lastInsertId();
-												echo "ID:".$crash_known_id."<BR>";
-											}
-											else{
-
-												echo $query."<BR>".$error;
-												$OK=False;
-											}
-										}
-										else{
-											echo "Regex already exists in the database.";
-											$crash_known_id =  $rows[0]["crash_known_id"];
-										}
-
-
-										if ($OK) {
-											# Now update the the crash exec for this guy..
-											$query = 'UPDATE crash_exec SET fk_crash_known_id='.$crash_known_id.' WHERE fk_line_marker_id='.$_GET["lm"];
-
-											$result = sql_query($sql_handle, $query, $error);
-
-											if ($result){
-
-												/*
-													Now look for other instances of this test (test_root_id) within this child project.. That have a crash that has a known crash id of NULL.
-													And compare them to this regex.
-												*/
-
-												$query = 'SELECT * FROM crash_exec, line_marker WHERE ';
-
-
-
-
-											}
-											else{
-												echo $query."<BR>".$error."<BR>";
-											}
-
-										}
-									}
-									else{
-										echo $query."<BR>".$error;
-										$OK=False;
-									}
-								}
-								else{
-									echo $error;
-									$OK = False;
-								}
-							}
-						}
-						else{
-							echo "<center>".$error."</center>";
-						}
-					}
-				}
+			if ($rc== OK){
+				$reporter_enum = $rows[0]["recorder_enum"];
+				$bug_reporter_unique_ref = $rows[0]["unique_ref"];
 			}
-			else{
-				echo $error;
-			}
-
 		}
-		else{
-			echo $error;
-
-		}
-
 	}
-	else{
-		echo $error;
 
-	}
+	return $rc;
 }
 
 gen_footer();
