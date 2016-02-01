@@ -246,7 +246,9 @@ function insert(&$error, $sql_handle, $table, $insert_dict, $check=False) {
 					$value = $insert_dict[$field];
 
 					if (is_string($value)) {
-						if (strtolower($value) != "now()"){
+						$pos = strpos(strtolower(trim($value)), "compress(");
+
+						if ((strtolower($value) != "now()") && ($pos !== 0)){
 							$value = '"'.addslashes($value).'"';
 						}
 					}
@@ -276,8 +278,6 @@ function insert(&$error, $sql_handle, $table, $insert_dict, $check=False) {
 				if ($rc == OK) {
 					$query = 'INSERT INTO '.$table.' ('.implode(', ',$fields).') VALUES ('.implode(', ', $values).')';
 
-					echo $query."<BR>";
-
 					$result = sql_query($sql_handle, $query, $error);
 
 					if ($result) {
@@ -299,6 +299,134 @@ function insert(&$error, $sql_handle, $table, $insert_dict, $check=False) {
 	return $rc;
 }
 
+function update(&$error, $sql_handle, $table, $update_dict, $where_data, $where_string=NULL){
+	$rc = OK;
+
+	if (is_array($update_dict)) {
+
+		if (is_array($where_data)){
+			$where = "";
+			foreach(array_keys($where_data) as $key) {
+				# We want to check just the field size so remove any stuff before the .
+				# and look for an " as" and remove the " as" and anything after it
+				$field_name = $key;
+				$pos = strrpos($field_name, ".");
+
+				if ($pos !== False){
+					$field_name = substr($field_name, $pos+1, strlen($field_name));
+				}
+
+				$pos = strrpos($field_name, " as");
+
+				if ($pos !== False){
+					$field_name = substr($field_name, 0, $pos);
+				}
+
+				$rc = field_length_check($error, "Where Value:" + $field_name, $field_name, 0, 65);
+
+				if ($rc == OK) {
+					$field = "";
+
+					if (is_string($where_data[$key])) {
+
+						if (strtolower($where_data[$key]) != "now()"){
+							# Check to see if the value to be written is preceeded by a table name.
+							# if it is.. then don't put quotes around it.
+
+							$pos = strpos($where_data[$key],".");
+
+							if ($pos === False){
+								$field = $key.'="'.addslashes($where_data[$key]).'"';
+							}
+							else{
+								$item = substr($where_data[$key],0, $pos);
+
+								if (in_array($item, $table)){
+									$field = $key.'='.addslashes($where_data[$key]);
+								}
+								else{
+									$field = $key.'="'.addslashes($where_data[$key]).'"';
+								}
+							}
+						}
+						else{
+							$field = $key."=".$where_data[$key];
+						}
+					}
+					else{
+						$field = $key."=".$where_data[$key];
+					}
+
+					if (strlen($where) > 0){
+						$where = $where." and ".$field;
+					}
+					else {
+						$where = $field;
+					}
+				}
+				else {
+					break;
+				}
+			} // end of foreach(keys($where_data) as $key)
+
+			$rc = field_length_check($error, "table", $table, 0, 65);
+			$set = "";
+			if ($rc == OK) {
+				$fields = array_keys($update_dict);
+
+
+				foreach($fields as $field){
+					# checking the size of the field name.
+					$rc = field_length_check($error, $field, $field, 0, 65);
+
+					if ($rc == OK){
+						$value = $update_dict[$field];
+
+						if (is_string($value)) {
+							$pos = strpos(strtolower(trim($value)), "compress(");
+
+							if ((strtolower($value) != "now()") && ($pos !== 0)){
+								$value = '"'.addslashes($value).'"';
+							}
+						}
+
+						if (strlen($set) > 0){
+							$set = $set.", ";
+						}
+						$set = $set.$field."=".$value;
+					}
+					else{
+						break;
+					}
+				}
+			}
+
+			if ($rc == OK){
+				$query = 'UPDATE '.$table.' SET '.$set." WHERE ".$where;
+				$result =  sql_query($sql_handle, $query, $error);
+
+				if ($result){
+					$result->closeCursor();
+				}
+				else{
+					$rc = ERROR_MYSQL;
+				}
+			}
+		}
+		else{
+			$rc = ERROR_INVALID_PARAM;
+			$error = "Error: where_array variatable must be an array.";
+
+		}
+	}
+	else{
+		$rc = ERROR_INVALID_PARAM;
+		$error = "Error: update_dict variatable must be an array.";
+	}
+	return $rc;
+}
+
+
 
 /* ============================================================================================================
  Some queries to help pull information from the database.
@@ -312,7 +440,7 @@ function get_crash_known_with_bug_info(&$error, $sql_handle, &$rows, $where_arra
 	# remember not all known crashes will have bugs, if the crash was intentional.
 
 	$rc = OK;
-	$rows  = array();	
+	$rows  = array();
 	$select = array("crash_known_id", "fk_crash_type_id", "fk_test_root_id","fk_test_suite_root_id",
 		           "fk_project_bug_id", "type_enum", "resolved", "UNCOMPRESS(regex) as regex", "comment", "created", "html_style_json");
 
@@ -325,30 +453,30 @@ function get_crash_known_with_bug_info(&$error, $sql_handle, &$rows, $where_arra
 			if ($row["fk_project_bug_id"] != NULL){
 				$sub_rows = array();
 				$tables = array("project_bug", "bug_root");
-				
+
 				$where = array("project_bug.project_bug_id"=>$row["fk_project_bug_id"],
 							   "project_bug.fk_bug_root_id"=>"bug_root.bug_root_id");
-				
+
 				$select = array("bug_root_id", "recorder_enum", "unique_ref", "summary", "triaged_enum", "resolved_enum", "added_enum");
-				
+
 				$rc =  select($error, $sql_handle, $sub_rows, $tables, $select, $where);
 
 				if ($rc == OK){
-					$row["bug_root_id"] = $sub_rows[0]["bug_root_id"];	
-					$row["recorder_enum"] = $sub_rows[0]["recorder_enum"];	
-					$row["unique_ref"] = $sub_rows[0]["unique_ref"];	
-					$row["summary"] = $sub_rows[0]["summary"];	
-					$row["triaged_enum"] = $sub_rows[0]["triaged_enum"];	
-					$row["resolved_enum"] = $sub_rows[0]["resolved_enum"];	
-					$row["added_enum"] = $sub_rows[0]["added_enum"];																					
-				} 
+					$row["bug_root_id"] = $sub_rows[0]["bug_root_id"];
+					$row["recorder_enum"] = $sub_rows[0]["recorder_enum"];
+					$row["unique_ref"] = $sub_rows[0]["unique_ref"];
+					$row["summary"] = $sub_rows[0]["summary"];
+					$row["triaged_enum"] = $sub_rows[0]["triaged_enum"];
+					$row["resolved_enum"] = $sub_rows[0]["resolved_enum"];
+					$row["added_enum"] = $sub_rows[0]["added_enum"];
+				}
 			}
 			else{
 					$row["bug_root_id"] = NULL;
 					$row["recorder_enum"] = NULL;
 					$row["unique_ref"] =NULL;
 					$row["summary"] = NULL;
-					$row["triaged_enum"] = NULL;	
+					$row["triaged_enum"] = NULL;
 					$row["resolved_enum"] =NULL;
 					$row["added_enum"] =NULL;
 			}
@@ -380,7 +508,7 @@ function get_variant_exec_id_from_test_exec_id(&$error, $sql_handle,  $test_exec
 		}
 		else{
 			$rc = ERROR_BAD_COUNT;
-			$error = __FUNCTION__.":".__LINE__." Returned to many records:".$count." for test_exec_id".$test_exec_id;		
+			$error = __FUNCTION__.":".__LINE__." Returned to many records:".$count." for test_exec_id".$test_exec_id;
 		}
 	}
 	return $rc;
@@ -513,11 +641,11 @@ function get_line_marker_type_id_from_string(&$error, $sql_handle, $line_marker_
 			$error = "(get_line_marker_type_id_from_string) expected a count of 1 but instead got: ".count($rows);
 		}
 	}
-	
+
 	return $rc;
 }
 function get_line_marker_info_for_type(&$error, $sql_handle, &$line_marker_info, $test_exec_id, $line_marker_type){
-	
+
 	$line_marker_type_id = get_line_marker_type_id_from_string($error, $sql_handle, $line_marker_type);
 
 	if ($line_marker_type_id > 0) {
@@ -541,7 +669,7 @@ function get_line_marker_info_for_type(&$error, $sql_handle, &$line_marker_info,
 			}
 			else{
 				$rc = ERROR_BAD_COUNT;
-				$error = __FUNCTION__.":".__LINE__." Returned to many records:".$count;		
+				$error = __FUNCTION__.":".__LINE__." Returned to many records:".$count;
 			}
 		}
 	}
@@ -553,14 +681,14 @@ function get_line_marker_info_for_type(&$error, $sql_handle, &$line_marker_info,
 }
 
 function get_info_for_line_marker_id(&$error, $sql_handle, &$row, $lm_id){
-	$select = array("line_marker_id", "fk_attachment_id", "line_marker_type_id", 
+	$select = array("line_marker_id", "fk_attachment_id", "line_marker_type_id",
 					"line_marker_sub_type_id", "fk_test_exec_id", "start", "end",
-					"line_marker.comment as line_marker_comment", 
+					"line_marker.comment as line_marker_comment",
 					"line_marker.created as line_marker_created",
 					"line_marker_type.name as line_marker_type",
-					"line_marker_sub_type.name as line_marker_sub_type",					
+					"line_marker_sub_type.name as line_marker_sub_type",
 					);
-	
+
 	$tables = array("line_marker", "line_marker_type", "line_marker_sub_type");
 
 	$where = array("line_marker.fk_line_marker_type_id"=>"line_marker_type.line_marker_type_id",
@@ -584,7 +712,7 @@ function get_info_for_line_marker_id(&$error, $sql_handle, &$row, $lm_id){
 		}
 		else{
 			$rc = ERROR_BAD_COUNT;
-			$error = __FUNCTION__.":".__LINE__." ".$lm_id." returned to many records:".$count;		
+			$error = __FUNCTION__.":".__LINE__." ".$lm_id." returned to many records:".$count;
 		}
 	}
 	return $rc;
@@ -628,8 +756,8 @@ function get_select_master_core(&$error, $sql_handle, &$rows,  $select_list, $wh
 		if (is_string($select_list)){
 			$pos = strpos($select_list, ",");
 
-			if ($pos === FALSE) {	
-				$select_list = array($select_list);					
+			if ($pos === FALSE) {
+				$select_list = array($select_list);
 			}
 			else{
 				$select_list = explode(",", $select_list);
@@ -936,7 +1064,7 @@ function get_file_info_w_lines_for_attachment_id(&$error, $sql_handle, &$file_in
 		#Explode on the new lines which are \n. Note: The logs were put in the database using python and read in using the python univeral read mode.
 		#So these lines should only have a \n. So no other stripping is required.
 		$file_data = explode("\n",$file_data);
-		
+
 		$max_lines = count($file_data);
 
 		if ($max_lines == 0)
@@ -962,7 +1090,7 @@ function get_file_info_w_lines_for_attachment_id(&$error, $sql_handle, &$file_in
 		$file_info["lines"] = array();
 
 		$line_index = $start_line;
-		
+
 		foreach($file_data as &$lines) {
 			$file_info["lines"][$line_index] = $lines;
 			$line_index ++;
@@ -977,7 +1105,7 @@ function get_file_info_for_line_marker_id(&$error, $sql_handle, &$file_info, $li
 	$select = array("*");
 	$tables = array("line_marker");
 	$where = array("line_marker_id" => $line_marker_id);
-	
+
 	$rows = array();
 
 	$rc = select($error, $sql_handle, $rows, $tables , $select, $where);
@@ -993,7 +1121,7 @@ function get_file_info_for_line_marker_id(&$error, $sql_handle, &$file_info, $li
 		}
 		else{
 			$rc = ERROR_BAD_COUNT;
-			$error = __FUNCTION__.":".__LINE__." Expected a row count of 1 instead got:".$count." for line_marker_id: ".$attachment_id;	
+			$error = __FUNCTION__.":".__LINE__." Expected a row count of 1 instead got:".$count." for line_marker_id: ".$attachment_id;
 		}
 	}
 
