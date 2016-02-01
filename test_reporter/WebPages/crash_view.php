@@ -426,7 +426,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 								$error = "A bug tracking refernce must be provided if the crash is not generated on purpose";
 							}
 							else{
-								$fk_project_bug_id = add_project_bug(&$error, $sql_handle, $recorder_enum, $unique_ref, $_GET["project"], $summary=NULL, $comment=NULL, $added_by="other");
+								$fk_project_bug_id = add_project_bug($error, $sql_handle, $recorder_enum, $unique_ref, $_GET["project"], $summary=NULL, $comment=NULL, $added_by="other");
 
 								if ($fk_project_bug_id < 0){
 									$rc = $fk_project_bug_id;
