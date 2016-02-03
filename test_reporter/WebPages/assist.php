@@ -54,7 +54,6 @@ function marked_lines_show($lines, $title, $marker_list, $rows=4, $cols=120, $li
  				if (($index >=  $marker["start"]) && ($index <=  $marker["end"])){
  					echo $marker["mark"];
  				}
-
  			}
  		}
 
@@ -91,6 +90,56 @@ function gunzip(&$error, $src_file_path){
 }
 
 
+function dup_get_to_string($omit_key_list=NULL){
+
+	$the_string = "";
+
+	if ($omit_key_list != NULL){
+		if (is_array($omit_key_list) == False){
+
+			if (is_string($omit_key_list)){
+				$pos = strpos($omit_key_list, ",");
+
+				if ($pos === FALSE) {
+					$omit_key_list = array($omit_key_list);
+				}
+				else{
+					$omit_key_list = explode(",", $omit_key_list);
+
+					foreach($omit_key_list as &$item){
+						$item = trim($item);
+					}
+				}
+			}
+			else{
+				echo "<BR><BR>ERROR: dup_get_input was passed in a type that it does not support.<BR><BR>";
+			}
+		}
+	}
+	else{
+		$omit_key_list = array();
+	}
+
+	foreach(array_keys($_GET) as $key ){
+		if (in_array($key, $omit_key_list) == False) {
+			
+			if(strlen($the_string) > 0) {
+				$the_string  = $the_string."&";
+			}
+			$the_string = $the_string.$key."=".urlencode($_GET[$key]);
+
+		}
+	}
+	
+	if (strlen($the_string) > 0){
+		return	$the_string;
+	}
+	else{
+		return NULL;
+	}
+
+}
+
 function dup_get_input_for_form($omit_key_list=NULL){
 
 	if ($omit_key_list != NULL){
@@ -121,7 +170,14 @@ function dup_get_input_for_form($omit_key_list=NULL){
 
 	foreach(array_keys($_GET) as $key ){
 		if (in_array($key, $omit_key_list) == False) {
-			echo '<input type=hidden name="'.$key.'" value="'.$_GET[$key].'" >';
+			if (is_array($_GET[$key])){
+				foreach($_GET[$key] as $value){
+					echo '<input type=hidden name="'.$key.'[]" value="'.$value.'" >';
+				}
+			}
+			else{
+				echo '<input type=hidden name="'.$key.'" value="'.$_GET[$key].'" >';
+			}
 		}
 	}
 }
@@ -157,11 +213,24 @@ function dup_get_input_to_string($omit_key_list=NULL){
 
 	foreach(array_keys($_GET) as $key ){
 		if (in_array($key, $omit_key_list) == False) {
-			if (strlen($output) > 0){
-				$output .= "&".$key."=".$_GET[$key];
+			if (is_array($_GET[$key])) {
+				foreach($_GET[$key] as $value) {
+					
+					if (strlen($output) > 0){
+						$output .= "&".$key."[]=".$value;
+					}
+					else{
+						$output .= $key."[]=".$value;
+					}
+				}
 			}
 			else{
-				$output .= $key."=".$_GET[$key];
+				if (strlen($output) > 0){
+					$output .= "&".$key."=".$_GET[$key];
+				}
+				else{
+					$output .= $key."=".$_GET[$key];
+				}
 			}
 		}
 	}

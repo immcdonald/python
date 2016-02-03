@@ -165,7 +165,7 @@ if ($rc == OK) {
 
 			if ($rc == OK) {
 				echo '<form>';
-				dup_get_input_for_form(array("regex", "type_enum", "recorder_enum", "unique_ref", "button_index", "submit", "crash_type_id"));
+				dup_get_input_for_form(array("regex", "type_enum", "recorder_enum", "unique_ref", "button_index", "submit", "crash_type_id", "crash_exec_ids", "crash_exec_ids[]"));
 				echo '<input type=hidden name="crash_type_id" value='.$crash_type_id.' >';
 
 				$match_check = False;
@@ -302,7 +302,7 @@ if ($rc == OK) {
 				#========================================================================================
 
 				echo '<form>';
-				dup_get_input_for_form(array("regex", "type_enum", "recorder_enum", "unique_ref", "button_index", "other_crash_known_id", "submit", "crash_type_id"));
+				dup_get_input_for_form(array("regex", "type_enum", "recorder_enum", "unique_ref", "button_index", "other_crash_known_id", "submit", "crash_type_id", "crash_exec_ids", "crash_exec_ids[]"));
 
 				$max_other_patterns = count($other_patterns);
 
@@ -321,13 +321,12 @@ if ($rc == OK) {
 					echo '<input type=hidden name="unique_ref" value='.$other_patterns[$other_pattern_index]["unique_ref"].' >';
 					echo '<input type=hidden name="crash_type_id" value='.$crash_type_id.' >';
 
-
 					$match_check = False;
 
 					echo '<tr>';
 					echo '<td colspan=3>';
 
-					if (check_regex($regex, $crash_profile_lines, $error)) {
+					if (check_regex($other_patterns[$other_pattern_index]["regex"], $crash_profile_lines, $error)) {
 						$match_check = True;
 						echo "<center><strong>Known Regex Profile [Match] (".$button_index." of ".$max_other_patterns.")</strong></center>";
 					}
@@ -386,6 +385,132 @@ if ($rc == OK) {
 }
 
 
+function look_for_orphans(&$error, $sql_handle, $crash_known_id){
+	$rc = OK;
+	$orphan_rows = array();
+
+	$select = array("crash_exec_id", "line_marker_id", "fk_test_root_id", "target.name as target", "arch.name as arch", "variant_root.variant as variant");
+
+	$tables = array("crash_exec", "line_marker", "test_exec", "test_revision", "variant_exec", "variant_root", "target", "arch");
+
+	$where = array("crash_exec.fk_line_marker_id"=>"line_marker.line_marker_id",
+				   "line_marker.fk_test_exec_id"=>"test_exec.test_exec_id",
+				   "test_exec.fk_test_revision_id"=>"test_revision.test_revision_id",
+					"test_exec.fk_variant_exec_id"=>"variant_exec.variant_exec_id",
+					"variant_exec.fk_variant_root_id"=>"variant_root.variant_root_id",
+					"variant_root.fk_target_id"=>"target.target_id",
+					"variant_root.fk_arch_id"=>"arch.arch_id",
+
+				   # for the same test root id
+				   "test_revision.fk_test_root_id" => $_GET["test_root_id"],
+				   # set the following to only get crash of the same type..
+				   "line_marker.fk_line_marker_type_id" => $_GET["lm_type_id"],
+				   "line_marker.fk_line_marker_sub_type_id" => $_GET["sub_type_id"]
+					);
+
+	$where_string = "crash_exec.fk_crash_known_id IS NULL";
+
+	$rc = select($error, $sql_handle, $orphan_rows, $tables, $select,  $where, $where_string);
+
+	if($rc == OK){
+		# get the profile for each orphan and compare it to the regex..
+		$track_matching_orphans = array();
+		foreach($orphan_rows as $orphan) {
+			$test_profile = array();
+			$rc = get_log_and_crash_profile($error, $sql_handle, $orphan["line_marker_id"], $test_profile);
+
+			if ($rc == OK)
+			{
+				if(count($test_profile["crash"]["lines"]) > 0) {
+
+					$crash_profile = implode("\n",$test_profile["crash"]["lines"]);
+
+					if (check_regex($_GET["regex"], $crash_profile, $local_error)) {
+						$track_matching_orphans[count($track_matching_orphans)] = $orphan;
+
+						if (count($track_matching_orphans) >= 2){
+							break;
+						}
+					}
+				}
+			}
+			else{
+				break;
+			}
+
+		} // end of foreach($orphan_rows as $orphans) {
+
+		if ($rc == OK){
+
+			if (count($track_matching_orphans) > 0) {
+
+				$the_string = dup_get_to_string(array("lm_id", "crash_known_id", "submit", "crash_exec_ids",  "crash_exec_ids[]"));
+
+				echo "<BR><center><strong>Found Orphans Matching this Regex</strong></center>";
+				echo '<form>';
+				dup_get_input_for_form(array("submit", "known_crash_id", "crash_exec_ids", "crash_exec_ids", "crash_exec_ids[]"));
+
+				echo '<input type="hidden" name="known_crash_id" value='.$crash_known_id.'  >';
+
+				echo '<table align=center border=2>';
+				echo '<tr>';
+
+				echo '<th>';
+				echo "Select";
+				echo '</th>';
+
+				echo '<th>';
+				echo "Link";
+				echo '</th>';
+
+				echo '<th>';
+				echo "Target";
+				echo '</th>';
+
+				echo '<th>';
+				echo "Arch";
+				echo '</th>';
+
+				echo '<th>';
+				echo 'Variant';
+				echo '</th>';
+
+				echo '</tr>';
+
+				foreach($track_matching_orphans as $tracked_orphan) {
+					echo '<tr>';
+					echo '<td align="center" >';
+					echo '<input type=checkbox name="crash_exec_ids[]" value='.$tracked_orphan["crash_exec_id"].' checked>';
+					echo '</td>';
+
+					echo '<td>';
+					echo '<a href="./crash_view.php?lm_id='.$tracked_orphan["line_marker_id"]."&crash_known_id=&".$the_string.'">'.$tracked_orphan["line_marker_id"]."</a>";
+					echo '</td>';
+
+					echo '<td>';
+					echo $tracked_orphan["target"];
+					echo '</td>';
+
+					echo '<td>';
+					echo $tracked_orphan["arch"];
+					echo '</td>';
+
+					echo '<td>';
+					echo $tracked_orphan["variant"];
+					echo '</td>';
+					echo '</tr>';
+				}
+
+				echo '</table>';
+				echo '<center><input type=submit name="submit" value="Adopt Selected Orphans"></center>';
+				echo '</form>';
+			}
+		}
+	}
+	return $rc;
+}
+
+
 function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 	$rc = OK;
 	$local_error = "";
@@ -423,7 +548,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 						if ($recorder_enum != NULL) {
 							if (strlen($unique_ref) <= 0){
 								$rc = ERROR_GENERAL;
-								$error = "A bug tracking refernce must be provided if the crash is not generated on purpose";
+								$error = __FUNCTION__.":".__LINE__." A bug tracking refernce must be provided if the crash is not generated on purpose";
 							}
 							else{
 								$fk_project_bug_id = add_project_bug($error, $sql_handle, $recorder_enum, $unique_ref, $_GET["project"], $summary=NULL, $comment=NULL, $added_by="other");
@@ -435,13 +560,13 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 						}
 						else{
 							$rc = ERROR_GENERAL;
-							$error = "Form recorder_eum was unexpectedly NULL";
+							$error = __FUNCTION__.":".__LINE__."Form recorder_eum was unexpectedly NULL";
 						}
 					}
 				}
 				else{
 					$rc = ERROR_GENERAL;
-					$error = "Form status was unexpectedly NULL";
+					$error = __FUNCTION__.":".__LINE__."Form status was unexpectedly NULL";
 				}
 
 				if ($rc == OK) {
@@ -461,6 +586,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 					$rc = insert($error, $sql_handle, "crash_known", $insert_dict, FALSE);
 
 					if ($rc > 0) {
+						$crash_known_id = $rc;
 						$_GET["crash_known_id"] = $rc;
 
 						$where = array();
@@ -470,63 +596,38 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 						# then update the crash that generated this regex
 						$rc = update($error, $sql_handle, "crash_exec", $update, $where);
 
-
 						if ($rc == OK) {
-							$orphan_rows = array();
-
-							$select = array("crash_exec_id", "line_marker_id", "fk_test_root_id");
-
-							$tables = array("crash_exec", "line_marker", "test_exec", "test_revision");
-
-							$where = array("crash_exec.fk_line_marker_id"=>"line_marker.line_marker_id",
-										   "line_marker.fk_test_exec_id"=>"test_exec.test_exec_id",
-										   "test_exec.fk_test_revision_id" => "test_revision.test_revision_id",
-										   # for the same test root id
-										   "test_revision.fk_test_root_id" => $_GET["test_root_id"],
-										   # set the following to only get crash of the same type..
-										   "line_marker.fk_line_marker_type_id" => $_GET["lm_type_id"],
-										   "line_marker.fk_line_marker_sub_type_id" => $_GET["sub_type_id"]
-											);
-
-							$where_string = "crash_exec.fk_crash_known_id IS NULL";
-
-							$rc = select($error, $sql_handle, $orphan_rows, $tables, $select,  $where, $where_string);
-
-							if($rc == OK){
-								# get the profile for each orphan and compare it to the regex..
-								$track_matching_orphans = array();
-								foreach($orphan_rows as $orphans) {
-									$test_profile = array();
-									$rc = get_log_and_crash_profile($error, $sql_handle, $orphans["line_marker_id"], $test_profile);
-
-									if ($rc == OK)
-									{
-										if(count($test_profile["crash"]["lines"]) > 0) {
-
-											$crash_profile = implode("\n",$test_profile["crash"]["lines"]);
-
-											if (check_regex($_GET["regex"], $crash_profile, $local_error)) {
-												$track_matching_orphans[count($track_matching_orphans)] = $orphans["crash_exec_id"];
-
-												if (count($track_matching_orphans) > 100){
-													break;
-												}
-											}
-										}
-									}
-									else{
-										break;
-									}
-
-								} // end of foreach($orphan_rows as $orphans) {
-
-								if ($rc == OK){
-									show($track_matching_orphans, "MATCHING ORPHANS");
-
-								}
-							}
+							$rc = look_for_orphans($error, $sql_handle, $crash_known_id);
 						}
 					}
+				}
+			}
+			else if ($_GET["submit"] == "Adopt Selected Orphans") {
+				#Adopt  all the children then see if there are others..
+
+				if(isset($_GET["crash_exec_ids"])){
+					echo '<center>So kind of you to take in lost children.</center>';
+
+					foreach($_GET["crash_exec_ids"] as $crash_exec_id_index){
+						$where = array();
+						$update = array("fk_crash_known_id"=>$_GET["crash_known_id"]);
+						$where = array("crash_exec_id"=>$crash_exec_id_index);
+
+						# then update the crash that generated this regex
+						$rc = update($error, $sql_handle, "crash_exec", $update, $where);
+
+						if ($rc != OK){
+							break;
+						}
+					}
+
+					if ($rc == OK) {
+						$rc = look_for_orphans($error, $sql_handle, $_GET["known_crash_id"]);
+					}
+				}
+				else{
+					$rc = ERROR_GENERAL;
+					$error = __FUNCTION__.":".__LINE__."$_GET is missing expected key crash_exec_ids";
 				}
 			}
 			else if ($_GET["submit"] == "Use") {
@@ -537,22 +638,18 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 
 				# then update the crash that generated this regex
 				$rc = update($error, $sql_handle, "crash_exec", $update, $where);
-
-
-
 			}
 			else if ($_GET["submit"] == "Update") {
 				# check and see how many other bugs refernce this known crash..
 
 				# ensure that the regex
 
-
-
 				echo "Update detected!!!";
 			}
 		}
 		else{
 			echo $local_error;
+			$error = $local_error;
 			$rc = ERROR_GENERAL;
 		}
 	}
@@ -828,8 +925,6 @@ function generate_process_seg_crash_profile(&$error, $sql_handle, &$log_lines, &
 	$crash_profile["regex"] = preg_replace("/[\da-f]{16,16}/", "[\da-f]+", $crash_profile["regex"]);
 	$crash_profile["regex"] = preg_replace("/\\:\d+/", ":\d+", $crash_profile["regex"]);
 	$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);
-
-
 	return $rc;
 }
 
