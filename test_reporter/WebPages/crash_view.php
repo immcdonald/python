@@ -428,7 +428,7 @@ function look_for_orphans(&$error, $sql_handle, $crash_known_id){
 					if (check_regex($_GET["regex"], $crash_profile, $local_error)) {
 						$track_matching_orphans[count($track_matching_orphans)] = $orphan;
 
-						if (count($track_matching_orphans) >= 2){
+						if (count($track_matching_orphans) >= 99){
 							break;
 						}
 					}
@@ -560,13 +560,13 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 						}
 						else{
 							$rc = ERROR_GENERAL;
-							$error = __FUNCTION__.":".__LINE__."Form recorder_eum was unexpectedly NULL";
+							$error = __FUNCTION__.":".__LINE__." Form recorder_eum was unexpectedly NULL";
 						}
 					}
 				}
 				else{
 					$rc = ERROR_GENERAL;
-					$error = __FUNCTION__.":".__LINE__."Form status was unexpectedly NULL";
+					$error = __FUNCTION__.":".__LINE__." Form status was unexpectedly NULL";
 				}
 
 				if ($rc == OK) {
@@ -606,7 +606,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 				#Adopt  all the children then see if there are others..
 
 				if(isset($_GET["crash_exec_ids"])){
-					echo '<center>So kind of you to take in lost children.</center>';
+					
 
 					foreach($_GET["crash_exec_ids"] as $crash_exec_id_index){
 						$where = array();
@@ -622,6 +622,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 					}
 
 					if ($rc == OK) {
+						echo '<center>So kind of you to take in ('.count($_GET["crash_exec_ids"]).') lost children.</center>';
 						$rc = look_for_orphans($error, $sql_handle, $_GET["known_crash_id"]);
 					}
 				}
@@ -632,19 +633,98 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 			}
 			else if ($_GET["submit"] == "Use") {
 				# only update this test to use this regex.
-				$where = array();
 				$update = array("fk_crash_known_id"=>$_GET["other_crash_known_id"]);
 				$where = array("fk_line_marker_id"=>$_GET["lm_id"]);
 
 				# then update the crash that generated this regex
 				$rc = update($error, $sql_handle, "crash_exec", $update, $where);
+
 			}
 			else if ($_GET["submit"] == "Update") {
-				# check and see how many other bugs refernce this known crash..
-
-				# ensure that the regex
-
+				
 				echo "Update detected!!!";
+				
+				#check to see if this is a regex update and or a bug ref update..
+
+
+
+
+
+					# check and see how many other bugs refernce this known crash..
+					$rows = array();
+
+					$select=array("crash_exec_id", "fk_line_marker_id");
+					$tables=array("crash_exec");
+					$where=array("crash_exec.fk_crash_known_id"=>$_GET["crash_known_id"],
+						         "crash_exec.fk_line_marker_id!"=>$_GET["lm_id"],);
+
+					$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
+
+					if ($rc == OK) {
+						$update_is_ok = 0;
+
+						
+						$check_count = 0;
+						$max_time = (30 * 1000000); // 30 seconds
+
+
+						$start_time = microtime(true);
+
+						$rows_count = count($rows);
+
+						$min_check = min(10, $rows_count);	
+						$max_check = min($min_check + 10, $rows_count);
+
+						foreach($rows as $row) {
+
+							$test_profile = array();
+							$rc = get_log_and_crash_profile($error, $sql_handle, $row["fk_line_marker_id"], $test_profile);
+
+							if ($rc == OK)
+							{
+								if(count($test_profile["crash"]["lines"]) > 0) {
+
+									$crash_profile = implode("\n",$test_profile["crash"]["lines"]);
+
+									if (check_regex($_GET["regex"], $crash_profile, $local_error)) {
+										$check_count = $check_count + 1;
+									}
+									else{
+										$update_is_ok = $row["fk_line_marker_id"];
+										break;
+									}
+								}
+							}
+							else{
+								break;
+							}	
+
+							if ($check_count > $max_check){
+								break;
+							}
+
+							if ((microtime(true)-  $start_time) > $max_time){
+								break;
+							}
+
+						} // end of foreach($rows as $row) {
+
+						if ($rc == OK){
+							if($update_is_ok == 0) {
+								if ($check_count >= $min_check ){
+									echo "UPDATE APPROVED!!!!! SO WRITE IT TO THE DATABASE!.";
+								}
+								else{
+									$rc = ERROR_GENERAL;
+									$error = __FUNCTION__.":".__LINE__." The minimum number of checks(".$min_check .", completed ".$check_count.") could not be accomplished in time";
+								}
+							}						
+							else{
+								$rc = ERROR_GENERAL;
+								$error = __FUNCTION__.":".__LINE__." New pattern did not match crash profile for line_marker_id: ".$Update_is_ok;
+							}
+						}
+					}
 			}
 		}
 		else{
