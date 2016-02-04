@@ -1,5 +1,6 @@
 <?php
 include_once("assist.php");
+include_once("db_helper.php");
 gen_head("Variant List", "style.css");
 $error = NULL;
 

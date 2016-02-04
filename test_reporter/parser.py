@@ -1922,15 +1922,11 @@ def process_tests(args, log, sum_results, log_results, variant):
 						sum_index = test["sum_index"]
 						sum_line = sum_results["parsed_lines"][sum_index]
 
-						print pformat(sum_line)
-
 						test_result = sum_line["matches"]["testpnt"][:-2]
 
 						# Check to make sure this test root has been added.
 						# keep the test root id as we may need it later when looking for known crashes of a test.
 						test_root_id = report.add_test_root(test["test_path"], test["test_name"],  test["test_params"])
-
-						print "TS:", test["test_suite"]
 
 						if test_root_id > 0:
 							test_exec_id = report.add_test_exec(test_result.lower(), test["test_suite"], test["test_path"], test["test_name"],  test["test_params"], revision_string=test["revision"], exec_time=test["exec_time"], extra_time=test["download_time"], mem_before=test["mem_before"], mem_after=test["mem_after"])
@@ -1947,9 +1943,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 					rc = report.add_line_marker(yoyo_sum_id, "yoyo_sum", sum_line["start"], end_line=sum_line["end"], test_exec_id=test_exec_id, sub_type=test["sub_type"])
 
 					if rc > 0:
-
-						print pformat(test)
-
 						# Write out the entire test range
 						rc = report.add_line_marker(yoyo_log_id, "full_test", test["log_start"], end_line=test["log_end"], test_exec_id=test_exec_id, sub_type=test["sub_type"])
 
@@ -1965,12 +1958,18 @@ def process_tests(args, log, sum_results, log_results, variant):
 								if log_regex["final_flag"]:
 									rc = report.add_line_marker(yoyo_log_id, "yoyo_log", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=log_regex["sub_type"])
 								else:
-									if args["test_point_level"] == 1:
-										# Don't line mark NOTE
-										if log_regex["matches"]["testpnt"] != "NOTE: ":
+
+									if args["line_marker_level"] >= 1:
+										if (log_regex["matches"]["testpnt"] != "NOTE: ") and (log_regex["matches"]["testpnt"] != "START: ") and (log_regex["matches"]["testpnt"] != "STOP: "):
 											line_type = log_regex["matches"]["testpnt"][:-2].lower()
 											rc = report.add_line_marker(yoyo_log_id, "test_point", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=line_type)
-									elif args["test_point_level"] == 2:
+
+									elif args["line_marker_level"] >= 2:
+										if (log_regex["matches"]["testpnt"] != "NOTE: "):
+											line_type = log_regex["matches"]["testpnt"][:-2].lower()
+											rc = report.add_line_marker(yoyo_log_id, "test_point", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=line_type)
+
+									elif args["line_marker_level"] >= 3:
 											line_type = log_regex["matches"]["testpnt"][:-2].lower()
 											rc = report.add_line_marker(yoyo_log_id, "test_point", log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id, sub_type=line_type)
 									else:
@@ -2071,19 +2070,24 @@ def process_tests(args, log, sum_results, log_results, variant):
 									rc = line_marker_id
 							elif log_regex["type"] == "download":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
-								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+								if args["line_marker_level"] >= 1:
+									rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							elif log_regex["type"] == "kermit_send":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
-								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+								if args["line_marker_level"] >=2:
+									rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							elif log_regex["type"] == "execute":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
-								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
+								if args["line_marker_level"] >=2:
+									rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							elif log_regex["type"] == "exec":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
-								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+								if args["line_marker_level"] >=1:
+									rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							elif log_regex["type"] == "mem_proc":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
@@ -2094,7 +2098,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							elif log_regex["type"] == "metric":
-								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=1)
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 								if rc > 0:
@@ -2102,7 +2106,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 									rc = report.add_test_metric(rc, log_regex["matches"]["value"], log_regex["matches"]["units"], log_regex["matches"]["desc"])
 
 							elif log_regex["type"] == "bug_ref":
-								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=1)
+								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=25)
 
 								log_regex["matches"]["bug_type"] = log_regex["matches"]["bug_type"].lower()
 								if log_regex["matches"]["bug_type"] == "jira":
@@ -2239,7 +2243,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 								rc = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 							else:
-								log.out("-------------------------------- " + str(log_regex["type"]) + " --------------------------------", DEBUG, v=3)
+								log.out("-------------------------------- " + str(log_regex["type"]) + " --------------------------------", DEBUG, v=1)
 
 							if rc <= 0:
 								log.out("An error (" + str(rc) +") occurred while processing " + log_regex["type"] + " exiting the line marker loop" , ERROR)
@@ -2443,7 +2447,7 @@ def main(argv=None):
 
 	parser.add_argument('-input', '--input',
 						help='')
-	parser.add_argument('-test_point_level', '--test_point_level', default=0,
+	parser.add_argument('-line_marker_level', '--line_marker_level', default=0,
 						help='')
 
 	parser.add_argument('-set_storage_path', '--set_storage_path',
