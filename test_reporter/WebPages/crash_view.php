@@ -606,7 +606,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 				#Adopt  all the children then see if there are others..
 
 				if(isset($_GET["crash_exec_ids"])){
-					
+
 
 					foreach($_GET["crash_exec_ids"] as $crash_exec_id_index){
 						$where = array();
@@ -641,9 +641,9 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 
 			}
 			else if ($_GET["submit"] == "Update") {
-				
+
 				echo "Update detected!!!";
-				
+
 				#check to see if this is a regex update and or a bug ref update..
 
 
@@ -663,7 +663,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 					if ($rc == OK) {
 						$update_is_ok = 0;
 
-						
+
 						$check_count = 0;
 						$max_time = (30 * 1000000); // 30 seconds
 
@@ -672,7 +672,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 
 						$rows_count = count($rows);
 
-						$min_check = min(10, $rows_count);	
+						$min_check = min(10, $rows_count);
 						$max_check = min($min_check + 10, $rows_count);
 
 						foreach($rows as $row) {
@@ -697,7 +697,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 							}
 							else{
 								break;
-							}	
+							}
 
 							if ($check_count > $max_check){
 								break;
@@ -718,7 +718,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 									$rc = ERROR_GENERAL;
 									$error = __FUNCTION__.":".__LINE__." The minimum number of checks(".$min_check .", completed ".$check_count.") could not be accomplished in time";
 								}
-							}						
+							}
 							else{
 								$rc = ERROR_GENERAL;
 								$error = __FUNCTION__.":".__LINE__." New pattern did not match crash profile for line_marker_id: ".$Update_is_ok;
@@ -746,19 +746,38 @@ function generate_shutdown_crash_profile(&$error, &$log_lines, &$crash_profile, 
 	$crash_profile["lines"][$start] = $log_lines[$start];
 
 	for($index =  $start+1; $index < $max_lines; $index ++) {
-		$pos = strpos($log_lines[$index],'$URL');
+
+		$pos = strpos($log_lines[$index],']ASPACE');
 
 		if ($pos !== FALSE){
-			if ($pos == 0){
-				$crash_profile["lines"][$index] = $log_lines[$index];
-				break;
-			}
+			$crash_profile["lines"][$index] = $log_lines[$index];
 		}
+
+		$pos = strpos($log_lines[$index],'x86_64 context[');
+
+		if ($pos !== FALSE){
+			$crash_profile["lines"][$index] = $log_lines[$index];
+		}
+
+		$pos = strpos($log_lines[$index],'instruction[');
+
+		if ($pos !== FALSE){
+			$crash_profile["lines"][$index] = $log_lines[$index];
+		}
+
+		$pos = strpos($log_lines[$index],'stack[');
+
+		if ($pos !== FALSE){
+			$crash_profile["lines"][$index] = $log_lines[$index];
+		}
+
 	}
 
 	if ($rc == OK){
 		$crash_profile["regex"] = preg_quote(implode("\n",$crash_profile["lines"]));
 		$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);
+		$crash_profile["regex"] = preg_replace("/PID\\\=\d+/", "PID=\d+", $crash_profile["regex"]);
+		$crash_profile["regex"] = preg_replace("/\\\[\d+\\\]/", "[\d+]", $crash_profile["regex"]);
 	}
 
 	return $rc;
@@ -925,6 +944,8 @@ function generate_kdump_crash_profile(&$error, $sql_handle, &$log_lines, &$crash
 											$crash_profile["lines"] = $keep_lines;
 
 											$crash_profile["regex"] = preg_quote(implode("\n",$crash_profile["lines"]));
+											$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);
+
 										}
 										else{
 											$error = __FUNCTION__.":".__LINE__." GDB process returned no data.";
