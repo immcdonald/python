@@ -2317,7 +2317,7 @@ def process_variants(args, log, fp, recovery_data):
 
 	line_regex["metric"] = re.compile('METRIC: (?P<desc>.+)\sVALUE:\s(?P<value>.+)\sUNITS:\s(?P<units>.+)$')
 
-	line_regex["bug_ref"] = re.compile('(?P<testpnt>PASSX|FAILX).*(.+\.[a-zA-Z0-9]{1,4}:\d+)*\s*(?P<bug_type>jira|JIRA|JI|PR|ji|pr)[_|:]*\s*(?P<value>\d{5,10})')
+	line_regex["bug_ref"] = re.compile('(?P<testpnt>PASSX|FAILX|POINT).*(.+\.[a-zA-Z0-9]{1,4}:\d+)*\s*(?P<bug_type>jira|JIRA|JI|PR|ji|pr)[_|:]*\s*(?P<value>\d{5,10})')
 
 	line_regex["kernel_start"] = re.compile('(?P<kernel_dump_start>KERNEL\s+DUMP\s+START)')
 
