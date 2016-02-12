@@ -777,7 +777,8 @@ function generate_shutdown_crash_profile(&$error, &$log_lines, &$crash_profile, 
 		$crash_profile["regex"] = preg_quote(implode("\n",$crash_profile["lines"]));
 		$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);
 		$crash_profile["regex"] = preg_replace("/PID\\\=\d+/", "PID=\d+", $crash_profile["regex"]);
-		$crash_profile["regex"] = preg_replace("/\\\[\d+\\\]/", "[\d+]", $crash_profile["regex"]);
+		$crash_profile["regex"] = preg_replace("/PF\\\=\d+/", "PF=\d+", $crash_profile["regex"]);
+		$crash_profile["regex"] = preg_replace("/\[\d+/", "[\d+", $crash_profile["regex"]);
 	}
 
 	return $rc;
@@ -898,12 +899,40 @@ function generate_kdump_crash_profile(&$error, $sql_handle, &$log_lines, &$crash
 
 											$crash_profile["display"] = trim(substr($display, $pos + strlen("[ian_is_totally_awesome_display]"), strlen($display)));
 
+											$keep_lines = array();
+											$keep_lines[count($keep_lines)] = "                                -=Back Trace=-";
+
+											$lines = explode("\n", $crash_profile["back_trace"]);
+
+											// use this to shift off the first line
+											array_shift ($lines);
+
+											foreach($lines as $line) {
+												$pos = strpos($line, "??");
+
+												if ($pos !== FALSE){
+													continue;
+												}
+
+												$pos = strpos($line, "(gdb)");
+
+												if ($pos !== FALSE){
+
+													$line = trim(substr($line, 5, strlen($line)));
+												}
+
+												if (strlen($line) <= 0) {
+													continue;
+												}
+
+												$keep_lines[count($keep_lines)] = $line;
+											}
 
 											$lines = explode("\n", $crash_profile["display"]);
 
 
-											$keep_lines = array();
 
+											$keep_lines[count($keep_lines)] = "                                -=Display=-";
 											$next_break = False;
 											$counter = 0;
 											foreach($lines as $line) {
@@ -946,6 +975,11 @@ function generate_kdump_crash_profile(&$error, $sql_handle, &$log_lines, &$crash
 											$crash_profile["regex"] = preg_quote(implode("\n",$crash_profile["lines"]));
 											$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);
 
+
+											$crash_profile["regex"] = preg_replace("/0x[a-fA-F0-9]+/", "0x[a-fA-F0-9]+", $crash_profile["regex"] );
+											$crash_profile["regex"] = preg_replace("/=[0-9]+/", "=[0-9]+", $crash_profile["regex"]);
+											$crash_profile["regex"] = preg_replace("/:[0-9]+/", ":[0-9]+", $crash_profile["regex"]);
+											$crash_profile["regex"] = preg_replace("/\+[0-9]+/", "+[0-9]+", $crash_profile["regex"] );
 										}
 										else{
 											$error = __FUNCTION__.":".__LINE__." GDB process returned no data.";
