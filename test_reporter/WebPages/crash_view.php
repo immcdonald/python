@@ -141,10 +141,17 @@ if ($rc == OK) {
 						$rc = get_crash_known_with_bug_info($error, $sql_handle, $rows, $where);
 
 						if ($rc == OK) {
-							$regex = $rows[0]["regex"];
-							$type_enum = $rows[0]["type_enum"];
-							$recorder_enum = $rows[0]["recorder_enum"];
-							$unique_ref = $rows[0]["unique_ref"];
+							if (count($rows) > 0) {
+
+								$regex = $rows[0]["regex"];
+								$type_enum = $rows[0]["type_enum"];
+								$recorder_enum = $rows[0]["recorder_enum"];
+								$unique_ref = $rows[0]["unique_ref"];
+							}
+							else{
+								$rc = ERROR_GENERAL;
+								$error = "No known crash found!";
+							}
 						}
 					}
 					else {
@@ -270,7 +277,7 @@ if ($rc == OK) {
 				if ($match_check){
 					if (intval($_GET["crash_known_id"])> 0) {
 						echo '<td align="center">';
-						echo '<input type="submit" name="submit" value="Update" >';
+						echo '<input type="submit" name="submit" value="Update Regex" >';
 						echo '</td>';
 					}
 					else {
@@ -294,7 +301,6 @@ if ($rc == OK) {
 				echo '</td>';
 
 				echo '</tr>';
-
 
 				echo '<table align="center" width="20%">';
 				echo '</form>';
@@ -428,7 +434,7 @@ function look_for_orphans(&$error, $sql_handle, $crash_known_id){
 					if (check_regex($_GET["regex"], $crash_profile, $local_error)) {
 						$track_matching_orphans[count($track_matching_orphans)] = $orphan;
 
-						if (count($track_matching_orphans) >= 99){
+						if (count($track_matching_orphans) >= 50){
 							break;
 						}
 					}
@@ -638,16 +644,10 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 				$rc = update($error, $sql_handle, "crash_exec", $update, $where);
 
 			}
-			else if ($_GET["submit"] == "Update") {
+			else if ($_GET["submit"] == "Update Regex") {
 
-				echo "REMEMBER TO WORK ON UPDATE!!!<BR>";
-				echo "CHECK TO SEE IF IT IS A REGEX OR BUG REF UPDATE!<BR>";
-
-
-
-				# check and see how many other bugs refernce this known crash..
-				$rows = array();
-
+				# Check to see how many crashes reference this same crash ID
+				$rows=array();
 				$select=array("crash_exec_id", "fk_line_marker_id");
 				$tables=array("crash_exec");
 				$where=array("crash_exec.fk_crash_known_id"=>$_GET["crash_known_id"],
@@ -656,6 +656,7 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 				$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
 
 				if ($rc == OK) {
+
 					$update_is_ok = 0;
 
 					$check_count = 0;
@@ -699,7 +700,6 @@ function check_handle_sumbit(&$error, $sql_handle, $crash_profile){
 						if ((microtime(true)-  $start_time) > $max_time){
 							break;
 						}
-
 					} // end of foreach($rows as $row) {
 
 					if ($rc == OK){

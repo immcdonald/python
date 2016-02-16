@@ -1052,8 +1052,8 @@ function get_file_info_w_lines_for_attachment_id(&$error, $sql_handle, &$file_in
 
 			$buffer = "";
 
-			while(!gzeof($file)){
-				$buffer = gzread($file, 4096);
+			while(!gzeof($file)) {
+				$buffer = gzread($file, 8192);
 				$file_data = $file_data.$buffer;
 			}
 		}
