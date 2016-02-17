@@ -123,6 +123,17 @@ if ($rc == OK) {
 				}
 			}
 
+
+			#Check to see if this page is updated on a submit:
+			if (isset($_GET["submit"])){
+				#Check to see if the user hit the use button
+				if ($_GET["submit"] == "Use"){
+					# if they did then use the known regex profile.
+					$_GET["regex"] = $_GET["known_regex"];
+				}
+			}
+
+
 			if ($rc == OK){
 				if (isset($_GET["regex"])){
 					$regex = $_GET["regex"];
@@ -235,12 +246,14 @@ if ($rc == OK) {
 				echo '</td >';
 
 				echo '<td align="center" >';
+
 				if ($unique_ref != NULL) {
 					echo '<label>Unique Ref: </label><input type=text name="unique_ref" value="'.$unique_ref.'" >';
 				}
 				else{
 					echo '<label>Unique Ref: </label><input type=text name="unique_ref">';
 				}
+
 				echo '</td>';
 
 				echo '<td>';
@@ -251,6 +264,7 @@ if ($rc == OK) {
 
 				echo '<tr>';
 				echo '<td colspan="5">';
+
 				if ($readonly){
 					echo '<textarea name="regex" cols=140 rows='.$line_count.' readonly>';
 				}
@@ -332,15 +346,16 @@ if ($rc == OK) {
 					echo '<tr>';
 					echo '<td colspan=3>';
 
+
 					if (check_regex($other_patterns[$other_pattern_index]["regex"], $crash_profile_lines, $error)) {
 						$match_check = True;
-						echo "<center><strong>Known Regex Profile [Match] (".$button_index." of ".$max_other_patterns.")</strong></center>";
+						echo "<center><strong>Known Regex Profile [Match] (".$button_index." of ".$max_other_patterns.") [".$other_patterns[$other_pattern_index]["crash_known_id"]."]</strong></center>";
 					}
 					else{
-						echo "<center><strong>Known Regex Profile [No Match] (".$button_index." of ".$max_other_patterns.")</strong></center>";
+						echo "<center><strong>Known Regex Profile [No Match] (".$button_index." of ".$max_other_patterns.") [".$other_patterns[$other_pattern_index]["crash_known_id"]."]</strong></center>";
 					}
 
-					echo '<center><textarea name="regex" cols=140 rows='.$line_count.' readonly>';
+					echo '<center><textarea name="known_regex" cols=140 rows='.$line_count.' readonly>';
 					echo $other_patterns[$other_pattern_index]["regex"];
 					echo '</textarea></center>';
 					echo '</td>';

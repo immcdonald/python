@@ -102,7 +102,7 @@ function q(&$error, $sql_handle, $query_str, &$values=NULL) {
 }
 
 
-function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_data=NULL, $where_string=NULL){
+function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_data=NULL, $where_string=NULL, $limit=NULL){
 
 	$rc = ERROR_GENERAL;
 	$out_rows = array();
@@ -210,6 +210,10 @@ function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_d
 				if (strlen($where_string)> 0){
 					$query = $query. " and (".$where_string.")";
 				}
+			}
+
+			if ($limit != NULL){
+				$query = $query. " LIMIT ".$limit;
 			}
 
 			$result =  sql_query($sql_handle, $query, $error);
@@ -441,15 +445,16 @@ function get_crash_known_with_bug_info(&$error, $sql_handle, &$rows, $where_arra
 
 	$rc = OK;
 	$rows  = array();
+
 	$select = array("crash_known_id", "fk_crash_type_id", "fk_test_root_id","fk_test_suite_root_id",
 		           "fk_project_bug_id", "type_enum", "resolved", "UNCOMPRESS(regex) as regex", "comment", "created", "html_style_json");
-
 	$tables = array("crash_known");
 
 	$rc =  select($error, $sql_handle, $rows, $tables, $select, $where_array, $where_string);
 
 	if ($rc == OK){
 		foreach($rows as &$row){
+
 			if ($row["fk_project_bug_id"] != NULL){
 				$sub_rows = array();
 				$tables = array("project_bug", "bug_root");

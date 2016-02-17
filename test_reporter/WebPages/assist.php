@@ -29,18 +29,18 @@ function marked_lines_show($lines, $title, $marker_list, $rows=4, $cols=120, $li
 	$show_line_number = False;
 
 	if (strlen($line_number_seperator) > 0) {
-		$show_line_number = True;	
+		$show_line_number = True;
 	}
 
 	echo "<center><strong>".$title."</strong></center>";
-	
+
 	if ($readonly){
 		echo '<center><textarea rows='.$rows.' cols='.$cols.' readonly>';
 	}
 	else{
 		echo '<center><textarea rows='.$rows.' cols='.$cols.' >';
-	}	
-	
+	}
+
 	foreach ($lines as $index => $value) {
 
  		if ($show_line_number){
@@ -48,9 +48,9 @@ function marked_lines_show($lines, $title, $marker_list, $rows=4, $cols=120, $li
  		}
 
  		foreach(array_reverse($marker_list) as $marker){
- 			
+
  			if (array_key_exists("start", $marker) && array_key_exists("end", $marker) && array_key_exists("mark", $marker)){
- 			
+
  				if (($index >=  $marker["start"]) && ($index <=  $marker["end"])){
  					echo $marker["mark"];
  				}
@@ -120,17 +120,22 @@ function dup_get_to_string($omit_key_list=NULL){
 		$omit_key_list = array();
 	}
 
+	//show($omit_key_list);
+
+
 	foreach(array_keys($_GET) as $key ){
 		if (in_array($key, $omit_key_list) == False) {
-			
 			if(strlen($the_string) > 0) {
 				$the_string  = $the_string."&";
 			}
 			$the_string = $the_string.$key."=".urlencode($_GET[$key]);
 
 		}
+		else{
+			//echo "Omitting Key:".$key."<BR>";
+		}
 	}
-	
+
 	if (strlen($the_string) > 0){
 		return	$the_string;
 	}
@@ -215,7 +220,7 @@ function dup_get_input_to_string($omit_key_list=NULL){
 		if (in_array($key, $omit_key_list) == False) {
 			if (is_array($_GET[$key])) {
 				foreach($_GET[$key] as $value) {
-					
+
 					if (strlen($output) > 0){
 						$output .= "&".$key."[]=".$value;
 					}
