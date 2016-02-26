@@ -2537,9 +2537,9 @@ class TestReporter(My_SQL):
 				fields.append("fk_crash_type_id")
 				data.append(crash_type_id)
 
-				data = self.select(["crash_known_id", "regex"], "crash_known",fields, data)
+				data = self.select(["crash_known_id", "uncompress(regex)"], "crash_known", fields, data)
 
-				return data
+				return str(data)
 			else:
 				log._error_macro(str(crash_type) + " is not a valid crash type.")
 				return crash_type_id

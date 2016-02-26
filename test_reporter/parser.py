@@ -1994,9 +1994,13 @@ def process_tests(args, log, sum_results, log_results, variant):
 										# Get the known crashes for this test and this crash type.
 										known_crashes_rows = report.get_known_crashes_for_test(test_root_id, log_regex["matches"]["type"].lower())
 
+
+										print "1 -->", pformat(known_crashes_rows);
+
+
 										if known_crashes_rows:
 
-											if isinstance(known_crashes, list):
+											if isinstance(known_crashes_rows, list):
 												# Read from the log file the process data.
 												with open(os.path.join(variant, "yoyo.log"),"Ur") as fp_in:
 
@@ -2005,6 +2009,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 													# We want some lines before and after the crash part.. in order to match against..
 													count = 0
+													max_lines = len(lines)
 													for line_index in range(log_regex["end"], max_lines):
 														if len(lines[line_index]) > 1:
 															count = count + 1
@@ -2039,9 +2044,16 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 													text_block = "".join(lines)
 
+
+													print "2 -->", pformat(text_block)
+
+
+
 												# compare lines to known crashes
 												for known_crash_row in known_crashes_rows:
 													# Index 1 should be the regex string pattern, index 0 should be the table id for the pattern.
+
+													print  "3 -->", pformat(known_crash_row);
 
 													# We want to remove new_lines from the pattern
 													regex_pattern_lines = known_crash_row[1].splitlines()
@@ -2056,11 +2068,16 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 													regex_pattern_lines = temp_lines
 
+
+													print "4 -->", pformat(regex_pattern_lines)
+
+
 													# Compile the regex pattern
 													regex = re.compile("".join(regex_pattern_lines))
 													result = regex.search(text_block)
 
 													if result:
+														log.out("REGEX PATTERN MATCH FOUND FOR process_seg", DEBUG, v=1)
 														known_crash_id = known_crash_row[0]
 														break
 
@@ -2162,9 +2179,17 @@ def process_tests(args, log, sum_results, log_results, variant):
 													shutdown_line_marker_id = report.add_line_marker(kdump_index_id, 'shutdown', shutdown_found_line_index, end_line=max_lines, test_exec_id=test_exec_id)
 
 													if shutdown_line_marker_id > 0:
+
+														log.out("TODO: Compare the shutdown and GDB stuff to known crash patterns and update if this is known", EXCEPTION)
+
+
+
 														shutdown_crash_exec_id = report.add_crash_exec(shutdown_line_marker_id, 'shutdown', None)
 														if shutdown_crash_exec_id > 0:
-															log.out("TODO: Compare the shutdown and GDB stuff to known crash patterns and update if this is known")
+															pass
+
+
+
 														else:
 															rc = shutdown_crash_exec_id
 													else:
@@ -2181,9 +2206,23 @@ def process_tests(args, log, sum_results, log_results, variant):
 								line_marker_id = report.add_line_marker(yoyo_log_id, log_regex["type"],  log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 								if line_marker_id > 0:
+
+									log.out("TODO: Compare the shutdown known crash patterns and update if this is known", EXCEPTION);
+
+
+
+
+
+
+
 									crash_exec_id = report.add_crash_exec(line_marker_id, log_regex["matches"]["type"].lower(), None)
 									if crash_exec_id:
-										log.out("TODO: Compare the shutdown known crash patterns and update if this is known")
+
+										pass
+
+
+
+
 									else:
 										rc = crash_exec_id
 								else:
