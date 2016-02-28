@@ -4,6 +4,7 @@ import user
 import gzip
 import shutil
 import getpass
+from pprint import pformat
 
 parentPath = os.path.abspath("../common")
 
@@ -2537,9 +2538,12 @@ class TestReporter(My_SQL):
 				fields.append("fk_crash_type_id")
 				data.append(crash_type_id)
 
-				data = self.select(["crash_known_id", "uncompress(regex)"], "crash_known", fields, data)
+				crash_known_rows = self.select(["crash_known_id", "uncompress(regex)"], "crash_known", fields, data)
 
-				return str(data)
+				if self.size(crash_known_rows) > 0:
+					return crash_known_rows
+				else:
+					return None
 			else:
 				log._error_macro(str(crash_type) + " is not a valid crash type.")
 				return crash_type_id
