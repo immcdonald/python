@@ -225,7 +225,8 @@ def add_project(args, log):
 		"sigbus",
 		"sigtrap",
 		"shutdown",
-		"kdump"
+		"kdump",
+		"kernel_start"
 	]
 
 	line_markers = [
@@ -2226,6 +2227,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 							elif log_regex["type"] == "kernel_start":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=1)
 								line_marker_id = report.add_line_marker(yoyo_log_id, log_regex["type"],  log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
+
 
 								if line_marker_id > 0:
 									crash_exec_id = report.add_crash_exec(line_marker_id,log_regex["type"], None)
