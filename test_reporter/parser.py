@@ -2190,21 +2190,45 @@ def process_tests(args, log, sum_results, log_results, variant):
 														if call(gunzip_cmd, shell=True) == 0:
 															cmd = [gdb_path, symbol_file]
 															cmd_str = "target remote | kdserver " + uncompressed_kdump_file +"\n"
-															cmd_str = cmd_str + "echo [ian_is_totally_awesome_bt]\n"
+															cmd_str = cmd_str + "echo [ian_is_totally_awesome_bt]\\n\n"
 															cmd_str = cmd_str + "bt\n"
-															cmd_str = cmd_str + "echo [\ian_is_totally_awesome_bt]\necho [ian_is_totally_awesome_info_reg]\n"
+															cmd_str = cmd_str + "echo [-ian_is_totally_awesome_bt]\\n\necho [ian_is_totally_awesome_info_reg]\\n\n"
 															cmd_str = cmd_str + "info reg\n"
-															cmd_str = cmd_str + "echo [\ian_is_totally_awesome_info_reg]\necho [ian_is_totally_awesome_display]\n"
+															cmd_str = cmd_str + "echo [-ian_is_totally_awesome_info_reg]\\n\necho [ian_is_totally_awesome_display]\\n\n"
 															cmd_str = cmd_str + "display /100i $pc-0d40\n"
-															cmd_str = cmd_str + "echo [\ian_is_totally_awesome_display]\n"
+															cmd_str = cmd_str + "echo [-ian_is_totally_awesome_display]\\n\n"
 															cmd_str = cmd_str + "quit\n"
 															cmd_str = cmd_str + "y\n"
-
+															cmd_str = cmd_str + "quit\n"
+															cmd_str = cmd_str + "y\n"
 															process = Popen(cmd, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
+															output = process.communicate(cmd_str)[0]
 
-															print process.communicate(cmd_str)[0]
+															print "<" * 80
+
+															if process.returncode == 0:
+
+																back_trace = None
 
 
+																start_pos = output.find("[ian_is_totally_awesome_bt]");
+																if start_pos > -1:
+																	start_pos = start_pos + len("[ian_is_totally_awesome_bt]");
+																	end_pos = output.find("[-ian_is_totally_awesome_bt]");
+																	if end_pos > -1:
+																		back_trace = output[start_pos: (end_pos-start_pos)]
+
+																print ">" * 80
+
+																print back_trace
+																print start_pos, end_pos
+
+
+
+
+
+															else:
+																log.out("Executing gdb failed (" + str(process.returncode) + ") with the following output:\n" + output, WARNING)
 
 															os.remove(uncompressed_kdump_file)
 
