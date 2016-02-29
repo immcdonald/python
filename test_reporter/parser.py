@@ -4,6 +4,7 @@ from datetime import datetime
 import re
 import user
 from TestReporter import TestReporter, DEBUG, ERROR, WARNING, EXCEPTION
+from subprocess import call,Popen, PIPE, STDOUT
 
 from pprint import pformat
 
@@ -1844,6 +1845,10 @@ def process_tests(args, log, sum_results, log_results, variant):
 					if rc <= 0:
 						break
 
+
+		#Used to store the last symbol file path. Will be used later for kdump stuff
+		symbol_file = None
+
 		# Keep track of the sumbit id for the yoyo.log and yoyo.sum files
 		yoyo_log_id = -1
 		yoyo_sum_id = -1
@@ -1873,6 +1878,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 						rc = report.add_attachment("build", file_name)
 					elif item.find(".sym") != -1:
 						rc = report.add_attachment("symbol", file_name)
+						symbol_file = file_name
 					elif item.find("kdump.elf.gz") != -1:
 						rc = report.add_attachment("kdump_raw", file_name)
 					else:
@@ -2035,9 +2041,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 												text_block = "".join(lines)
 
-											#	print "="*80
-											#	print "\n".join(lines)
-											#	print "="*80
 
 												# compare lines to known crashes
 												for known_crash_row in known_crashes_rows:
@@ -2148,60 +2151,82 @@ def process_tests(args, log, sum_results, log_results, variant):
 							elif log_regex["type"] == "kdump":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=1)
 
+								print pformat(log_regex)
+
+
 								# add the kdump line marker...
 								line_marker_id = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
 
 								if line_marker_id > 0:
-									crash_exec_id = report.add_crash_exec(line_marker_id, log_regex["type"], None)
 
-									if crash_exec_id > 0:
-										kdump_file_name = "kdump."+str(log_regex["matches"]["index"])
-										full_attached_path = os.path.join(variant, kdump_file_name)
+									crash_known_id = None;
 
-										# get the attachment id for this index file.
-										kdump_index_id = report.get_attachment_id(full_attached_path)
-
-										if kdump_index_id > 0:
-											# Open the local kdump index file
-												with open(full_attached_path,"Ur") as fp_in:
-													# read in with new lines
-													lines = fp_in.readlines()
-
-												kdump_line_index = 0
-												max_lines = len(lines)
-												shutdown_found_line_index  = -1
-
-												for kdump_line_index in range(0, len(lines)):
-													# scan for the shutdown message
-													if lines[kdump_line_index].find("Shutdown[") != -1:
-														shutdown_found_line_index = kdump_line_index
-														break
-
-												if shutdown_found_line_index != -1:
-													shutdown_line_marker_id = report.add_line_marker(kdump_index_id, 'shutdown', shutdown_found_line_index, end_line=max_lines, test_exec_id=test_exec_id)
-
-													if shutdown_line_marker_id > 0:
-
-														log.out("TODO: Compare the shutdown and GDB stuff to known crash patterns and update if this is known", EXCEPTION)
+									# check to see if the symbol file exists
+									if os.path.exists(symbol_file) == False:
+										log.out("Symbol file does not exist at ("+ str(symbol_file) + ")", EXCEPTION)
 
 
 
-														shutdown_crash_exec_id = report.add_crash_exec(shutdown_line_marker_id, 'shutdown', None)
-														if shutdown_crash_exec_id > 0:
-															pass
+									#check to see if we have a root path to the gdb tools
+									if len(args["gdb_tools_path"]) > 0:
+
+										gdb_path = os.path.join(args["gdb_tools_path"], "nto" +  str(submit_dict["arch"]) + "-gdb")
+
+										# Check to see if the path to the debug tool exists:
+										if os.path.exists(gdb_path):
+
+											# Get the known crashes for this test and this crash type.
+											known_crashes_rows = report.get_known_crashes_for_test(test_root_id, log_regex["type"].lower())
+											if known_crashes_rows:
+												if isinstance(known_crashes_rows, list):
+
+													compressed_kdump_file = os.path.join(args["full_root"], "kdump." + str(log_regex["matches"]["index"]) + ".elf.gz"  )
+													uncompressed_kdump_file = os.path.abspath(os.path.join(args["full_root"], "kdump." + str(log_regex["matches"]["index"]) + ".elf"))
+
+													if os.path.exists(compressed_kdump_file):
+
+														gunzip_cmd = "gunzip -c " + str(compressed_kdump_file) +  " > " + uncompressed_kdump_file
+
+														if call(gunzip_cmd, shell=True) == 0:
+															cmd = [gdb_path, symbol_file]
+															cmd_str = "target remote | kdserver " + uncompressed_kdump_file +"\n"
+															cmd_str = cmd_str + "echo [ian_is_totally_awesome_bt]\n"
+															cmd_str = cmd_str + "bt\n"
+															cmd_str = cmd_str + "echo [\ian_is_totally_awesome_bt]\necho [ian_is_totally_awesome_info_reg]\n"
+															cmd_str = cmd_str + "info reg\n"
+															cmd_str = cmd_str + "echo [\ian_is_totally_awesome_info_reg]\necho [ian_is_totally_awesome_display]\n"
+															cmd_str = cmd_str + "display /100i $pc-0d40\n"
+															cmd_str = cmd_str + "echo [\ian_is_totally_awesome_display]\n"
+															cmd_str = cmd_str + "quit\n"
+															cmd_str = cmd_str + "y\n"
+
+															process = Popen(cmd, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
+
+															print process.communicate(cmd_str)[0]
 
 
+
+															os.remove(uncompressed_kdump_file)
 
 														else:
-															rc = shutdown_crash_exec_id
+															log.out("Comand line call (" + gunzip_cmd + ") Failed", EXCEPTION)
 													else:
-														rc = shutdown_line_marker_id
+														log.out("Failed to find (" + str(compressed_kdump_file) + ")", EXCEPTION)
+												else:
+													log.out("Get known crashes returned a Non list.", ERROR);
+											else:
+												log.out("Get known crash returned nothing.", DEBUG, v=25)
 										else:
-											log.out("Failed to find attachment id for kdump." + str(log_regex["matches"]["index"]), ERROR)
-									else:
-										rc = crash_exec_id
+											log.out("GDB path ("+ str(gdb_path) + ") is invalid or permission problem exists", EXCEPTION)
+
+
+									rc = report.add_crash_exec(line_marker_id, log_regex["type"], crash_known_id)
 								else:
 									rc = line_marker_id
+
+
+								log.out("------", EXCEPTION);
+
 
 							elif log_regex["type"] == "shutdown":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=1)
@@ -2483,6 +2508,7 @@ def main(argv=None):
 
 	parser.add_argument('-input', '--input',
 						help='')
+
 	parser.add_argument('-line_marker_level', '--line_marker_level', default=0,
 						help='')
 
@@ -2550,6 +2576,7 @@ def main(argv=None):
 
 	args = vars(parser.parse_args())
 
+
 	args["reporter"] = TestReporter(args["mysql_host"],  args["mysql_user_name"], args["mysql_password"], args["schema"])
 
 	log = args["reporter"].get_log()
@@ -2559,6 +2586,11 @@ def main(argv=None):
 	str_buffer = "Input Parameters\n"
 
 	log.out(str_buffer + ("=" * (len(str_buffer)-1)) + "\n" + pformat(args), DEBUG, v=1)
+
+	if "gdb_tools_path" in args:
+		if len(args["gdb_tools_path"]) > 0:
+			if os.path.exists(args["gdb_tools_path"]) is False:
+				log.out("The provided path (" + str(args["gdb_tools_path"]) + ") to the gdb does not exist or there is a permissions issue.")
 
 	if args["reporter"]:
 
