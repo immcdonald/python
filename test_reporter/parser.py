@@ -8,7 +8,6 @@ from subprocess import call,Popen, PIPE, STDOUT
 
 from pprint import pformat
 
-
 scan_enum = {"NOTHING": 0,
 			 "DOWNLOAD_START": 1,
 		     "SEND_TEST": 2,
@@ -2151,8 +2150,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 							elif log_regex["type"] == "kdump":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=1)
 
-								print pformat(log_regex)
-
 
 								# add the kdump line marker...
 								line_marker_id = report.add_line_marker(yoyo_log_id, log_regex["type"], log_regex["start"], end_line=log_regex["end"], test_exec_id=test_exec_id)
@@ -2164,8 +2161,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 									# check to see if the symbol file exists
 									if os.path.exists(symbol_file) == False:
 										log.out("Symbol file does not exist at ("+ str(symbol_file) + ")", EXCEPTION)
-
-
 
 									#check to see if we have a root path to the gdb tools
 									if len(args["gdb_tools_path"]) > 0:
@@ -2204,27 +2199,91 @@ def process_tests(args, log, sum_results, log_results, variant):
 															process = Popen(cmd, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
 															output = process.communicate(cmd_str)[0]
 
-															print "<" * 80
-
 															if process.returncode == 0:
 
 																back_trace = None
-
+																info_reg = None
+																display = None
 
 																start_pos = output.find("[ian_is_totally_awesome_bt]");
 																if start_pos > -1:
 																	start_pos = start_pos + len("[ian_is_totally_awesome_bt]");
-																	end_pos = output.find("[-ian_is_totally_awesome_bt]");
+																	end_pos = output.find("[-ian_is_totally_awesome_bt]\n");
 																	if end_pos > -1:
+																		print start_pos, end_pos
 																		back_trace = output[start_pos: (end_pos-start_pos)]
 
-																print ">" * 80
+																start_pos = output.find("[ian_is_totally_awesome_info_reg]");
+																if start_pos > -1:
+																	start_pos = start_pos + len("[ian_is_totally_awesome_info_reg]");
+																	end_pos = output.find("[-ian_is_totally_awesome_info_reg]");
+																	if end_pos > -1:
+																		info_reg = output[start_pos:]
+																		info_reg = info_reg[:(end_pos-start_pos)]
 
-																print back_trace
-																print start_pos, end_pos
+																start_pos = output.find("[ian_is_totally_awesome_display]");
+																if start_pos > -1:
+																	start_pos = start_pos + len("[ian_is_totally_awesome_display]");
+																	end_pos = output.find("[-ian_is_totally_awesome_display]\n");
+																	if end_pos > -1:
+																		display = output[start_pos: (end_pos-start_pos)]
+
+																keep_back_trace_lines = ["                                -=Back Trace=-"]
+
+																for line in back_trace.splitlines():
+																	if line.find("??") != -1:
+																		continue
+
+																	pos = line.find("(gdb)")
+																	if pos != -1:
+																		line = line[5:].strip()
+
+																	if len(line) <= 0:
+																		continue
+
+																	keep_back_trace_lines.append(line)
+
+
+																keep_back_trace_lines.append("                                -=Display=-")
+
+																next_break = False
+																counter = 0
+
+																for line in display.splitlines():
+																	counter = counter + 1
+
+																	if counter < 4:
+																		continue
+
+																	line = line.strip()
+
+																	if len(line) == 0:
+																		continue
+
+																	pos = line.find("=>")
+
+																	if pos != -1:
+																		pos = line.find("<")
+
+																		if pos != -1:
+																			keep_back_trace_lines.append("=>" + line[pos: len(line)])
+																			next_break = True
+																	else:
+																		pos = line.find("<")
+
+																		if pos == -1:
+																			pos = 0
+
+																		keep_back_trace_lines.append(line[pos: len(line)])
+
+																print "\n".join(keep_back_trace_lines)
 
 
 
+															#	print " "
+															#	print "info_reg:\n", info_reg
+															#	print " "
+															#	print "display:\n", display
 
 
 															else:
