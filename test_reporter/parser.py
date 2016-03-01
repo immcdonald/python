@@ -2210,7 +2210,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 																	start_pos = start_pos + len("[ian_is_totally_awesome_bt]");
 																	end_pos = output.find("[-ian_is_totally_awesome_bt]\n");
 																	if end_pos > -1:
-																		print start_pos, end_pos
 																		back_trace = output[start_pos: (end_pos-start_pos)]
 
 																start_pos = output.find("[ian_is_totally_awesome_info_reg]");
@@ -2276,14 +2275,56 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 																		keep_back_trace_lines.append(line[pos: len(line)])
 
-																print "\n".join(keep_back_trace_lines)
+																		if next_break:
+																			break
+
+																text_block = "".join(keep_back_trace_lines)
 
 
+																# compare lines to known crashes
+																for known_crash_row in known_crashes_rows:
+																	pattern_id = known_crash_row[0]
+																	pattern = str(known_crash_row[1])
 
-															#	print " "
-															#	print "info_reg:\n", info_reg
-															#	print " "
-															#	print "display:\n", display
+																	#print "-" * 80
+																	#print pattern
+																	#print "-" * 80
+
+																	# Index 1 should be the regex string pattern, index 0 should be the table id for the pattern.
+																	# We want to remove new_lines from the pattern
+																	regex_pattern_lines = pattern.splitlines()
+
+																	# remove any extra preceeding and endind white space from each line
+																	# remove any empty lines.
+																	temp_lines = []
+																	for line in regex_pattern_lines:
+																		line = line.strip()
+																		if len(line) > 0:
+																			temp_lines.append(line)
+
+																	regex_pattern_lines = temp_lines
+
+																	# Compile the regex pattern
+																	regex = re.compile("".join(regex_pattern_lines))
+
+																	print "*"*80
+																	print "".join(regex_pattern_lines)
+																	print "=-"*40
+
+
+																	print "*"*80
+																	print "".join(text_block)
+																	print "=-"*40
+
+
+																	result = regex.search(text_block)
+
+																	if result:
+																		log.out("REGEX PATTERN MATCH FOUND FOR process_seg: " + str(pattern_id), DEBUG, v=1)
+																		known_crash_id = pattern_id
+																		break
+
+
 
 
 															else:
