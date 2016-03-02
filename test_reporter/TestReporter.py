@@ -2490,7 +2490,6 @@ class TestReporter(My_SQL):
 			return TestReporter.ERROR_NOT_READY_ERROR
 
 	def add_crash_exec(self, line_marker_id, crash_type, known_crash_id=None):
-
 		if self.look_for_exists_already:
 			crash_exec_id = self.get_crash_exec_id(line_marker_id, crash_type, display_error=False)
 		else:

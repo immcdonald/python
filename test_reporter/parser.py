@@ -54,6 +54,7 @@ arch_type_file_path_breaks = ["tests",
 
 expected_sub_strings = ["(timeout) where is the STOP message?",
 						"(timeout) kermit not responsive",
+						"(timeout) where is the shell?",
 						"Assertion failed",
 						"program crashed",
 						"premature exit",
@@ -288,6 +289,7 @@ def add_project(args, log):
 		"never started",
 		"kernel crash kdump",
 		"No such file or directory",
+		"(timeout) where is the shell?",
 		"sigbus",
 		"sigill",
 		"sigsegv",
@@ -632,6 +634,9 @@ def cleanup_yoyo_log(args, log, fp, path):
 
 def cleanup_log_files(args, log, fp, recovery_data):
 	for root, dirs, files in os.walk(args["input"]):
+		if "!no_scan.txt" in files:
+			continue
+
 		if "yoyo.sum" in files:
 			completed_string = root + " " + "yoyo.sum cleanup completed"
 
@@ -1088,6 +1093,9 @@ def get_subtype(args, log, search_string):
 
 		if period_pos > 0:
 			sub_string = sub_string[0:period_pos]
+
+		print sub_string
+		print pformat(expected_sub_strings)
 
 		if sub_string in expected_sub_strings:
 			if sub_string == "(timeout) where is the STOP message?":
@@ -2075,7 +2083,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 													if result:
 														log.out("REGEX PATTERN MATCH FOUND FOR process_seg: " + str(pattern_id), DEBUG, v=25)
-														known_crash_id = pattern_id
+														crash_known_id = pattern_id
 														break
 
 										else:
@@ -2307,7 +2315,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 																	if result:
 																		log.out("REGEX PATTERN MATCH FOUND FOR process_seg: " + str(pattern_id), DEBUG, v=1)
-																		known_crash_id = pattern_id
+																		crash_known_id = pattern_id
 																		break
 															else:
 																log.out("Executing gdb failed (" + str(process.returncode) + ") with the following output:\n" + output, WARNING)
@@ -2336,16 +2344,14 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 								if line_marker_id > 0:
 
-									log.out("TODO: Compare the shutdown known crash patterns and update if this is known", EXCEPTION);
+									log.out("TODO: Compare the shutdown known crash patterns and update if this is known", ERROR);
 
-									crash_exec_id = report.add_crash_exec(line_marker_id, log_regex["matches"]["type"].lower(), None)
+									crash_exec_id = report.add_crash_exec(line_marker_id, log_regex["type"].lower(), None)
+
+
+
 									if crash_exec_id:
-
 										pass
-
-
-
-
 									else:
 										rc = crash_exec_id
 								else:
@@ -2507,6 +2513,9 @@ def process_variants(args, log, fp, recovery_data):
 		relative_root = root[input_lenght:]
 
 		args["full_root"] = root
+
+		if "!no_scan.txt" in files:
+			continue
 
 		if len(relative_root) > 0:
 			if relative_root[0] == "/":
