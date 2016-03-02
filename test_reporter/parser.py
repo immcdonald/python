@@ -2210,7 +2210,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 																	start_pos = start_pos + len("[ian_is_totally_awesome_bt]");
 																	end_pos = output.find("[-ian_is_totally_awesome_bt]\n");
 																	if end_pos > -1:
-																		back_trace = output[start_pos: (end_pos-start_pos)]
+																		back_trace = output[start_pos: end_pos]
 
 																start_pos = output.find("[ian_is_totally_awesome_info_reg]");
 																if start_pos > -1:
@@ -2218,14 +2218,14 @@ def process_tests(args, log, sum_results, log_results, variant):
 																	end_pos = output.find("[-ian_is_totally_awesome_info_reg]");
 																	if end_pos > -1:
 																		info_reg = output[start_pos:]
-																		info_reg = info_reg[:(end_pos-start_pos)]
+																		info_reg = info_reg[:end_pos]
 
 																start_pos = output.find("[ian_is_totally_awesome_display]");
 																if start_pos > -1:
 																	start_pos = start_pos + len("[ian_is_totally_awesome_display]");
 																	end_pos = output.find("[-ian_is_totally_awesome_display]\n");
 																	if end_pos > -1:
-																		display = output[start_pos: (end_pos-start_pos)]
+																		display = output[start_pos:end_pos]
 
 																keep_back_trace_lines = ["                                -=Back Trace=-"]
 
@@ -2251,7 +2251,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 																for line in display.splitlines():
 																	counter = counter + 1
 
-																	if counter < 4:
+																	if counter < 3:
 																		continue
 
 																	line = line.strip()
@@ -2280,15 +2280,10 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 																text_block = "".join(keep_back_trace_lines)
 
-
 																# compare lines to known crashes
 																for known_crash_row in known_crashes_rows:
 																	pattern_id = known_crash_row[0]
 																	pattern = str(known_crash_row[1])
-
-																	#print "-" * 80
-																	#print pattern
-																	#print "-" * 80
 
 																	# Index 1 should be the regex string pattern, index 0 should be the table id for the pattern.
 																	# We want to remove new_lines from the pattern
@@ -2307,15 +2302,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 																	# Compile the regex pattern
 																	regex = re.compile("".join(regex_pattern_lines))
 
-																	print "*"*80
-																	print "".join(regex_pattern_lines)
-																	print "=-"*40
-
-
-																	print "*"*80
-																	print "".join(text_block)
-																	print "=-"*40
-
 
 																	result = regex.search(text_block)
 
@@ -2323,10 +2309,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 																		log.out("REGEX PATTERN MATCH FOUND FOR process_seg: " + str(pattern_id), DEBUG, v=1)
 																		known_crash_id = pattern_id
 																		break
-
-
-
-
 															else:
 																log.out("Executing gdb failed (" + str(process.returncode) + ") with the following output:\n" + output, WARNING)
 
@@ -2347,10 +2329,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 									rc = report.add_crash_exec(line_marker_id, log_regex["type"], crash_known_id)
 								else:
 									rc = line_marker_id
-
-
-								log.out("------", EXCEPTION);
-
 
 							elif log_regex["type"] == "shutdown":
 								log.out("++++++++++++++++++++++++++++++++ " + str(log_regex["type"]) + " ++++++++++++++++++++++++++++++++", DEBUG, v=1)
