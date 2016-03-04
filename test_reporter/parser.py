@@ -1602,7 +1602,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 			# see if we can determine the end line for this kernel start..
 			for offset in range(index + 1, max_index):
 				local_regex = log_results["parsed_lines"][offset]
-				if local_regex["type"] != "shutdown" and local_regex["type"] != "TestPoint"  and local_regex["type"] != "kdump":
+				if local_regex["type"] != "shutdown" and local_regex["type"] != "TestPoint"  and local_regex["type"] != "kdump" and local_regex["type"] != "execute":
 					regex_data["end"] = local_regex["start"] -1
 					break
 
@@ -1616,7 +1616,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 				local_regex = log_results["parsed_lines"][offset]
 				regex_data["end"] = local_regex["start"] -1
 
-				if local_regex["type"] != "shutdown" and local_regex["type"] != "TestPoint":
+				if local_regex["type"] != "shutdown" and local_regex["type"] != "TestPoint" and local_regex["type"] != "execute":
 					break
 
 			if submit_test_index > 0:
@@ -1628,7 +1628,8 @@ def process_tests(args, log, sum_results, log_results, variant):
 			for offset in range(index + 1, max_index):
 				local_regex = log_results["parsed_lines"][offset]
 				regex_data["end"] = local_regex["start"] -1
-				if local_regex["type"] != "TestPoint":
+				if local_regex["type"] != "TestPoint" and local_regex["type"] != "execute":
+					print "-="*20, "\n", local_regex["type"]
 					break
 
 			if submit_test_index > 0:
@@ -2314,7 +2315,7 @@ def process_tests(args, log, sum_results, log_results, variant):
 																	result = regex.search(text_block)
 
 																	if result:
-																		log.out("REGEX PATTERN MATCH FOUND FOR process_seg: " + str(pattern_id), DEBUG, v=1)
+																		log.out("REGEX PATTERN MATCH FOUND FOR kdump: " + str(pattern_id), DEBUG, v=1)
 																		crash_known_id = pattern_id
 																		break
 															else:
@@ -2344,11 +2345,76 @@ def process_tests(args, log, sum_results, log_results, variant):
 
 								if line_marker_id > 0:
 
-									log.out("TODO: Compare the shutdown known crash patterns and update if this is known", ERROR);
+									crash_known_id = None;
 
-									crash_exec_id = report.add_crash_exec(line_marker_id, log_regex["type"].lower(), None)
+									# Get the known crashes for this test and this crash type.
+									known_crashes_rows = report.get_known_crashes_for_test(test_root_id, log_regex["type"].lower())
 
+									if known_crashes_rows:
+										if isinstance(known_crashes_rows, list):
 
+											# Read from the log file the data we are interested in
+											with open(os.path.join(variant, "yoyo.log"),"Ur") as fp_in:
+
+												# Load the lines without the new lines
+												lines = fp_in.read().splitlines()
+
+												temp_lines = []
+												temp_lines.append(lines[log_regex["start"]])
+
+												for line_index in range(log_regex["start"]+1, log_regex["end"]):
+
+													if lines[line_index].find(']ASPACE') != -1:
+														temp_lines.append(lines[line_index])
+
+													if lines[line_index].find('x86_64 context[') != -1:
+														temp_lines.append(lines[line_index])
+
+													if lines[line_index].find('instruction[') != -1:
+														temp_lines.append(lines[line_index])
+
+													if lines[line_index].find('stack[') != -1:
+														temp_lines.append(lines[line_index])
+
+												text_block = "".join(temp_lines)
+
+												# Compare lines to known crashes
+												for known_crash_row in known_crashes_rows:
+													pattern_id = known_crash_row[0]
+													pattern = str(known_crash_row[1])
+
+													# Index 1 should be the regex string pattern, index 0 should be the table id for the pattern.
+													# We want to remove new_lines from the pattern
+													regex_pattern_lines = pattern.splitlines()
+
+													# remove any extra preceeding and endind white space from each line
+													# remove any empty lines.
+													temp_lines = []
+													for line in regex_pattern_lines:
+														line = line.strip()
+														if len(line) > 0:
+															temp_lines.append(line)
+
+													regex_pattern_lines = temp_lines
+
+													regex_pattern_lines =  "".join(regex_pattern_lines)
+													regex_pattern_lines.replace("\\\\", "\\")
+
+													# Compile the regex pattern
+													regex = re.compile(regex_pattern_lines)
+													result = regex.search(text_block)
+
+													if result:
+														log.out("REGEX PATTERN MATCH FOUND FOR shutdown: " + str(pattern_id), DEBUG, v=1)
+														crash_known_id = pattern_id
+														break
+										else:
+											log.out("Get known crashes returned a Non list.", ERROR);
+
+									else:
+										log.out("Get known crash returned nothing.", DEBUG, v=25)
+
+									crash_exec_id = report.add_crash_exec(line_marker_id, log_regex["type"].lower(), crash_known_id)
 
 									if crash_exec_id:
 										pass

@@ -2162,8 +2162,6 @@ class TestReporter(My_SQL):
 					if marker_sub_type_id > 0:
 						if end_line:
 							if start_line > end_line:
-								print marker_type, sub_type
-
 								self._error_macro("Start line value (" + str(start_line) + ") must be <= end line value (" + str(end_line) + ")")
 								return TestReporter.ERROR_LINE_INDEXING
 

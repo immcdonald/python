@@ -124,6 +124,7 @@ if ($rc == OK) {
 			}
 
 
+
 			#Check to see if this page is updated on a submit:
 			if (isset($_GET["submit"])){
 				#Check to see if the user hit the use button
@@ -212,7 +213,7 @@ if ($rc == OK) {
 				echo '<tr>';
 
 				echo '<td>';
-				echo '&nbsp';
+				echo "Type: ".ucfirst($type);
 				echo '</td>';
 
 				echo '<td align="center" >';
@@ -757,12 +758,10 @@ function generate_shutdown_crash_profile(&$error, &$log_lines, &$crash_profile, 
 	$rc = OK;
 	$crash_profile["lines"] = array();
 	$crash_profile["regex"] = array();
-	$max_lines = count($log_lines);
-
 
 	$crash_profile["lines"][$start] = $log_lines[$start];
 
-	for($index =  $start+1; $index < $max_lines; $index ++) {
+	for($index =  $start+1; $index < $end; $index ++) {
 
 		$pos = strpos($log_lines[$index],']ASPACE');
 
@@ -795,7 +794,8 @@ function generate_shutdown_crash_profile(&$error, &$log_lines, &$crash_profile, 
 		$crash_profile["regex"] = preg_replace("/[[:blank:]]+/", "\s*", $crash_profile["regex"]);
 		$crash_profile["regex"] = preg_replace("/PID\\\=\d+/", "PID=\d+", $crash_profile["regex"]);
 		$crash_profile["regex"] = preg_replace("/PF\\\=\d+/", "PF=\d+", $crash_profile["regex"]);
-		$crash_profile["regex"] = preg_replace("/\[\d+/", "[\d+", $crash_profile["regex"]);
+		$crash_profile["regex"] = preg_replace("/\[\s*\d+/", "[\d+", $crash_profile["regex"]);
+		$crash_profile["regex"] = preg_replace("/,\s*\d+\s*\\\]/", ",\d+\]", $crash_profile["regex"]);
 	}
 
 	return $rc;
@@ -1116,9 +1116,8 @@ function get_line_marker_info_and_crash_profile(&$error, $sql_handle, $lm_id, &$
 			# Somtimes the shutdown message appears in the main log and sometimes it appears in the kdump log.
 			# Check to see if the log attachment id and the shutdown attachment id are the same or differnt
 			if ($log_profile["line_marker_info"]["fk_attachment_id"] == $crash_profile["line_marker_info"]["fk_attachment_id"]){
-
 				# They are in the same file.
-				$rc = generate_shutdown_crash_profile($error, $log_profile["lines"], $crash_profile,  $crash_profile["line_marker_info"]["start"], $crash_profile["line_marker_info"]["end"]);
+				$rc = generate_shutdown_crash_profile($error, $log_profile["file_data"]["lines"], $crash_profile,  $crash_profile["line_marker_info"]["start"], $crash_profile["line_marker_info"]["end"]);
 			}
 			else{
 				$kdump_index_file_info = array();
@@ -1127,7 +1126,7 @@ function get_line_marker_info_and_crash_profile(&$error, $sql_handle, $lm_id, &$
 
 				if ($rc == OK){
 
-					$rc = generate_shutdown_crash_profile($error, $kdump_index_file_info["lines"], $crash_profile,  $crash_profile["line_marker_info"]["start"], $crash_profile["line_marker_info"]["end"]);
+					$rc = generate_shutdown_crash_profile($error, $log_profile["file_data"]["lines"], $crash_profile,  $crash_profile["line_marker_info"]["start"], $crash_profile["line_marker_info"]["end"]);
 				}
 			}
 		}
