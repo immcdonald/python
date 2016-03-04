@@ -1037,8 +1037,11 @@ function generate_process_seg_crash_profile(&$error, $sql_handle, &$log_lines, &
 
 	# Now scan back from the crash position to the first none empty line.
 	for($scan_index = $crash_profile["line_marker_info"]["start"]-1; $scan_index > 0; $scan_index --){
-		if (strlen($log_lines[$scan_index]) > 0) {
-			break;
+
+		if (array_key_exists($scan_index,$log_lines)){
+			if (strlen($log_lines[$scan_index]) > 0) {
+				break;
+			}
 		}
 	}
 
@@ -1046,11 +1049,14 @@ function generate_process_seg_crash_profile(&$error, $sql_handle, &$log_lines, &
 
 	# Now scan forward from the crash position to the first none empty line.
 	for($scan_index = $crash_profile["line_marker_info"]["start"]+1; $scan_index < $max_log_lines; $scan_index ++) {
-		if (strlen($log_lines[$scan_index]) > 0) {
-			break;
+		if (array_key_exists($scan_index, $log_lines)){
+			if (strlen($log_lines[$scan_index]) > 0) {
+				break;
+			}
 		}
 	}
-		$crash_profile["mod_end"]  = $scan_index;
+
+	$crash_profile["mod_end"]  = $scan_index;
 
 	$temp = array_splice($log_lines, $crash_profile["mod_start"] - key($log_lines), (($crash_profile["mod_end"]+1) - $crash_profile["mod_start"]));
 
