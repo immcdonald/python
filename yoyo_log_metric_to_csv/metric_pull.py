@@ -4,7 +4,7 @@ from pprint import pformat
 test_exec_pattern = re.compile('^/tmp/(?P<test_name>[a-zA-Z0-9\-\_]+)\s*(?P<params>.*)');
 metric_pattern = re.compile('^METRIC: (?P<desc>.+)\sVALUE:\s(?P<value>.+)\sUNITS:\s(?P<units>.+)$')
 
-src_path = "sandybrige-001_qnx7_running_660_benchmark.log"
+src_path = "770_ds81-shuttle-001_running_660_tests.log"
 
 metric_data_tests = {}
 
@@ -45,7 +45,9 @@ with open(src_path, "Ur") as fp_in:
 			else:
 				print line
 
-for metric_data_test_key in sorted(metric_data_tests):
-	for description in sorted(metric_data_tests[metric_data_test_key]):
-			print metric_data_test_key + "; " + description + "; " + metric_data_tests[metric_data_test_key][description]["value"] + "; " + metric_data_tests[metric_data_test_key][description]["units"]
+
+with open(src_path+".csv", "w") as fp_out:
+	for metric_data_test_key in sorted(metric_data_tests):
+		for description in sorted(metric_data_tests[metric_data_test_key]):
+				fp_out.write(metric_data_test_key + "; " + description + "; " + metric_data_tests[metric_data_test_key][description]["value"] + "; " + metric_data_tests[metric_data_test_key][description]["units"]+"\n")
 
