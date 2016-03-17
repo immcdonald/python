@@ -102,7 +102,7 @@ function q(&$error, $sql_handle, $query_str, &$values=NULL) {
 }
 
 
-function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_data=NULL, $where_string=NULL, $limit=NULL){
+function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_data=NULL, $where_string=NULL, $limit=NULL, $order_by=NULL){
 
 	$rc = ERROR_GENERAL;
 	$out_rows = array();
@@ -210,6 +210,11 @@ function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_d
 				if (strlen($where_string)> 0){
 					$query = $query. " and (".$where_string.")";
 				}
+			}
+
+			if ($order_by != NULL)
+			{
+				$query = $query. " ORDER BY ".$order_by;
 			}
 
 			if ($limit != NULL){

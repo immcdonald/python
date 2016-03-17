@@ -4,7 +4,7 @@ from pprint import pformat
 test_exec_pattern = re.compile('^/tmp/(?P<test_name>[a-zA-Z0-9\-\_]+)\s*(?P<params>.*)');
 metric_pattern = re.compile('^METRIC: (?P<desc>.+)\sVALUE:\s(?P<value>.+)\sUNITS:\s(?P<units>.+)$')
 
-src_path = "yoyo.log"
+src_path = "sandybrige-001_qnx7_running_660_benchmark.log"
 
 metric_data_tests = {}
 
