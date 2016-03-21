@@ -77,7 +77,7 @@ def dmdty2time(input_string):
 def get_test_parts(full_test_path):
 	test_path = "."
 	test_name = None
-	test_params = None
+	test_params = " "
 
 	full_test_path = full_test_path.strip()
 	full_test_path = full_test_path.replace("\\", "/")
@@ -1312,8 +1312,6 @@ def process_tests(args, log, sum_results, log_results, variant):
 		if regex_data["type"] == "test_suite":
 			last_test_suite = regex_data["test_suite_name"]
 			submit_dict["test_suites"].append(last_test_suite)
-
-
 
 		elif regex_data["type"] == "host":
 			if "sum_host_index" not in  submit_dict:
