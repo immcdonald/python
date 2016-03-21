@@ -98,11 +98,15 @@ if (isset($_GET["project"])) {
 							$max_rows = count($rows);
 
 							foreach($keys as $key){
-								if (strlen($key) >= 3) {
-									if ($key[1] == '_') {
+								if (strlen($key) >= 2) {
+									$output_array = array();
+									$regex_result = preg_match("/(?P<action>[a-z])(?P<id>\d+)/", $key, $output_array);
 
-										$action = $key[0];
-										$test_exec_id = intval(substr($key, 2, strlen($key)));
+
+									if ($regex_result == 1) {
+
+										$test_exec_id = intval($output_array["id"]);
+
 										$radio_setting = $_GET[$key];
 
 										for($index=$row_start_index; $index < $max_rows; $index++) {
@@ -112,7 +116,7 @@ if (isset($_GET["project"])) {
 
 											if ($rows[$index]["test_exec_id"] == $test_exec_id) {
 
-												if ($action == 'a') {
+												if ($output_array["action"] == 'a') {
 													$insert_dict = array("fk_variant_root_id"=>$rows[$index]["fk_variant_root_id"],
 																		 "fk_test_suite_root_id"=>$rows[$index]["fk_test_suite_root_id"],
 																		 "fk_test_revision_id"=>$rows[$index]["fk_test_revision_id"],
@@ -151,7 +155,7 @@ if (isset($_GET["project"])) {
 													die("Error: Unknown managed action :".$action);
 												}
 
-												echo $action." ".$test_exec_id." ".$radio_setting."<BR>";
+												#echo $output_array["action"]." ".$test_exec_id." ".$radio_setting."<BR>";
 												$row_start_index = $index + 1;
 												break;
 											}
@@ -196,18 +200,25 @@ if (isset($_GET["project"])) {
 
 												if ($expected_row["exec_time_secs"] > 0){
 													$min_threshold = $expected_row["exec_time_secs"] - ($expected_row["exec_time_secs"] * 0.02);
+
 													$max_threshold = $expected_row["exec_time_secs"] + ($expected_row["exec_time_secs"] * 0.02);
 												}
-												else{
+												else if ($expected_row["exec_time_secs"] == 0){
 													$min_threshold = 0;
 													$max_threshold = 1;
 												}
+												else if ($expected_row["exec_time_secs"] < 0){
+													$min_threshold = $expected_row["exec_time_secs"] +($expected_row["exec_time_secs"] * 0.02);
+													$max_threshold = $expected_row["exec_time_secs"] - ($expected_row["exec_time_secs"] * 0.02);
+												}
+
 
 												if (($row["exec_time_secs"] >= $min_threshold) and ($row["exec_time_secs"] <= $max_threshold)) {
 													$expected_row["check"] = DEF_FOUND;
 													$row["status"]  = DEF_FOUND;
 												}
 												else {
+													echo $expected_row["exec_time_secs"]."Min: ".$min_threshold."&nbsp&nbsp&nbsp&nbsp&nbsp&nbspValue:".$row["exec_time_secs"]."&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspMax:".$max_threshold ."<BR>";
 													$expected_row["check"] = DEF_FOUND_BUT_EXEC_TIME_MISMATCH;
 													$row["status"]  = DEF_FOUND_BUT_EXEC_TIME_MISMATCH;
 													$row["execpted"] = $expected_row;
@@ -280,6 +291,8 @@ if (isset($_GET["project"])) {
 
 
 						echo '</tr>';
+						$add_counter = 0;
+
 						foreach($rows as $row) {
 
 							if ($row["status"] == DEF_FOUND){
@@ -289,6 +302,7 @@ if (isset($_GET["project"])) {
 							echo '<tr>';
 							echo '<td>';
 							echo $row["target"];
+							echo "(".$row["fk_variant_root_id"].")";
 							echo '</td>';
 
 							echo '<td>';
@@ -301,10 +315,12 @@ if (isset($_GET["project"])) {
 
 							echo '<td>';
 							echo $row["suite_name"];
+							echo "(".$row["fk_test_suite_root_id"].")";
 							echo '</td>';
 
 							echo '<td>';
 							echo $row["exec_path"];
+							echo "(".$row["fk_test_revision_id"].")";
 							echo '</td>';
 
 							echo '<td>';
@@ -325,15 +341,29 @@ if (isset($_GET["project"])) {
 							else if ($row["status"] == DEF_FOUND_BUT_EXEC_TIME_MISMATCH) {
 								echo "Exec Time Mismatch";
 							}
+							else if ($row["status"] == DEF_FOUND_FUTURE_DATE) {
+								echo "Future Match";
+							}
+							else{
+								echo "Error: Unmanaged status code! ".$row["status"];
+							}
+							echo "(".$row["test_exec_id"].")";
 							echo '</td>';
-
 
 							echo '<td>';
 
 							if ($row["status"] == DEF_NOT_FOUND) {
-								echo '<input type="radio" name="a_'.$row["test_exec_id"].'" value="." /><label>Do not Add</label><BR>';
-								echo '<input type="radio" name="a_'.$row["test_exec_id"].'" value="t" ><label>Add  ('.$exec_date.')</label><BR>';
-								echo '<input type="radio" name="a_'.$row["test_exec_id"].'" value="a" ><label>Add After ('.$exec_date_one_second_later.')</label><BR>';
+								echo '<input type="radio" name="a'.$row["test_exec_id"].'" value="." /><label>Do not Add</label><BR>';
+								echo '<input type="radio" name="a'.$row["test_exec_id"].'" value="t" ><label>Add  ('.$exec_date.')</label><BR>';
+
+								if ($add_counter < 500){
+									echo '<input type="radio" name="a'.$row["test_exec_id"].'" value="a" checked="checked" ><label>Add After ('.$exec_date_one_second_later.')</label><BR>';
+									$add_counter ++;
+								}
+								else {
+									echo '<input type="radio" name="a'.$row["test_exec_id"].'" value="a"  ><label>Add After ('.$exec_date_one_second_later.')</label><BR>';
+								}
+
 							}
 							else if ($row["status"] == DEF_FOUND_RESULT_NO_MATCH) {
 								echo "Result Mismatch";
@@ -342,12 +372,10 @@ if (isset($_GET["project"])) {
 								echo "Exec Time Mismatch";
 							}
 							else if ($row["status"] == DEF_FOUND_FUTURE_DATE) {
-								echo "Future Match:".$row["execpted"]["start_date"];
+								echo $row["execpted"]["start_date"];
 							}
 
 							echo '</td>';
-
-
 							echo '</tr>';
 						}
 
