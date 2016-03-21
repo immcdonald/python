@@ -272,9 +272,19 @@ function insert(&$error, $sql_handle, $table, $insert_dict, $check=False) {
 			if ($rc == OK) {
 
 				if ($check) {
+
+					$check_dict = array();
+
+					foreach(array_keys($insert_dict) as $key) {
+						if ($key != "created"){
+							if ($insert_dict[$key] != "now()"){
+								$check_dict[$key] = $insert_dict[$key];
+							}
+						}
+					}
 					$rows = array();
 
-					$rc = select($error, $sql_handle, $rows, $table, "*", $insert_dict);
+					$rc = select($error, $sql_handle, $rows, $table, "*", $check_dict);
 
 					if ($rc == OK) {
 						if (count($rows) != 0){

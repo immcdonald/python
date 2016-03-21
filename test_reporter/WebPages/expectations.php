@@ -10,8 +10,8 @@ define("DEF_EXPECTED_NOT_FOUND", -3);
 define("DEF_FOUND_BUT_EXEC_TIME_MISMATCH", -2);
 define("DEF_FOUND_RESULT_NO_MATCH", -1);
 define("DEF_NOT_FOUND", 0);
-
 define("DEF_FOUND", 1);
+define("DEF_FOUND_FUTURE_DATE", 2);
 
 
 function get_expected_results(&$error, &$sql_handle, &$expected_rows, $exec_type_id, $variant_root_id, $date){
@@ -24,7 +24,10 @@ function get_expected_results(&$error, &$sql_handle, &$expected_rows, $exec_type
 				   "fk_exec_type_id"=>$exec_type_id,
 				   "variant_root_id"=>$variant_root_id);
 
-	$extra_where = "\"".$date."\" BETWEEN start_date AND end_date";
+
+	//$extra_where = "\"".$date."\" BETWEEN start_date AND end_date";
+
+	$extra_where = "\"".$date."\" <= end_date";
 
 	$select = array("test_expected_id", "fk_test_revision_id", "fk_test_suite_root_id", "exec_time_secs", "fk_result_tag_id", "start_date", "end_date");
 
@@ -136,8 +139,12 @@ if (isset($_GET["project"])) {
 													$rc = insert($error, $sql_handle, "test_expected", $insert_dict, True);
 
 													if ($rc <= 0){
-
-														die($error);
+														if ($rc != ERROR_VALUE_EXISTS){
+															die($error);
+														}
+														else{
+															$error = NULL;
+														}
 													}
 												}
 												else{
@@ -153,11 +160,9 @@ if (isset($_GET["project"])) {
 								}
 							}
 						}
-						echo "=========================================================<BR>";
 						flush();
 
 						foreach($rows as &$row) {
-
 							$row["status"] = DEF_NOT_FOUND;
 
 							if ($row["exec_time_secs"]==NULL) {
@@ -186,30 +191,38 @@ if (isset($_GET["project"])) {
 							foreach($expected_rows as &$expected_row) {
 								if ($expected_row["fk_test_suite_root_id"] == $row["fk_test_suite_root_id"]) {
 									if ($expected_row["fk_test_revision_id"] == $row["fk_test_revision_id"]) {
-										if($expected_row["fk_result_tag_id"] == $row["fk_result_tag_id"]) {
+										if (strtotime($exec_date) >= strtotime($expected_row["start_date"])) {
+											if($expected_row["fk_result_tag_id"] == $row["fk_result_tag_id"]) {
 
-											if ($expected_row["exec_time_secs"] > 0){
-												$min_threshold = $expected_row["exec_time_secs"] - ($expected_row["exec_time_secs"] * 0.05);
-												$max_threshold = $expected_row["exec_time_secs"] - ($expected_row["exec_time_secs"] * 0.05);
+												if ($expected_row["exec_time_secs"] > 0){
+													$min_threshold = $expected_row["exec_time_secs"] - ($expected_row["exec_time_secs"] * 0.02);
+													$max_threshold = $expected_row["exec_time_secs"] + ($expected_row["exec_time_secs"] * 0.02);
+												}
+												else{
+													$min_threshold = 0;
+													$max_threshold = 1;
+												}
+
+												if (($row["exec_time_secs"] >= $min_threshold) and ($row["exec_time_secs"] <= $max_threshold)) {
+													$expected_row["check"] = DEF_FOUND;
+													$row["status"]  = DEF_FOUND;
+												}
+												else {
+													$expected_row["check"] = DEF_FOUND_BUT_EXEC_TIME_MISMATCH;
+													$row["status"]  = DEF_FOUND_BUT_EXEC_TIME_MISMATCH;
+													$row["execpted"] = $expected_row;
+												}
 											}
 											else{
-												$min_threshold = 0;
-												$max_threshold = 1;
+												$expected_row["check"] = DEF_FOUND_RESULT_NO_MATCH;
+												$row["status"] = DEF_FOUND_RESULT_NO_MATCH;
+												$row["execpted"] = $expected_row;
 											}
-
-											if (($row["exec_time_secs"] >= $min_threshold) and ($row["exec_time_secs"] <= $max_threshold)) {
-												$expected_row["check"] = DEF_FOUND;
-												$row["status"]  = DEF_FOUND;
-											}
-											else {
-												$expected_row["check"] = DEF_FOUND_BUT_EXEC_TIME_MISMATCH;
-												$row["status"]  = DEF_FOUND_BUT_EXEC_TIME_MISMATCH;
-											}
-
 										}
 										else{
-											$expected_row["check"] = DEF_FOUND_RESULT_NO_MATCH;
-											$row["status"] = DEF_FOUND_RESULT_NO_MATCH;
+											$expected_row["check"] = DEF_FOUND_FUTURE_DATE;
+											$row["status"] = DEF_FOUND_FUTURE_DATE;
+											$row["execpted"] = $expected_row;
 										}
 									}
 								}
@@ -327,6 +340,9 @@ if (isset($_GET["project"])) {
 							}
 							else if ($row["status"] == DEF_FOUND_BUT_EXEC_TIME_MISMATCH) {
 								echo "Exec Time Mismatch";
+							}
+							else if ($row["status"] == DEF_FOUND_FUTURE_DATE) {
+								echo "Future Match:".$row["execpted"]["start_date"];
 							}
 
 							echo '</td>';
