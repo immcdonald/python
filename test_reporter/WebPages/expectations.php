@@ -6,6 +6,7 @@ include_once("db_helper.php");
 
 gen_head("Expectations", "style.css");
 $error = NULL;
+define("DEF_AUTO_SELECT", 500);
 define("DEF_EXPECTED_NOT_FOUND", -3);
 define("DEF_FOUND_BUT_EXEC_TIME_MISMATCH", -2);
 define("DEF_FOUND_RESULT_NO_MATCH", -1);
@@ -59,8 +60,8 @@ if (isset($_GET["project"])) {
 
 			$rc = select($error, $sql_handle, $rows, $tables, $select, $where);
 
-			if ($rc == OK){
-				if (count($rows) == 1){
+			if ($rc == OK) {
+				if (count($rows) == 1) {
 					$exec_type_id = $rows[0]["fk_exec_type_id"];
 					$exec_date = $rows[0]["created"];
 
@@ -98,13 +99,12 @@ if (isset($_GET["project"])) {
 							$max_rows = count($rows);
 
 							foreach($keys as $key){
+
 								if (strlen($key) >= 2) {
 									$output_array = array();
 									$regex_result = preg_match("/(?P<action>[a-z])(?P<id>\d+)/", $key, $output_array);
 
-
 									if ($regex_result == 1) {
-
 										$test_exec_id = intval($output_array["id"]);
 
 										$radio_setting = $_GET[$key];
@@ -115,7 +115,6 @@ if (isset($_GET["project"])) {
 											}
 
 											if ($rows[$index]["test_exec_id"] == $test_exec_id) {
-
 												if ($output_array["action"] == 'a') {
 													$insert_dict = array("fk_variant_root_id"=>$rows[$index]["fk_variant_root_id"],
 																		 "fk_test_suite_root_id"=>$rows[$index]["fk_test_suite_root_id"],
@@ -140,13 +139,14 @@ if (isset($_GET["project"])) {
 														die("Error: Unknown Add radio setting action :".$radio_setting);
 													}
 
-													$rc = insert($error, $sql_handle, "test_expected", $insert_dict, True);
+													$rc = insert($error, $sql_handle, "test_expected", $insert_dict, array("fk_result_tag_id", "exec_time_secs", "created"));
 
 													if ($rc <= 0){
 														if ($rc != ERROR_VALUE_EXISTS){
 															die($error);
 														}
 														else{
+															echo show($insert_dict, "already existed!");
 															$error = NULL;
 														}
 													}
@@ -218,13 +218,17 @@ if (isset($_GET["project"])) {
 													$row["status"]  = DEF_FOUND;
 												}
 												else {
-													echo $expected_row["exec_time_secs"]."Min: ".$min_threshold."&nbsp&nbsp&nbsp&nbsp&nbsp&nbspValue:".$row["exec_time_secs"]."&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspMax:".$max_threshold ."<BR>";
+
 													$expected_row["check"] = DEF_FOUND_BUT_EXEC_TIME_MISMATCH;
 													$row["status"]  = DEF_FOUND_BUT_EXEC_TIME_MISMATCH;
 													$row["execpted"] = $expected_row;
 												}
 											}
 											else{
+												show($row, "RESULT mismatch");
+
+												echo "Expected: ".$expected_row["fk_result_tag_id"]."&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspGot: ".$row["fk_result_tag_id"]."<BR>";
+
 												$expected_row["check"] = DEF_FOUND_RESULT_NO_MATCH;
 												$row["status"] = DEF_FOUND_RESULT_NO_MATCH;
 												$row["execpted"] = $expected_row;
@@ -240,7 +244,7 @@ if (isset($_GET["project"])) {
 							} // end of for foreach($expected_rows as &$expected_row)
 						} // end of foreach($rows as &$row) {
 
-						show($rows, "Test Exec Rows");
+						#show($rows, "Test Exec Rows");
 
 						show($missing_expected, "Missing Expected");
 
@@ -356,7 +360,7 @@ if (isset($_GET["project"])) {
 								echo '<input type="radio" name="a'.$row["test_exec_id"].'" value="." /><label>Do not Add</label><BR>';
 								echo '<input type="radio" name="a'.$row["test_exec_id"].'" value="t" ><label>Add  ('.$exec_date.')</label><BR>';
 
-								if ($add_counter < 500){
+								if ($add_counter < DEF_AUTO_SELECT){
 									echo '<input type="radio" name="a'.$row["test_exec_id"].'" value="a" checked="checked" ><label>Add After ('.$exec_date_one_second_later.')</label><BR>';
 									$add_counter ++;
 								}
@@ -391,7 +395,7 @@ if (isset($_GET["project"])) {
 					}
 				}
 				else{
-					echo "Error: Expected a row count of 1 and instead got ".count($row)."<BR>";
+					echo "Error: Expected a row count of 1 and instead got ".count($rows)."<BR>";
 				}
 			}
 			else{

@@ -239,7 +239,7 @@ function select(&$error, $sql_handle, &$out_rows, $table, $select_list, $where_d
 	return $rc;
 }
 
-function insert(&$error, $sql_handle, $table, $insert_dict, $check=False) {
+function insert(&$error, $sql_handle, $table, $insert_dict, $omit_check=NULL) {
 	$rc = ERROR_GENERAL;
 	if (is_array($insert_dict)) {
 		$rc = field_length_check($error, "table", $table, 0, 65);
@@ -271,12 +271,12 @@ function insert(&$error, $sql_handle, $table, $insert_dict, $check=False) {
 
 			if ($rc == OK) {
 
-				if ($check) {
+				if ($omit_check != NULL) {
 
 					$check_dict = array();
 
 					foreach(array_keys($insert_dict) as $key) {
-						if ($key != "created"){
+						if (in_array($key, $omit_check) == FALSE){
 							if ($insert_dict[$key] != "now()"){
 								$check_dict[$key] = $insert_dict[$key];
 							}
@@ -284,16 +284,22 @@ function insert(&$error, $sql_handle, $table, $insert_dict, $check=False) {
 					}
 					$rows = array();
 
+
 					$rc = select($error, $sql_handle, $rows, $table, "*", $check_dict);
 
+					show($check_dict, $rc);
+
+
 					if ($rc == OK) {
-						if (count($rows) != 0){
+						if (count($rows) > 0){
+							echo "----------------------- HIT!!! --------------- <BR>";
 							$error = "Error: Insert skipped these values already exist at id:".$rc;
 							$rc = ERROR_VALUE_EXISTS;
 						}
 					}
 
 				}
+
 				if ($rc == OK) {
 					$query = 'INSERT INTO '.$table.' ('.implode(', ',$fields).') VALUES ('.implode(', ', $values).')';
 

@@ -260,12 +260,13 @@ class My_SQL(object):
 
 		query = "SELECT " + get_string + " FROM " + table
 
-		if where_addition:
-			query = query + where_addition
-
 		if fields:
 			if self.size(fields) > 0:
 				query = query + " WHERE " + "=%s and ".join(fields) + "=%s"
+
+
+		if where_addition:
+			query = query + " " + where_addition
 
 		self.query(query, data)
 		return self.cursor.fetchall()
