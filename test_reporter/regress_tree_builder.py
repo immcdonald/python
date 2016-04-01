@@ -4,7 +4,7 @@ import gzip
 from pprint import pformat
 import user
 import json
-
+import glob
 
 parentPath = os.path.abspath("../common")
 
@@ -39,9 +39,23 @@ def build_tree(args):
 
 		exec_ids = args["sql"].select(get_list, table, fields, data)
 
-
 		for exec_id in exec_ids:
+			found_regress_data = False
+
 			exec_path = os.path.join(project_path, "%0.9d" % exec_id[0])
+			partial_regress_data_path = os.path.join(args["source"], "new_db_%d_*.tar.gz" % exec_id[0])
+
+
+			glob_match = glob.glob(partial_regress_data_path)
+
+
+
+			if len(glob_match) == 0:
+				found_regress_data = False
+			elif len(glob_match) == 1:
+				print "Put unpacking code here!!!"
+			else:
+				raise Exception("Error: regression data archive search on (" + str(partial_regress_data_path) +  ") return: %s" % pformat(glob_match))
 
 			if os.path.exists(exec_path) == False:
 				# Create the project directory
@@ -59,31 +73,39 @@ def build_tree(args):
 				general_info_path = os.path.join(exec_path, "!!!_general")
 
 				with open(general_info_path + ".json", "w") as fp_out_json:
-					with open(general_info_path + ".txt", "w") as fp_out_text:
+					with open(general_info_path + ".ini", "w") as fp_out_text:
+						fp_out_text.write("[Information]\n")
+						fp_out_text.write("id: %d\n" %  exec_id[0])
+						fp_out_text.write("description: %s\n" %  exec_id[3])
+						fp_out_text.write("user_name: %s\n" %  exec_id[1])
+						fp_out_text.write("created: %s\n" %  exec_id[2])
+						fp_out_text.write("sources: %d\n" % len(source_info))
+
 						json_data = {}
 
 						json_data["user_name"] = exec_id[1]
 						json_data["date"] = str(exec_id[2])
 						json_data["description"] = exec_id[3]
 						json_data["sources"] = []
+
+						counter = 0
 						for source in source_info:
-							temp = {}
-							temp[]
+							fp_out_text.write("\n[Source_%d]\n" %  counter)
+							counter = counter + 1
+							fp_out_text.write("type: %s\n" %  source[0])
+							fp_out_text.write("src_desc: %s\n" %  source[1])
+							fp_out_text.write("url: %s\n" %  source[2])
+							fp_out_text.write("unique_id: %s\n" %  source[2])
 
+							source_data = {}
+							source_data["type"] = source[0]
+							source_data["src_desc"] = source[1]
+							source_data["url"] = source[2]
+							source_data["unique_id"] = source[3]
 
-
-
-
+							json_data["sources"].append(source_data)
 
 						fp_out_json.write(json.dumps(json_data))
-
-
-
-
-
-
-
-
 
 
 
@@ -98,7 +120,7 @@ def main(argv=None):
 
 	parser = argparse.ArgumentParser(description='Regress tree data builder')
 	parser.add_argument('-d', '--destination', help='', default="./local/")
-	parser.add_argument('-s', '--source', help='')
+	parser.add_argument('-s', '--source', help='', required=True)
 
 	args = vars(parser.parse_args())
 	args["sql"] = My_SQL(user.sql_host, user.sql_user_name, user.sql_password, "qa_db")
