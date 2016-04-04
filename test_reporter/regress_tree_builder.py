@@ -8,7 +8,6 @@ import glob
 import subprocess
 import shutil
 
-
 parentPath = os.path.abspath("../common")
 
 if parentPath not in sys.path:
@@ -17,7 +16,6 @@ if parentPath not in sys.path:
 from my_log import *
 from my_sql import *
 from my_ftp import *
-
 
 def build_tree(args):
 	table = "project"
@@ -79,6 +77,13 @@ def build_tree(args):
 			else:
 				raise Exception("Error: regression data archive search on (" + str(partial_regress_data_path) +  ") return: %s" % pformat(glob_match))
 
+			select = 'SELECT attachment.id, file_name, variant_id, target, arch, variant FROM attachment, variant WHERE attachment.variant_id = variant.id and attachment.exec_id=' + str(exec_id[0])
+
+			result = args["sql"].query(select)
+
+			for row in args["sql"].cursor.fetchall():
+				print pformat(row)
+
 			table = "sources"
 			fields = ["exec_id"]
 			data = [exec_id[0]]
@@ -125,8 +130,6 @@ def build_tree(args):
 
 						fp_out_json.write(json.dumps(json_data))
 
-
-
 def main(argv=None):
 
 	if argv is None:
@@ -134,7 +137,6 @@ def main(argv=None):
 		# Remove the first element in the list because
 		# that is the execution name which we don't care about.
 		argv = sys.argv[1:]
-
 
 	parser = argparse.ArgumentParser(description='Regress tree data builder')
 	parser.add_argument('-d', '--destination', help='', default="./local/")

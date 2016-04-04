@@ -252,18 +252,27 @@ class My_SQL(object):
 				data.append(line[0])
 			return data
 
-	def select(self, get_list, table, fields, data, where_addition=None):
+	def select(self, get_list, table_list, fields, data, where_addition=None):
 		if type(get_list) != list:
-			get_list = [get_list]
+			if type(get_list) == tuple:
+				get_list = list(get_list)
+			else:
+				get_list = [get_list]
+
+		if type(table_list) != list:
+			if type(table_list) == tuple:
+				table_list = list(table_list)
+			else:
+				table_list = [table_list]
 
 		get_string = ",".join(get_list)
+		table_string = ",".join(table_list)
 
-		query = "SELECT " + get_string + " FROM " + table
+		query = "SELECT " + get_string + " FROM " + table_string
 
 		if fields:
 			if self.size(fields) > 0:
 				query = query + " WHERE " + "=%s and ".join(fields) + "=%s"
-
 
 		if where_addition:
 			query = query + " " + where_addition
